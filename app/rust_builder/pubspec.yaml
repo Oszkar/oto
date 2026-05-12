@@ -1,5 +1,5 @@
 name: oto_native
-description: "Utility to build Rust code"
+description: "Flutter FFI build shim for the oto Rust core."
 version: 0.0.1
 publish_to: none
 

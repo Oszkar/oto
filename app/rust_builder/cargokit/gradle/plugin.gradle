@@ -141,9 +141,13 @@ class CargoKitPlugin implements Plugin<Project> {
 
             // Same thing addFlutterDependencies does in flutter.gradle
             if (buildType == "debug") {
-                platforms.add("android-x86")
+                // LOCAL PATCH (oto): upstream also adds "android-x86"; we target Android 15+ (64-bit only).
                 platforms.add("android-x64")
             }
+
+            // LOCAL PATCH (oto): drop 32-bit ABIs — project minSdk is 35 (Android 15+).
+            // Re-apply if syncing cargokit from upstream.
+            platforms = platforms.findAll { it != "android-arm" && it != "android-x86" }.unique()
 
             // The task name depends on plugin properties, which are not available
             // at this point

@@ -1,16 +1,18 @@
 # oto
 
-A new Flutter project.
+Flutter application shell for oto.
 
-## Getting Started
+## Development
 
-This project is a starting point for a Flutter application.
+Run app-level commands from this directory, or use the root `Makefile` /
+`justfile` from the repository root.
 
-A few resources to get you started if this is your first Flutter project:
+Common local commands:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- `flutter pub get`
+- `flutter analyze`
+- `flutter test`
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Generated FRB and Riverpod source is committed. Regenerate it from the repository
+root with `just gen` or `make gen` after changing the Rust bridge API or
+`@riverpod` providers.

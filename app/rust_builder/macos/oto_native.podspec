@@ -5,13 +5,13 @@
 Pod::Spec.new do |s|
   s.name             = 'oto_native'
   s.version          = '0.0.1'
-  s.summary          = 'A new Flutter FFI plugin project.'
+  s.summary          = 'Flutter FFI build shim for the oto Rust core.'
   s.description      = <<-DESC
-A new Flutter FFI plugin project.
+Builds and links the oto Rust core for Flutter targets.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/oszkar/oto'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'Oszkar' => 'oszkar@users.noreply.github.com' }
 
   # This will ensure the source files in Classes/ are included in the native
   # builds of apps using this FFI plugin. Podspec does not support relative
