@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:oto/src/rust/api.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oto/src/rust/frb_generated.dart';
+import 'package:oto/src/state/greeting.dart';
 
 Future<void> main() async {
   await RustLib.init();
-  runApp(const OtoApp());
+  runApp(const ProviderScope(child: OtoApp()));
 }
 
 class OtoApp extends StatelessWidget {
@@ -12,14 +13,22 @@ class OtoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       title: 'oto',
-      home: Scaffold(
-        appBar: AppBar(title: const Text('oto — scaffold')),
-        body: Center(
-          child: Text('Rust says: ${greet(name: "oto")}'),
-        ),
-      ),
+      home: HomePage(),
+    );
+  }
+}
+
+class HomePage extends ConsumerWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final greeting = ref.watch(greetingProvider(name: 'oto'));
+    return Scaffold(
+      appBar: AppBar(title: const Text('oto — scaffold')),
+      body: Center(child: Text('Rust says: $greeting')),
     );
   }
 }

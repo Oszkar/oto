@@ -62,16 +62,23 @@ The same recipes are mirrored in both `Makefile` and `justfile`. Pick whichever
 runner you have. With `just`:
 
 ```bash
-just gen          # regenerate FRB bindings (run after changing native/src/api.rs)
+just gen          # FRB bindings + riverpod_generator (re-run after editing native/src/api.rs or any @riverpod-annotated Dart)
 just check        # cargo fmt + clippy + flutter analyze
 just test         # cargo nextest + flutter test
 just build-apk    # debug Android APK
 just build-win    # debug Windows desktop
 ```
 
-The first run of `just gen` populates `app/lib/src/rust/` and
-`native/src/frb_generated*.rs`. Both directories are gitignored — they're a
-build artifact of `native/src/api.rs`.
+`just gen` runs in two stages:
+
+1. `flutter_rust_bridge_codegen generate` — reads `native/src/api.rs` and
+   writes Dart bindings into `app/lib/src/rust/` plus Rust glue into
+   `native/src/frb_generated*.rs`.
+2. `dart run build_runner build` — runs `riverpod_generator` over Dart
+   sources and emits `*.g.dart` files alongside their inputs.
+
+All four output locations are gitignored — they're build artifacts of
+`native/src/api.rs` and the `@riverpod` annotations.
 
 ## CI
 
@@ -92,6 +99,10 @@ Two workflows under `.github/workflows/`:
   unit-testable in pure Rust.
 - `oto-mock` exists so Flutter integration tests and future end-to-end LAN
   tests share the same fake speaker fixtures.
-- Generated FRB bindings (`app/lib/src/rust/` and `native/src/frb_generated*`)
-  are not committed; they regenerate from `native/src/api.rs` whenever you
-  run `just gen` or `flutter_rust_bridge_codegen generate`.
+- State management on the Dart side is **Riverpod 3 with codegen**. Define
+  providers under `app/lib/src/state/` using `@riverpod`; they're consumed
+  via `ref.watch(...)` from `ConsumerWidget`s. The app is wrapped in a single
+  `ProviderScope` in `main.dart`.
+- Generated artifacts (`app/lib/src/rust/`, `native/src/frb_generated*`,
+  `**/*.g.dart`) are not committed; they regenerate from `native/src/api.rs`
+  and the `@riverpod` annotations whenever you run `just gen`.

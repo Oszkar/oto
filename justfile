@@ -6,9 +6,15 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 default:
     @just --list
 
-# Regenerate FRB bindings from native/src/api.rs into app/lib/src/rust/.
-gen:
+# Regenerate FRB bindings from native/src/api.rs into app/lib/src/rust/, then
+# run riverpod_generator over Dart sources.
+gen: gen-rust gen-dart
+
+gen-rust:
     cd app && flutter_rust_bridge_codegen generate
+
+gen-dart:
+    cd app && dart run build_runner build
 
 # Fast feedback loop: format + lint everything.
 check: fmt clippy analyze

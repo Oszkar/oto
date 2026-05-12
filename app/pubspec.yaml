@@ -31,25 +31,30 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+
+  # Native bridge.
   oto_native:
     path: rust_builder
   flutter_rust_bridge: 2.12.0
 
+  # State management — Riverpod 3 with code generation.
+  flutter_riverpod: ^3.0.0
+  riverpod_annotation: ^3.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
-  flutter_lints: ^6.0.0
   integration_test:
     sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+  # Riverpod codegen + lints.
+  build_runner: ^2.6.0
+  riverpod_generator: ^3.0.0
+  riverpod_lint: ^3.0.0
+  custom_lint: ^0.8.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

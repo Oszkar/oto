@@ -29,6 +29,10 @@ native/src/frb_generated.rs
 native/src/frb_generated.io.rs
 native/src/frb_generated.web.rs
 
+# Dart code generation (riverpod_generator, freezed, json_serializable, …).
+**/*.g.dart
+**/*.freezed.dart
+
 # Coverage
 coverage/
 lcov.info
