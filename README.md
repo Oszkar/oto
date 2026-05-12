@@ -15,7 +15,7 @@ oto/
 │  ├─ lib/               # Dart source
 │  ├─ lib/src/rust/      # FRB-generated Dart bindings (committed, regenerated)
 │  ├─ rust_builder/      # Cargokit Flutter plugin (builds the native lib per platform)
-│  ├─ android/, windows/, ios/, macos/, linux/, web/
+│  ├─ android/, windows/, ios/, macos/, web/
 │  └─ flutter_rust_bridge.yaml
 ├─ native/               # Rust workspace
 │  ├─ Cargo.toml         # workspace root + FRB-exposed cdylib package (oto_native)
