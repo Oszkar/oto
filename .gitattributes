@@ -1,0 +1,22 @@
+# Treat all text files as text. Line endings are normalized to LF in the repo
+# and converted to the platform-native EOL on checkout (CRLF on Windows).
+* text=auto eol=lf
+
+# Force LF on files that must use it regardless of platform.
+*.sh   text eol=lf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+
+# Binary — never touch.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.icns      binary
+*.jar       binary
+*.keystore  binary
+*.so        binary
+*.dll       binary
+*.dylib     binary

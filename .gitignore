@@ -1,0 +1,38 @@
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Rust
+target/
+Cargo.lock.bak
+**/*.rs.bk
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.log
+
+# Generated FRB bindings — regenerated on every build, do not commit
+app/lib/src/rust/
+native/src/frb_generated.rs
+native/src/frb_generated.io.rs
+native/src/frb_generated.web.rs
+
+# Coverage
+coverage/
+lcov.info
+
+# Local env
+.env
+.env.local
