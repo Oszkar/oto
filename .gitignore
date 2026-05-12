@@ -23,16 +23,6 @@ Cargo.lock.bak
 build/
 *.log
 
-# Generated FRB bindings — regenerated on every build, do not commit
-app/lib/src/rust/
-native/src/frb_generated.rs
-native/src/frb_generated.io.rs
-native/src/frb_generated.web.rs
-
-# Dart code generation (riverpod_generator, freezed, json_serializable, …).
-**/*.g.dart
-**/*.freezed.dart
-
 # Coverage
 coverage/
 lcov.info

@@ -1,0 +1,4 @@
+pre-commit:
+  commands:
+    generated:
+      run: dart scripts/verify_generated.dart

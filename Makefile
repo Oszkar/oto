@@ -1,11 +1,11 @@
 # Mirror of justfile. Prefer `just` when available; this exists so a fresh
 # clone can run `make check` without installing anything extra.
 
-.PHONY: default gen gen-rust gen-dart check fmt fmt-fix clippy analyze test \
-        test-rust test-dart deny build-apk build-win bootstrap clean
+.PHONY: default gen gen-rust gen-dart gen-check check fmt fmt-fix clippy analyze test \
+        test-rust test-dart deny install-hooks build-apk build-win bootstrap clean
 
 default:
-	@echo "Recipes: gen check fmt fmt-fix clippy analyze test test-rust test-dart deny build-apk build-win bootstrap clean"
+	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart deny install-hooks build-apk build-win bootstrap clean"
 
 gen: gen-rust gen-dart
 
@@ -14,6 +14,9 @@ gen-rust:
 
 gen-dart:
 	cd app && dart run build_runner build
+
+gen-check:
+	dart scripts/verify_generated.dart
 
 check: fmt clippy analyze
 
@@ -39,6 +42,9 @@ test-dart:
 
 deny:
 	cd native && cargo deny check
+
+install-hooks:
+	lefthook install
 
 build-apk:
 	cd app && flutter build apk --debug

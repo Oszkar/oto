@@ -13,10 +13,7 @@ class OtoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'oto',
-      home: HomePage(),
-    );
+    return const MaterialApp(title: 'oto', home: HomePage());
   }
 }
 

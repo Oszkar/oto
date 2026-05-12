@@ -11,6 +11,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  generated:
+    name: Generated source freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
+
+      - name: flutter pub get
+        working-directory: app
+        run: flutter pub get
+
+      - name: Verify generated source
+        run: dart scripts/verify_generated.dart
+
   rust:
     name: Rust (lint + test)
     runs-on: ubuntu-latest

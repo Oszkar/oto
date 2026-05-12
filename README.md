@@ -13,7 +13,7 @@ only through generated FRB bindings.
 oto/
 ├─ app/                  # Flutter app (android + windows targets first)
 │  ├─ lib/               # Dart source
-│  ├─ lib/src/rust/      # FRB-generated Dart bindings (regenerated, gitignored)
+│  ├─ lib/src/rust/      # FRB-generated Dart bindings (committed, regenerated)
 │  ├─ rust_builder/      # Cargokit Flutter plugin (builds the native lib per platform)
 │  ├─ android/, windows/, ios/, macos/, linux/, web/
 │  └─ flutter_rust_bridge.yaml
@@ -46,6 +46,7 @@ if you move `native/` or `rust_builder/`, update those paths.
 - Rust 1.94+ via `rust-toolchain.toml` (auto-installed by rustup)
 - Cargo extensions: `flutter_rust_bridge_codegen`, `cargo-ndk`, `cargo-nextest`,
   `cargo-deny`
+- Optional: [`lefthook`][lefthook] for local Git hooks
 - Android: Android Studio + SDK + NDK (NDK version pinned by Flutter)
 - Windows: Visual Studio 2022 with the "Desktop development with C++" workload
 
@@ -56,6 +57,14 @@ cargo install flutter_rust_bridge_codegen --version "^2" --locked
 cargo install cargo-ndk cargo-nextest cargo-deny --locked
 ```
 
+Install Lefthook separately if you want the pre-commit generated-source check:
+
+```bash
+brew install lefthook      # macOS/Linux
+winget install evilmartians.lefthook  # Windows
+just install-hooks
+```
+
 ## Common commands
 
 The same recipes are mirrored in both `Makefile` and `justfile`. Pick whichever
@@ -63,6 +72,7 @@ runner you have. With `just`:
 
 ```bash
 just gen          # FRB bindings + riverpod_generator (re-run after editing native/src/api.rs or any @riverpod-annotated Dart)
+just gen-check    # regenerate generated source and fail if it differs from git
 just check        # cargo fmt + clippy + flutter analyze
 just test         # cargo nextest + flutter test
 just build-apk    # debug Android APK
@@ -77,15 +87,19 @@ just build-win    # debug Windows desktop
 2. `dart run build_runner build` — runs `riverpod_generator` over Dart
    sources and emits `*.g.dart` files alongside their inputs.
 
-All four output locations are gitignored — they're build artifacts of
-`native/src/api.rs` and the `@riverpod` annotations.
+These generated source files are committed. That keeps a fresh clone usable in
+IDEs and on Windows/macOS/Linux without requiring every contributor to run
+codegen before `flutter analyze`, `flutter test`, or `cargo check`. CI and the
+optional Lefthook pre-commit hook run `scripts/verify_generated.dart`, which
+regenerates them and fails if the checked-in output is stale.
 
 ## CI
 
 Two workflows under `.github/workflows/`:
 
-- `ci.yml` — lint + tests for Flutter and Rust on every PR. Two jobs (Flutter,
-  Rust) so they run in parallel and can be re-run independently.
+- `ci.yml` — verifies generated source freshness, then runs lint + tests for
+  Flutter and Rust on every PR. Jobs are split so they run in parallel and can
+  be re-run independently.
 - `build.yml` — debug-builds the Android APK on pushes to `main` to catch
   toolchain rot. No Windows job — fluctuating runner minutes aren't worth it
   for a hobby project; dev machines catch Windows issues.
@@ -103,6 +117,6 @@ Two workflows under `.github/workflows/`:
   providers under `app/lib/src/state/` using `@riverpod`; they're consumed
   via `ref.watch(...)` from `ConsumerWidget`s. The app is wrapped in a single
   `ProviderScope` in `main.dart`.
-- Generated artifacts (`app/lib/src/rust/`, `native/src/frb_generated*`,
-  `**/*.g.dart`) are not committed; they regenerate from `native/src/api.rs`
-  and the `@riverpod` annotations whenever you run `just gen`.
+- Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`,
+  `**/*.g.dart`) is committed for contributor ergonomics. Regenerate it with
+  `just gen` after changing `native/src/api.rs` or any `@riverpod` provider.

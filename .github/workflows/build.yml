@@ -43,17 +43,14 @@ jobs:
           tool: cargo-ndk
 
       - name: Install flutter_rust_bridge_codegen
-        uses: taiki-e/install-action@v2
-        with:
-          tool: flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
 
       - name: flutter pub get
         working-directory: app
         run: flutter pub get
 
-      - name: Generate FRB bindings
-        working-directory: app
-        run: flutter_rust_bridge_codegen generate
+      - name: Verify generated source
+        run: dart scripts/verify_generated.dart
 
       - name: Build debug APK
         working-directory: app

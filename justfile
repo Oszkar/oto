@@ -16,6 +16,9 @@ gen-rust:
 gen-dart:
     cd app && dart run build_runner build
 
+gen-check:
+    dart scripts/verify_generated.dart
+
 # Fast feedback loop: format + lint everything.
 check: fmt clippy analyze
 
@@ -43,6 +46,9 @@ test-dart:
 # Supply-chain check (runs cargo deny against the workspace).
 deny:
     cd native && cargo deny check
+
+install-hooks:
+    lefthook install
 
 # Debug builds.
 build-apk:
