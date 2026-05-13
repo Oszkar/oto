@@ -91,5 +91,5 @@ Keep the subject under ~72 chars and let the body explain *why*.
 
 - Run `just check` and `just test` locally before opening.
 - Generated source must be regenerated and committed if any input changed.
-- CI runs three jobs in parallel (`generated`, `rust`, `flutter`); all
-  must pass before merge.
+- CI runs four jobs in parallel (`generated`, `rust`, `deny`, `flutter`);
+  all must pass before merge.

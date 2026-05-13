@@ -67,6 +67,24 @@ jobs:
       - name: cargo nextest
         run: cargo nextest run --workspace
 
+  deny:
+    name: Rust (supply-chain)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: cargo deny check
+        run: cargo deny check
+
   flutter:
     name: Flutter (analyze + test)
     runs-on: ubuntu-latest

@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Sonos discovery, SOAP control, and event subscription core."
+publish = false
 
 [lints]
 workspace = true
