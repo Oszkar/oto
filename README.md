@@ -7,6 +7,17 @@ only through generated FRB bindings.
 
 > **Status:** scaffold only. No Sonos logic yet.
 
+## Scope
+
+- **Platforms:** Android and Windows. macOS/iOS/Web scaffolding compiles, but
+  isn't CI-tested and isn't a release target.
+- **Android floor:** `minSdk = 35` (Android 15, released Q4 2024). Sonos
+  buyers tend to be on recent hardware and the scope reduction simplifies
+  testing on a single emulator image. We'll lower it if and when someone
+  asks. Practical implication: APKs ship arm64-v8a + x86_64 only — see
+  [LOCAL_PATCHES.md](LOCAL_PATCHES.md) for the cargokit patch that enforces
+  this.
+
 ## Layout
 
 ```text
@@ -36,6 +47,10 @@ shim that compiles `native/` into the right shared library for each platform
 during a normal `flutter build`. Its CMake / Gradle / Podspec files point at
 `../../../native` (or deeper, on Windows where the symlink chain is longer);
 if you move `native/` or `rust_builder/`, update those paths.
+
+We carry one **local patch** against vendored Cargokit to drop 32-bit Android
+ABIs from the Rust build target list. See [LOCAL_PATCHES.md](LOCAL_PATCHES.md)
+for the diff and re-apply procedure if you ever sync Cargokit from upstream.
 
 [frb]: https://github.com/fzyzcjy/flutter_rust_bridge
 [cargokit]: https://github.com/irondash/cargokit
