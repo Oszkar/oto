@@ -1,7 +1,11 @@
 # Common dev commands for the oto monorepo.
 # Use `just <recipe>` from the repo root. The same recipes live in `Makefile`.
+#
+# Recipes use `[working-directory: '...']` instead of `cd ... && ...` so they
+# work on every shell (cmd, bash, zsh, PowerShell 7+) without relying on
+# shell-specific statement separators. PowerShell 7+ is required on Windows.
 
-set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+set windows-shell := ["pwsh.exe", "-NoLogo", "-NoProfile", "-Command"]
 
 default:
     @just --list
@@ -10,11 +14,13 @@ default:
 # run riverpod_generator over Dart sources.
 gen: gen-rust gen-dart
 
+[working-directory: 'app']
 gen-rust:
-    cd app && flutter_rust_bridge_codegen generate
+    flutter_rust_bridge_codegen generate
 
+[working-directory: 'app']
 gen-dart:
-    cd app && dart run build_runner build
+    dart run build_runner build
 
 gen-check:
     dart scripts/verify_generated.dart
@@ -22,47 +28,68 @@ gen-check:
 # Fast feedback loop: format + lint everything.
 check: fmt clippy analyze
 
+[working-directory: 'native']
 fmt:
-    cd native && cargo fmt --all --check
+    cargo fmt --all --check
 
+[working-directory: 'native']
 fmt-fix:
-    cd native && cargo fmt --all
+    cargo fmt --all
 
+[working-directory: 'native']
 clippy:
-    cd native && cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
 
+[working-directory: 'app']
 analyze:
-    cd app && flutter analyze
+    flutter analyze
 
 # Tests.
 test: test-rust test-dart
 
+[working-directory: 'native']
 test-rust:
-    cd native && cargo nextest run --workspace
+    cargo nextest run --workspace
 
+[working-directory: 'app']
 test-dart:
-    cd app && flutter test
+    flutter test
 
 # Supply-chain check (runs cargo deny against the workspace).
+[working-directory: 'native']
 deny:
-    cd native && cargo deny check
+    cargo deny check
 
 install-hooks:
     lefthook install
 
 # Debug builds.
+[working-directory: 'app']
 build-apk:
-    cd app && flutter build apk --debug
+    flutter build apk --debug
 
+[working-directory: 'app']
 build-win:
-    cd app && flutter build windows --debug
+    flutter build windows --debug
 
 # Pull Flutter dependencies and verify Cargo can resolve the workspace.
-bootstrap:
-    cd app && flutter pub get
-    cd native && cargo check --workspace
+bootstrap: bootstrap-app bootstrap-native
+
+[working-directory: 'app']
+bootstrap-app:
+    flutter pub get
+
+[working-directory: 'native']
+bootstrap-native:
+    cargo check --workspace
 
 # Wipe build artifacts.
-clean:
-    cd app && flutter clean
-    cd native && cargo clean
+clean: clean-app clean-native
+
+[working-directory: 'app']
+clean-app:
+    flutter clean
+
+[working-directory: 'native']
+clean-native:
+    cargo clean

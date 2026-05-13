@@ -48,7 +48,7 @@ if you move `native/` or `rust_builder/`, update those paths.
   `cargo-deny`
 - Optional: [`lefthook`][lefthook] for local Git hooks
 - Android: Android Studio + SDK + NDK (NDK version pinned by Flutter)
-- Windows: Visual Studio 2022 with the "Desktop development with C++" workload
+- Windows: Visual Studio 2022 with the "Desktop development with C++" workload, plus PowerShell 7+ (required by `just`; `winget install Microsoft.PowerShell`)
 
 Install once:
 

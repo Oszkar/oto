@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Rust + JVM languages use 4-space indent by community convention.
+[*.{rs,kt,kts,java,gradle}]
+indent_size = 4
+
+# Makefiles require tab indentation.
+[Makefile]
+indent_style = tab
+
+# Trailing whitespace in Markdown can be a hard line break (two spaces).
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows-native files stay CRLF.
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
