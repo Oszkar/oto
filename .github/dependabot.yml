@@ -1,0 +1,46 @@
+version: 2
+updates:
+  # GitHub Actions referenced in .github/workflows/*. Covers the pinned
+  # `dtolnay/rust-toolchain@1.94.0` — Dependabot will PR newer Rust versions
+  # as the action publishes them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Rust workspace.
+  - package-ecosystem: cargo
+    directory: /native
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      cargo:
+        patterns: ["*"]
+
+  # Flutter app dependencies.
+  - package-ecosystem: pub
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      pub:
+        patterns: ["*"]
+
+  # Cargokit FFI shim. Mostly boilerplate but pinned alongside.
+  - package-ecosystem: pub
+    directory: /app/rust_builder
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      pub-rust-builder:
+        patterns: ["*"]
