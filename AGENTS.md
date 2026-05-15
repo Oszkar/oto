@@ -52,8 +52,8 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 | Rust edition / MSRV | 2021 / 1.94 (workspace `Cargo.toml`); CI pins toolchain `1.94.0` |
 | Workspace | one Cargo workspace at `native/`; root `oto_native` cdylib + `crates/{core,wire,mock}`; shared deps via `[workspace.dependencies]` |
 | `oto-core` | pure: no networking/async/third-party deps; typed newtypes; manual `Error` enum (no `thiserror`); `#![deny(unsafe_code)]` |
-| `sonos-sdk` | pinned **`=0.5.2`** (exact) — we use the `test-support`-gated `from_discovered_devices`, not semver-protected. Don't bump without re-checking that API + upstream issue #76 |
-| FRB surface | `native/src/api.rs` is a thin shim: sync commands return `Result`; events are a `Stream` pumped by an OS thread off `sonos-sdk`'s `ChangeIterator`. Extending it needs an ARCHITECTURE.md update first |
+| `sonos-sdk` | pinned **`=0.5.2`** (exact) — we use the `test-support`-gated `from_discovered_devices`, not semver-protected. Don't bump without re-checking that API + [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76) |
+| FRB surface | `native/src/api.rs` is a thin shim (currently minimal — `greet`/`init_app`); **target:** sync commands return `Result`, events as a `Stream` pumped off `sonos-sdk`'s `ChangeIterator`. Extending the surface needs an ARCHITECTURE.md update first |
 | Frontend | Flutter + Riverpod 3 (codegen); providers in `app/lib/src/state/` via `@riverpod`, consumed from `ConsumerWidget`. `app/pubspec.yaml` `version:` is the canonical project version |
 | Generated source | FRB bindings (`app/lib/src/rust/`, `native/src/frb_generated*`) and `*.g.dart` are committed; regenerate with `just gen` after editing `native/src/api.rs` or any `@riverpod` provider |
 | Lint floor | `just check` (fmt + clippy `-D warnings` + flutter analyze) and `just test` (cargo-nextest + flutter test) pass; `cargo deny check` clean |
@@ -64,7 +64,7 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 **LAN politeness.** The only thing being rate-limited is *us* against
 the user's Sonos devices on a home network. `sonos-sdk` owns SOAP/GENA;
 don't add aggressive polling on top. SSDP discovery is bounded and
-interface-scoped (§4 / issue #76).
+interface-scoped (§4 / [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
 
 **Errors & logging.** `oto-core` stays deps-free: manual `Error` enum,
 no `thiserror`, no `unwrap()` outside tests. `oto-wire`/`oto-app` may use
@@ -107,13 +107,15 @@ threads, `sonos_sdk`↔`oto_core` mapping) is **planned, not yet created**.
 
 1. **`oto-core` is pure.** Domain types only; no networking/async/deps.
    Other crates depend inward on it; it depends on nothing.
-2. **`oto-wire` is the only crate that touches `sonos-sdk`.** It runs its
-   own multi-interface SSDP and builds the system via
-   `SonosSystem::from_discovered_devices` — `sonos-sdk`'s `0.0.0.0` SSDP
-   is broken on multi-NIC hosts (upstream `tatimblin/sonos-sdk#76`).
+2. **`oto-wire` is the only crate that touches `sonos-sdk`.** It is the
+   sole `sonos-sdk` integration point; **target:** runs its own
+   multi-interface SSDP and builds the system via
+   `SonosSystem::from_discovered_devices` (see `docs/ARCHITECTURE.md`;
+   `sonos-sdk`'s `0.0.0.0` SSDP is broken on multi-NIC hosts —
+   [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
    Do not call `SonosSystem::new()`.
-3. **`oto-mock` is the test `Wire` impl** — deterministic fixtures, no
-   network; integration tests run without real Sonos.
+3. **`oto-mock` (planned) will be the test `Wire` impl** — deterministic
+   fixtures, no network; integration tests run without real Sonos.
 4. **`oto-app` (planned) is the sole owner of runtime state** and the
    only place `sonos_sdk` types are translated to `oto_core` types.
 5. **`oto_native` is glue only.** No business logic in
