@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/mock"]
+members = ["crates/core", "crates/mock", "crates/wire"]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,6 +23,11 @@ all = { level = "warn", priority = -1 }
 [workspace.dependencies]
 oto-core = { path = "crates/core" }
 oto-mock = { path = "crates/mock" }
+oto-wire = { path = "crates/wire" }
+
+# Wire-layer foundation. tatimblin/sonos-sdk handles SSDP discovery, UPnP
+# SOAP control, and reactive event subscriptions. See docs/ARCHITECTURE.md.
+sonos-sdk = "0.5.2"
 
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.
