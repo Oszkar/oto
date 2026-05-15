@@ -49,5 +49,9 @@ mod tests {
             WireError::Network("bind failed".into()).to_string(),
             "discovery network error: bind failed"
         );
+        assert_eq!(
+            WireError::Backend("parse failed".into()).to_string(),
+            "discovery backend error: parse failed"
+        );
     }
 }
