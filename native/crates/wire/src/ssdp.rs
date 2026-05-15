@@ -49,26 +49,36 @@ fn usable_ipv4() -> Result<Vec<IpAddr>, WireError> {
 /// SSDP across every usable IPv4 interface. Returns unique LOCATION URLs.
 ///
 /// Binds one UDP socket per interface and sends a ZonePlayer M-SEARCH on
-/// each. Responses are collected until `timeout` expires. Addresses are
-/// deduplicated across interfaces before returning.
+/// each. `timeout` is the **total bounded window** across all interfaces:
+/// the deadline is computed once before iterating, so wall time stays
+/// O(timeout) regardless of NIC count (important on multi-NIC Windows hosts
+/// with Docker/WSL/VPN adapters). Interfaces that cannot be bound or cannot
+/// egress multicast are skipped; only the `set_read_timeout` system call is
+/// fatal (local OS error, not a network condition).
 pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
     let ifaces = usable_ipv4()?;
     if ifaces.is_empty() {
         return Err(WireError::Network("no usable IPv4 interface".into()));
     }
+    let msearch = msearch();
+    let deadline = Instant::now() + timeout;
     let mut found: BTreeSet<String> = BTreeSet::new();
     for ip in ifaces {
-        let sock =
-            UdpSocket::bind((ip, 0)).map_err(|e| WireError::Network(format!("bind {ip}: {e}")))?;
+        if Instant::now() >= deadline {
+            break;
+        }
+        let sock = match UdpSocket::bind((ip, 0)) {
+            Ok(s) => s,
+            Err(_) => continue, // adapter unbindable (e.g. some VPN/tunnel) — skip, like send_to failure
+        };
         sock.set_read_timeout(Some(Duration::from_millis(800)))
             .map_err(|e| WireError::Network(e.to_string()))?;
-        if sock.send_to(msearch().as_bytes(), SSDP_ADDR).is_err() {
+        if sock.send_to(msearch.as_bytes(), SSDP_ADDR).is_err() {
             // Interface can't egress multicast (e.g. a virtual adapter with no
             // route to 239.x); skip it and try remaining interfaces.
             continue;
         }
         let mut buf = [0u8; 2048];
-        let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
             match sock.recv_from(&mut buf) {
                 Ok((n, _)) => {
