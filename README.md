@@ -1,11 +1,14 @@
 # oto
 
-A fast, local-first Sonos controller for Windows and Android. Flutter UI on top
-of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. All discovery,
-SOAP control, and event-subscription logic stays in Rust; the UI talks to it
+A fast, local-first Sonos controller for Windows and Android, without the 
+bloat of the official app. Flutter UI on topof a Rust core, bridged with 
+[`flutter_rust_bridge`][frb] v2. All discovery, SOAP control, and 
+event-subscription logic stays in Rust built on 
+[sonos-sdk](https://github.com/tatimblin/sonos-sdk); the UI talks to it
 only through generated FRB bindings.
 
-> **Status:** scaffold only. No Sonos logic yet.
+> note: `oto` is a working name for now. It means `sound` in Japanese and
+> it is a palindrome, just like Sonos 
 
 ## Scope
 
@@ -13,8 +16,7 @@ only through generated FRB bindings.
   isn't CI-tested and isn't a release target.
 - **Android floor:** `minSdk = 35` (Android 15, released Q4 2024). Sonos
   buyers tend to be on recent hardware and the scope reduction simplifies
-  testing on a single emulator image. We'll lower it if and when someone
-  asks. Practical implication: APKs ship arm64-v8a + x86_64 only — see
+  testing. Practical implication: APKs ship arm64-v8a + x86_64 only — see
   [LOCAL_PATCHES.md](LOCAL_PATCHES.md) for the cargokit patch that enforces
   this.
 
