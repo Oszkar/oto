@@ -1,6 +1,9 @@
-//! v0.1 acceptance: discovery proven end-to-end without a LAN, driving
-//! oto-app's seam with the deterministic MockWire and asserting the
-//! oto_core -> identity mapping the FRB layer renders.
+//! v0.1 acceptance: discovery proven end-to-end without a LAN. Drives
+//! oto-app's `discover_with` seam with the deterministic MockWire and
+//! asserts the snapshot oto-app produces. Per plan deviation D2 this
+//! stops at the oto-app/oto_core layer; it does NOT cross the FRB DTO
+//! mapping in api.rs (the thin Dart-facing provider wiring is covered
+//! separately by the Flutter test in Task 7).
 
 use oto_app::discover_with;
 use oto_mock::MockWire;
