@@ -9,6 +9,12 @@ analyzer:
     # Codegen output (riverpod_generator, freezed, json_serializable, …).
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    # Vendored cargokit build_tool is a self-contained Dart project with
+    # its own pubspec.yaml. The app's analyzer must not walk it — it has
+    # deps (ed25519_edwards, hex, github, http) the app doesn't pull in,
+    # which surfaces as `uri_does_not_exist` errors when CI's analyzer
+    # traverses the whole tree.
+    - rust_builder/cargokit/**
 
 linter:
   rules:
