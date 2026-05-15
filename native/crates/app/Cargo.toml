@@ -1,11 +1,11 @@
 [package]
-name = "oto-wire"
+name = "oto-app"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Production wire layer: adapts tatimblin/sonos-sdk onto oto-core domain types."
+description = "Runtime state owner: holds the Wire, routes the discover command."
 publish = false
 
 [lints]
@@ -13,4 +13,7 @@ workspace = true
 
 [dependencies]
 oto-core = { workspace = true }
-sonos-sdk = { workspace = true, features = ["test-support"] }
+oto-wire = { workspace = true }
+
+[dev-dependencies]
+oto-mock = { workspace = true }
