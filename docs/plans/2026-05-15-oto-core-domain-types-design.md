@@ -71,7 +71,7 @@ One enum lives in `oto-core` for now. Pure manual impls; no `thiserror`.
 
 ```rust
 pub enum Error {
-    InvalidVolume(u32),
+    InvalidVolume(u8),
 }
 impl Display, std::error::Error
 ```
