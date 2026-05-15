@@ -13,18 +13,22 @@
 pub mod error;
 pub mod group;
 pub mod identifiers;
+pub mod identity;
 pub mod speaker;
 pub mod track;
 pub mod transport;
 pub mod volume;
+pub mod wire;
 
 pub use error::Error;
 pub use group::Group;
 pub use identifiers::{GroupId, SpeakerId, TrackId};
+pub use identity::{DiscoverySnapshot, GroupIdentity, SpeakerIdentity};
 pub use speaker::Speaker;
 pub use track::Track;
 pub use transport::{PlaybackState, TransportState};
 pub use volume::Volume;
+pub use wire::{Wire, WireError};
 
 /// Demo bridge target that proves the FRB pipeline. Removed in step 2/3 when
 /// real Sonos plumbing replaces `greet` in `oto_native::api`.
