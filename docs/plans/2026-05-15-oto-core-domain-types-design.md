@@ -225,7 +225,7 @@ Per-type unit tests under each module's `#[cfg(test)] mod tests`:
 - `Volume::new` boundary table: 0, 1, 50, 100, 101, 255.
 - `Volume::clamped`: -5, 0, 50, 100, 200.
 - Identifier round-trip: `new`, `as_str`, `Display`, `From<&str>`, `From<String>`.
-- Construct a fully-populated `Group { coordinator, [Speaker, Speaker], TransportState{Playing, Track, Duration} }` to catch accidental private-field regressions.
+- Construct a fully-populated `Group { coordinator, members: vec![SpeakerId, SpeakerId], transport: TransportState{Playing, Track, Duration} }` to catch accidental private-field regressions.
 - One `Error` `Display` snapshot test.
 
 No `proptest` / `quickcheck` / `serde_json` for fixtures — pure deps-free std-only.
