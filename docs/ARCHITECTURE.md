@@ -7,9 +7,12 @@ networking delegated to [`tatimblin/sonos-sdk`][sdk].
 > today: `oto-core` (domain types) and the `oto-wire` skeleton (a
 > `sonos-sdk` dependency pin + link check). Not yet built: the `Wire`
 > trait, `oto-app`, the `oto-mock` fixtures, and the FRB command/event
-> surface. Inline notes and the Crates table mark what exists vs. what's
-> planned. Prose describes the intended design; it is not a claim that
-> the code exists today.
+> surface. The v0.1 `discover` command + `Wire` trait surface is
+> **designed but not yet implemented** — see
+> [FRB discover command design](plans/2026-05-15-frb-discover-command-design.md).
+> Inline notes and the Crates table mark what exists vs. what's planned.
+> Prose describes the intended design; it is not a claim that the code
+> exists today.
 
 ## Layers
 
@@ -71,6 +74,16 @@ Commands are synchronous Dart → Rust calls returning `Result`. Events are
 an asynchronous Rust → Dart stream. The two are independent: a command's
 success/failure is separate from the state change it eventually causes.
 
+**Discovery is the documented exception to "commands sync."** It blocks
+~3–5 s (own SSDP + device-description fetches +
+`SonosSystem::from_discovered_devices`), so `discover()` is a *deferred
+warm-up* command — a default (non-sync) FRB fn returning a Dart
+`Future<Topology>`, run off the UI isolate by FRB's worker executor, and
+**never on the `#[frb(init)]` path**. It returns an identity-only
+snapshot (no volume/transport at v0.1) and is idempotent
+(replace-on-success). Rationale and the rejected stream/poll
+alternatives: [FRB discover command design](plans/2026-05-15-frb-discover-command-design.md).
+
 ```mermaid
 sequenceDiagram
     participant U as Flutter UI
@@ -111,14 +124,28 @@ encapsulated and does not surface at the `Wire` boundary.)
 
 ## The `Wire` seam
 
-_Planned; none of the `Wire` trait, `oto-app`, or the impls below exist
-yet — see the Status note above._
+_Designed, not yet implemented — see the Status note and the
+[FRB discover command design](plans/2026-05-15-frb-discover-command-design.md)._
 
 `oto-app` will depend on a `Wire` trait rather than on `sonos-sdk`
 directly. Production will use `oto-wire` (a thin shim over `sonos-sdk`);
 tests will use `oto-mock` (deterministic fixtures). This keeps
 integration tests runnable without a Sonos device on the network and
 isolates any future library swap to a single crate.
+
+For v0.1 the trait is **minimal — one identity-only method**:
+
+```rust
+pub trait Wire {
+    fn discover(&self) -> Result<DiscoverySnapshot, WireError>;
+}
+```
+
+`DiscoverySnapshot` is built from lean identity types added to
+`oto-core` (`SpeakerIdentity` / `GroupIdentity`) — not `Speaker` /
+`Group`, whose `volume` / `transport` fields are unpopulated
+post-discovery (spike finding). v0.2 grows `Speaker` *around*
+`SpeakerIdentity` rather than retrofitting.
 
 **Discovery.** `sonos-sdk`'s built-in SSDP binds to `0.0.0.0` and fails on
 multi-NIC hosts (e.g. Windows with a WSL/Hyper-V vEthernet) — see
