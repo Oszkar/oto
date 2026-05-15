@@ -132,6 +132,12 @@ System design — layers, crate responsibilities, state ownership,
 concurrency model, and the command/event flow — lives in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Releases
+
+Pre-1.0 (`0.y.z`) — surface and behavior may change between any releases.
+Versioning and the release process: [RELEASING.md](RELEASING.md);
+notable changes: [CHANGELOG.md](CHANGELOG.md).
+
 ## Development notes
 
 - State management on the Dart side is **Riverpod 3 with codegen**. Define
