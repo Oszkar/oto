@@ -8,6 +8,12 @@ ignore = [
     # flutter_rust_bridge → backtrace → miniz_oxide → adler. No upgrade path
     # until FRB bumps its dep tree to use `adler2`. Revisit when FRB > 2.12.
     { id = "RUSTSEC-2025-0056", reason = "transitive via flutter_rust_bridge; no upgrade path locally" },
+    # `paste` macro crate: unmaintained but no security impact; used transitively
+    # via sonos-sdk → warp. Revisit when sonos-sdk bumps off warp 0.3. TODO(v0.2).
+    { id = "RUSTSEC-2024-0436", reason = "transitive via sonos-sdk → warp; no upgrade path on pinned sonos-sdk =0.5.2" },
+    # `rustls-pemfile` v1: superseded by v2; used transitively via reqwest 0.11
+    # inside sonos-sdk. No upgrade path on pinned sonos-sdk =0.5.2. TODO(v0.2).
+    { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-sdk → reqwest 0.11; no upgrade path on pinned sonos-sdk =0.5.2" },
 ]
 
 [licenses]
@@ -27,6 +33,9 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
+    # webpki-roots (via ureq → sonos-sdk-soap-client → sonos-sdk → oto-wire → oto-app).
+    # CDLA-Permissive-2.0 is a permissive, patent-grant licence; compatible with MIT.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
 

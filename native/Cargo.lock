@@ -1260,6 +1260,7 @@ name = "oto_native"
 version = "0.1.0"
 dependencies = [
  "flutter_rust_bridge",
+ "oto-app",
  "oto-core",
  "oto-mock",
 ]
