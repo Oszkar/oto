@@ -71,22 +71,22 @@ sequenceDiagram
     participant S as sonos-sdk
     participant K as Sonos speaker
 
-    Note over U,K: Command — sync, Dart → Rust
-    U->>B: play(groupId)
+    Note over U,K: Command — sync, Dart to Rust
+    U->>B: play groupId
     B->>A: route command
-    A->>S: Group::play()
+    A->>S: Group play
     S->>K: UPnP SOAP request
-    S-->>A: Result
-    A-->>B: Result&lt;(), Error&gt;
-    B-->>U: Result
+    S-->>A: result
+    A-->>B: Ok or Error
+    B-->>U: result
 
-    Note over U,K: Event — async, Rust → Dart
-    K->>S: GENA NOTIFY (LastChange)
-    S->>S: decode → StateManager → ChangeEvent
-    A->>S: ChangeIterator::recv() on bg thread
-    A->>A: map ChangeEvent → domain event
+    Note over U,K: Event — async, Rust to Dart
+    K->>S: GENA NOTIFY LastChange
+    S->>S: decode, StateManager, ChangeEvent
+    A->>S: ChangeIterator recv on bg thread
+    A->>A: map ChangeEvent to domain event
     A-->>B: push onto Stream
-    B-->>U: Stream yields; providers rebuild
+    B-->>U: Stream yields, providers rebuild
 ```
 
 ## Concurrency model
