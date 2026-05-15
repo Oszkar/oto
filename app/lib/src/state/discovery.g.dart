@@ -10,14 +10,14 @@ part of 'discovery.dart';
 // ignore_for_file: type=lint, type=warning
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
-/// gives loading / error / data; retry via `ref.invalidate`.
+/// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
 
 @ProviderFor(discovery)
 const discoveryProvider = DiscoveryProvider._();
 
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
-/// gives loading / error / data; retry via `ref.invalidate`.
+/// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
 
 final class DiscoveryProvider
     extends
@@ -31,7 +31,7 @@ final class DiscoveryProvider
         $FutureProvider<rust_api.Topology> {
   /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
   /// runs it off the UI isolate, so this is a Future provider: AsyncValue
-  /// gives loading / error / data; retry via `ref.invalidate`.
+  /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
   const DiscoveryProvider._()
     : super(
         from: null,
