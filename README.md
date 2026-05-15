@@ -30,17 +30,22 @@ oto/
 │  └─ flutter_rust_bridge.yaml
 ├─ native/               # Rust workspace
 │  ├─ Cargo.toml         # workspace root + FRB-exposed cdylib package (oto_native)
-│  ├─ src/api.rs         # FRB-exposed API surface — keep small, delegate to oto-core
+│  ├─ src/api.rs         # FRB-exposed API surface — keep small, delegate inward
 │  ├─ src/lib.rs         # mounts api + frb_generated
-│  ├─ crates/core/       # oto-core: domain logic (discovery, SOAP, state, events)
+│  ├─ crates/core/       # oto-core: pure domain types
+│  ├─ crates/wire/       # oto-wire: sonos-sdk-backed Wire impl (skeleton)
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  └─ rustfmt.toml
+├─ docs/                 # ARCHITECTURE.md + design docs
 ├─ scripts/
 ├─ .github/workflows/
 ├─ rust-toolchain.toml
 ├─ Makefile
 └─ justfile
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design —
+layers, crate responsibilities, state ownership, and the command/event flow.
 
 The Flutter plugin `app/rust_builder/` is the [Cargokit][cargokit] integration
 shim that compiles `native/` into the right shared library for each platform
@@ -119,15 +124,14 @@ Two workflows under `.github/workflows/`:
   toolchain rot. No Windows job — fluctuating runner minutes aren't worth it
   for a hobby project; dev machines catch Windows issues.
 
-## Architecture notes
+## Architecture
 
-- The Rust workspace is split into the FRB cdylib (`native/`, package
-  `oto_native`) and two member crates under `native/crates/`. `oto_native`
-  is intentionally a thin shim: every public FRB function in `src/api.rs`
-  should delegate into `oto-core`. This keeps the bridge surface small and
-  unit-testable in pure Rust.
-- `oto-mock` exists so Flutter integration tests and future end-to-end LAN
-  tests share the same fake speaker fixtures.
+System design — layers, crate responsibilities, state ownership,
+concurrency model, and the command/event flow — lives in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Development notes
+
 - State management on the Dart side is **Riverpod 3 with codegen**. Define
   providers under `app/lib/src/state/` using `@riverpod`; they're consumed
   via `ref.watch(...)` from `ConsumerWidget`s. The app is wrapped in a single
