@@ -22,3 +22,7 @@ sonos-sdk = { workspace = true, features = ["test-support"] }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
 if-addrs = "0.15"
+# Robust HTTP for UPnP device descriptions. Sonos replies HTTP/1.1
+# chunked; a raw TcpStream GET can't de-chunk. Already in the locked
+# graph via sonos-sdk (no new supply-chain) — unify, don't bump.
+ureq = "2"
