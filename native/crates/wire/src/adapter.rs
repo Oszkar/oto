@@ -27,6 +27,9 @@ impl Default for SonosWire {
     }
 }
 
+/// Strip host:port → bare IP.
+/// `DeviceDescription::to_device` takes a bare IP string (not `host:port`),
+/// unlike `http::get_body` which keeps `host:port` for `TcpStream::connect`.
 fn extract_ip(url: &str) -> Option<String> {
     url.strip_prefix("http://")?
         .split('/')
@@ -99,12 +102,19 @@ fn map_snapshot(system: &SonosSystem) -> DiscoverySnapshot {
 impl Wire for SonosWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
         let locations = ssdp::discover_locations(SSDP_TIMEOUT)?;
+        let location_count = locations.len();
         let devices = to_devices(locations);
         if devices.is_empty() {
-            return Err(WireError::NoDevicesFound);
+            return Err(if location_count == 0 {
+                WireError::NoDevicesFound
+            } else {
+                WireError::Backend(format!(
+                    "SSDP found {location_count} responder(s) but none returned a usable Sonos device description (fetch/parse failed or non-Sonos)"
+                ))
+            });
         }
         let system = SonosSystem::from_discovered_devices(devices)
-            .map_err(|e| WireError::Backend(format!("{e:?}")))?;
+            .map_err(|e| WireError::Backend(e.to_string()))?;
         Ok(map_snapshot(&system))
     }
 }
