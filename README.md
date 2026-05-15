@@ -33,7 +33,7 @@ oto/
 │  ├─ src/api.rs         # FRB-exposed API surface — keep small, delegate inward
 │  ├─ src/lib.rs         # mounts api + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types
-│  ├─ crates/wire/       # oto-wire: sonos-sdk-backed Wire impl (skeleton)
+│  ├─ crates/wire/       # oto-wire: sonos-sdk dependency pin (skeleton; adapter later)
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  └─ rustfmt.toml
 ├─ docs/                 # ARCHITECTURE.md + design docs

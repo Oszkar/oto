@@ -3,6 +3,14 @@
 How oto is structured: a Flutter UI over a Rust core, with all Sonos
 networking delegated to [`tatimblin/sonos-sdk`][sdk].
 
+> **Status — this is the target design, not current code.** Implemented
+> today: `oto-core` (domain types) and the `oto-wire` skeleton (a
+> `sonos-sdk` dependency pin + link check). Not yet built: the `Wire`
+> trait, `oto-app`, the `oto-mock` fixtures, and the FRB command/event
+> surface. Inline notes and the Crates table mark what exists vs. what's
+> planned. Prose describes the intended design; it is not a claim that
+> the code exists today.
+
 ## Layers
 
 ```mermaid
@@ -37,8 +45,8 @@ flowchart TD
 | `oto_native` | `native/` | FRB cdylib. Thin shim — exposes commands and event streams to Dart, delegates everything else. |
 | `oto-app` | (not yet created) | Owns the `SonosSystem` instance and the background threads that pump events. Translates `sonos_sdk` types ↔ `oto_core` types. Routes commands. |
 | `oto-core` | `native/crates/core` | Pure domain types (`Speaker`, `Group`, `TransportState`, `Track`, `Volume`, identifiers). No networking, no async, no third-party deps. |
-| `oto-wire` | `native/crates/wire` | Production `Wire` implementation backed by `sonos-sdk`. Currently a skeleton (pins the dependency; adapter lands later). |
-| `oto-mock` | `native/crates/mock` | `Wire` implementation with deterministic in-memory fixtures, for tests without a LAN. |
+| `oto-wire` | `native/crates/wire` | _Planned:_ production `Wire` implementation backed by `sonos-sdk`. _Today:_ skeleton — dependency pin + link check, no adapter or trait yet. |
+| `oto-mock` | `native/crates/mock` | _Planned:_ `Wire` implementation with deterministic in-memory fixtures, for tests without a LAN. _Today:_ placeholder stub only. |
 
 The Dart side is Flutter + Riverpod 3 (codegen). Providers live in
 `app/lib/src/state/`; FRB-generated bindings in `app/lib/src/rust/`.
@@ -103,11 +111,14 @@ encapsulated and does not surface at the `Wire` boundary.)
 
 ## The `Wire` seam
 
-`oto-app` depends on a `Wire` trait, not on `sonos-sdk` directly.
-Production uses `oto-wire` (a thin shim over `sonos-sdk`); tests use
-`oto-mock` (deterministic fixtures). This keeps integration tests runnable
-without a Sonos device on the network and isolates any future library swap
-to a single crate.
+_Planned; none of the `Wire` trait, `oto-app`, or the impls below exist
+yet — see the Status note above._
+
+`oto-app` will depend on a `Wire` trait rather than on `sonos-sdk`
+directly. Production will use `oto-wire` (a thin shim over `sonos-sdk`);
+tests will use `oto-mock` (deterministic fixtures). This keeps
+integration tests runnable without a Sonos device on the network and
+isolates any future library swap to a single crate.
 
 ## Scope
 
