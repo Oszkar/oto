@@ -8,6 +8,8 @@ use std::sync::{Mutex, OnceLock};
 use oto_core::{DiscoverySnapshot, Wire, WireError};
 use oto_wire::SonosWire;
 
+// `Send` lets the wire cross threads into the static; `Sync` is not
+// needed — all access is serialised by the `Mutex`. Don't add `+ Sync`.
 type HeldWire = Box<dyn Wire + Send>;
 
 fn slot() -> &'static Mutex<Option<HeldWire>> {
@@ -45,5 +47,7 @@ mod tests {
         let err = discover_with(|| Box::new(MockWire::failing(WireError::NoDevicesFound)));
         assert_eq!(err, Err(WireError::NoDevicesFound));
         assert!(slot().lock().unwrap().is_some());
+        // TODO(v0.2): once a slot accessor exists, also assert a second
+        // success replaces the first wire (can't observe identity yet).
     }
 }
