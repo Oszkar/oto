@@ -9,6 +9,8 @@
 //! See `docs/ARCHITECTURE.md` for the wire-layer design and the open
 //! questions to validate when this is fleshed out.
 
+pub mod ssdp;
+
 /// Anchors the SDK's speaker identifier into this crate so the dependency
 /// is exercised at compile time until the real adapter lands. Replaced by
 /// the `Wire` impl and `sonos_sdk` ↔ `oto_core` translation in a later step.

@@ -929,6 +929,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "if-addrs"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1217,6 +1227,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oto-app"
+version = "0.1.0"
+dependencies = [
+ "oto-core",
+ "oto-mock",
+ "oto-wire",
+]
+
+[[package]]
 name = "oto-core"
 version = "0.1.0"
 
@@ -1231,6 +1250,7 @@ dependencies = [
 name = "oto-wire"
 version = "0.1.0"
 dependencies = [
+ "if-addrs",
  "oto-core",
  "sonos-sdk",
 ]

@@ -19,3 +19,6 @@ oto-core = { workspace = true }
 # Pinned =0.5.2 at the workspace; do not bump without re-checking this API
 # (upstream tatimblin/sonos-sdk#76).
 sonos-sdk = { workspace = true, features = ["test-support"] }
+# Local interface enumeration for multi-NIC SSDP — std has no API for
+# this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
+if-addrs = "0.15"
