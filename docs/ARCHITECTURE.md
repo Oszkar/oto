@@ -120,6 +120,14 @@ tests will use `oto-mock` (deterministic fixtures). This keeps
 integration tests runnable without a Sonos device on the network and
 isolates any future library swap to a single crate.
 
+**Discovery.** `sonos-sdk`'s built-in SSDP binds to `0.0.0.0` and fails on
+multi-NIC hosts (e.g. Windows with a WSL/Hyper-V vEthernet) — see
+[discovery spike findings](plans/2026-05-15-discovery-spike-findings.md).
+`oto-wire` therefore runs its own multi-interface SSDP and constructs the
+system via `SonosSystem::from_discovered_devices` (behind `sonos-sdk`'s
+`test-support` feature; `sonos-sdk` pinned `=0.5.2` while we depend on
+that API). An upstream fix is tracked so the workaround can be dropped.
+
 ## Scope
 
 - **Targets:** Android (API 35+, 64-bit) and Windows. Other platforms
@@ -130,21 +138,25 @@ isolates any future library swap to a single crate.
 
 ## Open questions
 
-To validate when the wire layer is fleshed out (the `oto-wire` adapter and
-the discovery/event steps):
+Progress tracked against the
+[discovery spike findings](plans/2026-05-15-discovery-spike-findings.md).
 
-1. **ZoneGroupTopology coverage.** Grouping/topology event handling is the
-   historical weak spot in Sonos libraries. Confirm `sonos-sdk` decodes
-   topology changes (group form/break, coordinator change) reliably. If
-   not, this is the first candidate for an upstream contribution.
-2. **Discovery blocking on startup.** `SonosSystem::new()` performs
-   discovery. If it blocks for a timeout, it must not run inside FRB's
-   `init_app` (which would freeze UI startup). Likely mitigation: construct
-   `SonosSystem` from a "warm up" command issued after the UI mounts.
-3. **Thread count.** One OS thread per exposed event stream (blocking
-   `ChangeIterator`). Cheap, but confirm the stream granularity so the
-   thread count stays bounded (e.g. one multiplexed event stream rather
-   than one per speaker).
+1. **ZoneGroupTopology coverage.** _Still open._ Static group/standalone
+   reporting works; whether `sonos-sdk` emits topology-*change* events
+   (group form/break, coordinator change) is unverified — needs the
+   Phase-2 spike with explicit `.watch()`. Historical weak spot; validate
+   before relying on it.
+2. **Discovery blocking on startup.** _Resolved:_ `SonosSystem::new()`
+   blocks ~3–4.6s even on a healthy network. Off the FRB `init_app` path;
+   needs a deferred warm-up command and a UI loading state.
+3. **Thread count.** _Informed:_ events are opt-in via `.watch()`, so
+   stream granularity is a deliberate design choice (favour one
+   multiplexed event stream → one pump thread, not one per speaker).
+4. **Bonded / satellite / asleep units.** _New, open._ Spike saw fewer
+   speakers than the router's Sonos count (a unit SSDP-silent on two
+   platforms; another SSDP-visible but not surfaced by `sonos-sdk`).
+   Likely bonded/satellite or sleeping devices. Ties to the bonded-speaker
+   question deferred in oto-core; revisit during the discovery slice.
 
 ## Related docs
 
