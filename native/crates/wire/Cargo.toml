@@ -13,4 +13,9 @@ workspace = true
 
 [dependencies]
 oto-core = { workspace = true }
+# `test-support` exposes `SonosSystem::from_discovered_devices`, required for
+# the multi-NIC SSDP workaround (sonos-sdk's built-in SSDP binds 0.0.0.0).
+# This is a production code path, not test-only — see docs/ARCHITECTURE.md.
+# Pinned =0.5.2 at the workspace; do not bump without re-checking this API
+# (upstream tatimblin/sonos-sdk#76).
 sonos-sdk = { workspace = true, features = ["test-support"] }
