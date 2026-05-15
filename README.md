@@ -132,6 +132,26 @@ System design — layers, crate responsibilities, state ownership,
 concurrency model, and the command/event flow — lives in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Releases
+
+Pre-1.0 (`0.y.z`) — surface and behavior may change between any releases.
+Versioning and the release process: [RELEASING.md](RELEASING.md);
+notable changes: [CHANGELOG.md](CHANGELOG.md).
+
+### Milestones
+
+Each pre-1.0 minor is one capability layer, proven end-to-end through the
+Rust↔Dart bridge and verifiable without the real UI. `v1.0` is the
+bounded, externally-tested end state; after it, maintenance only.
+
+| Version | Capability |
+|---|---|
+| **v0.1** &larr; current | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
+| v0.2 | **Playback control** — play/pause/next/prev, volume, mute, and reading current state. |
+| v0.3 | **Grouping + live events** — group form/break, topology changes, reactive state. |
+| v0.4 | **UI** — the designed Flutter interface on the proven capability layers. |
+| v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
+
 ## Development notes
 
 - State management on the Dart side is **Riverpod 3 with codegen**. Define
