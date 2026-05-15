@@ -84,6 +84,11 @@ mod tests {
         let snap = MockWire::default().discover().unwrap();
         assert_eq!(snap.speakers.len(), 3);
         assert_eq!(snap.groups.len(), 2);
+        // Anchor specific fixture values so downstream integration tests
+        // (and this fixture) fail loudly if the data is silently edited.
+        assert_eq!(snap.speakers[0].room_name, "Kitchen");
+        assert_eq!(snap.speakers[2].model, None);
+        assert_eq!(snap.groups[0].id.as_str(), "RINCON_KITCHEN:1");
         assert_eq!(snap.groups[0].members.len(), 2);
         assert_eq!(snap.groups[0].members[0], snap.groups[0].coordinator);
         assert_eq!(snap.groups[1].members.len(), 1);
