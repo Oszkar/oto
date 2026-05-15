@@ -12,11 +12,25 @@ use oto_core::WireError;
 ///
 /// Uses ureq (already in the locked dependency graph via sonos-sdk — no new
 /// supply-chain) which transparently handles chunked transfer-encoding and
-/// Content-Length. `timeout` is applied as the overall request timeout
-/// (connect + read) via `Request::timeout`.
+/// Content-Length. `timeout` bounds **both** the TCP connect phase and the
+/// overall request (read/write); a per-call `AgentBuilder` is used so that
+/// `AgentBuilder::timeout_connect(timeout)` (connect deadline) and
+/// `AgentBuilder::timeout(timeout)` (overall deadline) are both applied.
+///
+/// This restores the contract of the original raw-TcpStream implementation:
+/// a device that stops responding after SSDP discovery cannot stall the
+/// caller for longer than `timeout` at the connect phase either. Without
+/// the per-call agent, `Request::timeout` does not bound connect (ureq's
+/// agent-level connect default is ~30 s), which would blow the discovery
+/// budget when a flaky device is targeted.
 pub fn get_body(url: &str, timeout: Duration) -> Result<String, WireError> {
-    let response = ureq::get(url)
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(timeout)
         .timeout(timeout)
+        .build();
+
+    let response = agent
+        .get(url)
         .call()
         .map_err(|e| WireError::Backend(format!("HTTP GET {url}: {e}")))?;
 
