@@ -61,11 +61,23 @@ fn usable_ipv4() -> Result<Vec<IpAddr>, WireError> {
 fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut buf = [0u8; 2048];
-    // The `while` condition is checked once per full inner `for` pass, so
-    // worst-case overrun ≈ N_sockets × 250 ms — fine for expected NIC counts
-    // (1–4); don't blindly grow the socket list.
+    // Round-robin across ALL sockets so a quiet socket never starves the
+    // others (the v0.1 [P1] multi-NIC bug). The deadline is re-checked
+    // *before each socket* (not once per full pass) and the hard-error
+    // sleep below is clamped to the remaining window, so total wall time is
+    // strictly O(timeout): bounded by at most one socket's read-timeout
+    // granularity (~250 ms) past `deadline`, independent of socket count.
+    // TODO(v0.2): per-socket consecutive-error budget instead of a blanket
+    // sleep (e.g. drop a socket after N hard errors) — lower priority now
+    // that both busy-spin and overshoot are bounded.
     while Instant::now() < deadline {
         for sock in socks {
+            // Stop mid-pass the instant the window closes so an in-progress
+            // pass can't overshoot by N_sockets × the hard-error sleep; the
+            // outer `while` then exits too.
+            if Instant::now() >= deadline {
+                break;
+            }
             match sock.recv_from(&mut buf) {
                 Ok((n, _)) => {
                     if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {
@@ -80,10 +92,15 @@ fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
                     // port-unreachable to the M-SEARCH) returns immediately. With a
                     // single socket (common single-NIC host) that would tight-spin
                     // until the deadline — pace it like a timed-out read. Never
-                    // abort: other sockets/passes must keep working.
-                    // TODO(v0.2): per-socket consecutive-error budget instead of a
-                    // blanket sleep (e.g. drop a socket after N hard errors).
-                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    // abort: other sockets/passes must keep working. Clamp the
+                    // pacing sleep to the time left so it can never push wall
+                    // time past `deadline` (saturating: ZERO if already past).
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if !remaining.is_zero() {
+                        std::thread::sleep(remaining.min(Duration::from_millis(250)));
+                    }
+                    // If no time remains, don't sleep — the top-of-loop guard
+                    // exits the pass on the next iteration.
                 }
             }
         }
@@ -251,6 +268,38 @@ mod tests {
             found.contains("http://10.0.0.2:1400/b.xml"),
             "missing socket B's LOCATION (the [P1] failure mode: \
              stuck on the first socket); found={found:?}"
+        );
+    }
+
+    /// Regression guard for the "wall time stays O(timeout)" contract: a
+    /// socket that only ever times out (nothing is ever sent to it) must
+    /// not push `collect_until` meaningfully past its deadline. Bounds the
+    /// overshoot to ~one read-timeout granularity regardless of error
+    /// regime (the top-of-loop deadline guard + clamped pacing sleep).
+    ///
+    /// Localhost only, deterministic, no sender thread: relies purely on
+    /// the socket's own 100ms read timeout pacing the recv loop, so there
+    /// is no scheduling race. Deadline 300ms; the 600ms wall bound leaves
+    /// wide slack for one read-timeout granularity + scheduler jitter while
+    /// staying well under the 1s gate. Returns the empty set (nothing sent).
+    #[test]
+    fn collect_until_does_not_overshoot_deadline() {
+        let sock = UdpSocket::bind("127.0.0.1:0").expect("bind");
+        sock.set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("set_read_timeout");
+
+        let start = Instant::now();
+        let found = collect_until(&[sock], start + Duration::from_millis(300));
+        let elapsed = start.elapsed();
+
+        assert!(
+            found.is_empty(),
+            "nothing was sent; expected empty set, found={found:?}"
+        );
+        assert!(
+            elapsed < Duration::from_millis(600),
+            "collect_until overshot its 300ms deadline: took {elapsed:?} \
+             (must stay O(timeout), not N×sleep)"
         );
     }
 }
