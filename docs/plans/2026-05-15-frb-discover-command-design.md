@@ -211,3 +211,62 @@ without the designed UI.
 - [discovery spike findings](2026-05-15-discovery-spike-findings.md)
 - `docs/plans/2026-05-15-oto-core-domain-types-design.md`
 - `docs/ARCHITECTURE.md` — living design (updated alongside this doc)
+
+---
+
+## Addendum — hardware verification (2026-05-16)
+
+The body above is the point-in-time decision record (kept as-decided).
+Task-8 verification on a real multi-NIC Sonos LAN (Beam + One + a
+SYMFONISK Bookshelf stereo pair, 4 device descriptions) changed two
+implementation decisions. The FRB **surface** (Approach A, the DTOs, the
+error enum, the minimal `Wire` trait, non-sync `discover()`) is
+unchanged and validated.
+
+**1. D3 reversed: chunked HTTP → `ureq`.** The body assumed a raw
+`TcpStream` GET would fetch device descriptions. Hardware: Sonos's
+embedded server replies `HTTP/1.1` `Transfer-Encoding: chunked` (no
+`Content-Length`, many tiny chunks) even to an HTTP/1.0 request, so the
+raw GET handed `quick_xml` chunk-framed bytes and every parse failed.
+Fix (user-approved): use `ureq` — already a **locked transitive dep**
+(`oto-wire → sonos-sdk → sonos-sdk-soap-client → ureq 2.12.1`), so this
+adds **no new supply-chain**; it handles chunked + UTF-8. The caller's
+`timeout` is applied via `AgentBuilder::timeout_connect` + `timeout` so
+connect is bounded too. (Resolves **open item #1**: oto-wire fetches +
+parses the XML itself via `sonos_discovery::DeviceDescription::from_xml`;
+`ureq` is the fetcher. Open item #2 resolved: `IpAddr::to_string()`.)
+
+**2. v0.1 snapshot built from own devices, NOT sonos-sdk topology.**
+The body (Context, Command doc-comment, Lifecycle) said `oto-wire`
+constructs the system via `SonosSystem::from_discovered_devices` and the
+snapshot comes from it. Hardware proved this path **lazy / lossy /
+non-deterministic**: fed all 4 correctly-discovered devices,
+`system.speakers()` returned only 1 (Kitchen) and flapped 0↔1 across
+runs — the documented ZoneGroupTopology weak spot (ARCHITECTURE Open
+Q1). Decision (user-approved, Option A): since v0.1 is **identity-only**
+and `oto-wire`'s own `to_devices()` already yields complete,
+deterministic per-device identity, `SonosWire::discover()` now maps that
+`Vec<sonos_discovery::Device>` **directly** to `DiscoverySnapshot`
+(`to_snapshot()`), with **no `SonosSystem` / `from_discovered_devices`
+in the v0.1 path**. Consequences:
+
+- **Groups = group-of-one** for v0.1 (`{speaker_id}:0`, coordinator =
+  members = the speaker). Real ZoneGroupTopology (multi-room groups,
+  bonded stereo pairs / HT surrounds, coordinator/topology-change
+  events) is **v0.3** (ARCHITECTURE Open Q1 + Q4).
+- **Known v0.1 limitation:** bonded surrounds (the SYMFONISK pair) are
+  listed as standalone players. Accepted and documented (README,
+  ARCHITECTURE Q4).
+- **Net positive:** the v0.1 happy path is now pure and
+  **deterministically unit-testable with no LAN** (the `to_snapshot`
+  tests), removing the dependency on sonos-sdk's lazy topology for the
+  v0.1 acceptance bar.
+- `oto-app` still holds the active `Wire` (replace-on-success);
+  `SonosSystem` ownership returns in **v0.2** (playback), where the
+  `from_discovered_devices`/topology path is re-evaluated.
+- `test-support` is still required (gates
+  `sonos_discovery::{Device, DeviceDescription}`); `=0.5.2` pin stands.
+
+The "Lifecycle / state ownership" and Command doc-comment text above
+(which reference `SonosSystem`) are **superseded for v0.1** by this
+addendum; they describe the v0.2+ target.
