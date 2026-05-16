@@ -47,6 +47,9 @@ impl From<WireError> for DiscoveryError {
     }
 }
 
+// TODO(v0.4): Android release discovery needs a held WifiManager.MulticastLock
+// (perms are declared in app/src/main/AndroidManifest.xml); SSDP multicast is
+// dropped without it. v0.1 discovery is verified on Windows via this bridge.
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. Identity-only snapshot.
 pub fn discover() -> Result<Topology, DiscoveryError> {
