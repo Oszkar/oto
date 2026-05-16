@@ -61,6 +61,9 @@ fn usable_ipv4() -> Result<Vec<IpAddr>, WireError> {
 fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut buf = [0u8; 2048];
+    // The `while` condition is checked once per full inner `for` pass, so
+    // worst-case overrun ≈ N_sockets × 250 ms — fine for expected NIC counts
+    // (1–4); don't blindly grow the socket list.
     while Instant::now() < deadline {
         for sock in socks {
             match sock.recv_from(&mut buf) {
@@ -72,7 +75,16 @@ fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
                 Err(e)
                     if e.kind() == std::io::ErrorKind::WouldBlock
                         || e.kind() == std::io::ErrorKind::TimedOut => {}
-                Err(_) => {} // ignore this socket this pass; never abort the loop or other sockets
+                Err(_) => {
+                    // A hard error (e.g. Windows WSAECONNRESET from an ICMP
+                    // port-unreachable to the M-SEARCH) returns immediately. With a
+                    // single socket (common single-NIC host) that would tight-spin
+                    // until the deadline — pace it like a timed-out read. Never
+                    // abort: other sockets/passes must keep working.
+                    // TODO(v0.2): per-socket consecutive-error budget instead of a
+                    // blanket sleep (e.g. drop a socket after N hard errors).
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
             }
         }
     }
@@ -128,8 +140,8 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
         socks.push(sock);
     }
     if socks.is_empty() {
-        // All interfaces failed bind/send — preserve the prior contract
-        // (caller maps empty -> NoDevicesFound/Backend from the count).
+        // All interfaces failed bind/send; caller sees location_count == 0
+        // and maps that to NoDevicesFound — no need to distinguish here.
         return Ok(Vec::new());
     }
 
