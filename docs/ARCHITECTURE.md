@@ -218,6 +218,46 @@ Progress tracked against the
    accepted v0.1 limitation: distinguishing bonded/satellite/invisible
    units needs ZoneGroupTopology, deferred with Q1 to **v0.3** (ties to
    the bonded-speaker question deferred in oto-core).
+5. **`sonos-sdk` dependency direction.** _Decided (2026-05-17 source
+   review): keep the umbrella `sonos-sdk` + `test-support`._ v0.1 uses
+   only `sonos_discovery::{Device, DeviceDescription}` (pure serde, zero
+   networking) yet links the whole tree (`sonos-state/-api/-event-manager
+   /-stream`, `reqwest`, `tokio`). The source crate `sonos-sdk-discovery`
+   exposes those two types publicly *without* the `test-support` gate, so
+   a v0.1-only build could depend on it directly. Rejected: v0.2
+   (playback) needs the umbrella regardless, so switching now + reverting
+   is churn; the real cost of keeping is build-time / supply-chain audit
+   scope, not stripped APK size (LTO dead-strips unused Rust). The
+   `=0.5.2` pin neutralises the non-semver `test-support` fragility.
+   `// TODO(v0.2):` confirm the umbrella is genuinely consumed once
+   playback lands so the unused-tree state stays explicitly temporary.
+6. **`watch()`-after-`fetch()` event suppression (v0.2/v0.3 constraint).**
+   _Open — design constraint, not a bug._ Upstream change-detection
+   suppresses the initial `.watch()` notification if a prior `.fetch()`
+   already cached the same value (documented upstream as by-design;
+   unlikely to change). The natural oto pattern — fetch initial state,
+   then subscribe — will silently miss the first event. Constraint for
+   v0.2/v0.3: treat `.watch()` itself as the reachability/seed probe;
+   do not rely on a post-`fetch()` watch firing an initial event.
+7. **Event-path reliability is the v0.3 risk; contingency is narrowing,
+   not forking.** _Tracked._ Upstream's reactive layer (`sonos-state/
+   -stream/-event-manager`) carries the only live correctness concern
+   (intermittent `position` updates, open upstream) and has no upstream
+   CI integration coverage (all hardware-gated). The lower layers
+   (`soap-client`, `sonos-api`, `callback-server`) are solid. If v0.3
+   event delivery proves unreliable, the fallback is **not** a fork:
+   `oto-app` (already the sole runtime-state owner, §"State ownership")
+   narrows its dependency to `sonos-api` fetch + `callback-server`/GENA
+   raw events and does change-detection itself. Decide at v0.3 with
+   real-hardware data.
+8. **Contribute the #76 multi-NIC SSDP fix upstream.** _Action, low
+   cost._ `oto-wire/src/ssdp.rs` is a near-drop-in better implementation;
+   the upstream fix is localised to `SsdpClient` (enumerate interfaces,
+   per-NIC bind, `set_multicast_if_v4`) and need not change the public
+   `DiscoveryIterator` API. Offer as a PR against
+   [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76);
+   acceptance is upside-only — oto-wire keeps its own SSDP either way
+   (the §4 boundary), so there is no fork-maintenance burden.
 
 ## Related docs
 
