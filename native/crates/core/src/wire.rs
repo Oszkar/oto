@@ -17,7 +17,7 @@ pub enum WireError {
     Network(String),
     /// SSDP completed but found zero Sonos devices.
     NoDevicesFound,
-    /// Device-description fetch/parse or SonosSystem construction failed.
+    /// Device-description fetch or parse failed (HTTP/XML stage).
     Backend(String),
 }
 

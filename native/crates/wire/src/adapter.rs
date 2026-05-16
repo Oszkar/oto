@@ -29,7 +29,7 @@ impl Default for SonosWire {
 
 /// Strip host:port → bare IP.
 /// `DeviceDescription::to_device` takes a bare IP string (not `host:port`),
-/// unlike `http::get_body` which keeps `host:port` for `TcpStream::connect`.
+/// unlike `http::get_body`, which passes the full `host:port` URL to ureq.
 fn extract_ip(url: &str) -> Option<String> {
     url.strip_prefix("http://")?
         .split('/')
