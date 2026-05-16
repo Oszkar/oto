@@ -1,12 +1,12 @@
 //! Production `Wire`: own SSDP + sonos-sdk (test-support) adapter.
 
+use std::net::IpAddr;
 use std::time::Duration;
 
 use oto_core::{
     DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, SpeakerIdentity, Wire, WireError,
 };
 use sonos_sdk::sonos_discovery::{device::DeviceDescription, Device};
-use sonos_sdk::SonosSystem;
 
 use crate::{http, ssdp};
 
@@ -53,49 +53,51 @@ fn to_devices(locations: Vec<String>) -> Vec<Device> {
         .collect()
 }
 
-fn map_snapshot(system: &SonosSystem) -> DiscoverySnapshot {
-    let speakers = system
-        .speakers()
-        .into_iter()
-        .map(|s| SpeakerIdentity {
-            id: SpeakerId::new(s.id.to_string()),
-            room_name: s.name,
-            model: if s.model_name.is_empty() {
+/// Build a `DiscoverySnapshot` directly from the devices returned by our own
+/// SSDP+to_devices pipeline — no `SonosSystem` involved.
+///
+/// v0.1 is identity-only: each device becomes exactly one speaker and one
+/// group-of-one.  Accurate ZoneGroupTopology (bonded surrounds, stereo pairs,
+/// multi-room groups) is deferred to v0.3 (ARCHITECTURE open-Q1/Q4).
+fn to_snapshot(devices: Vec<Device>) -> DiscoverySnapshot {
+    let mut speakers: Vec<SpeakerIdentity> = Vec::with_capacity(devices.len());
+    let mut groups: Vec<GroupIdentity> = Vec::with_capacity(devices.len());
+
+    for d in devices {
+        // Parse the IP we ourselves extracted — anomalous if it fails, but
+        // skip rather than panic.
+        let ip: IpAddr = match d.ip_address.parse() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+
+        // sonos-sdk stores the UDN verbatim from the XML, which carries a
+        // leading "uuid:" prefix (e.g. "uuid:RINCON_542A1B9463A801400").
+        // oto_core::SpeakerId holds the bare RINCON_… form — strip it here.
+        let bare_id = d.id.strip_prefix("uuid:").unwrap_or(&d.id);
+        let sid = SpeakerId::new(bare_id);
+
+        speakers.push(SpeakerIdentity {
+            id: sid.clone(),
+            room_name: d.room_name,
+            model: if d.model_name.is_empty() {
                 None
             } else {
-                Some(s.model_name)
+                Some(d.model_name)
             },
-            ip: s.ip,
-        })
-        .collect();
-    let groups = system
-        .groups()
-        .into_iter()
-        .map(|g| {
-            // Use the pub fields g.coordinator_id / g.member_ids directly:
-            // they are the authoritative ids stored in state and avoid
-            // allocating Speaker handle objects just to read an id.
-            // coordinator()/members() are pure in-memory lookups too, but
-            // they return Option<Speaker>/Vec<Speaker> — unnecessary heap
-            // allocation when all we need is the id.
-            // member_ids already includes the coordinator; we push it first
-            // then skip it in the member_ids pass to guarantee index-0 ordering.
-            let coord = SpeakerId::new(g.coordinator_id.to_string());
-            let mut members: Vec<SpeakerId> = Vec::with_capacity(g.member_ids.len());
-            members.push(coord.clone());
-            for mid in &g.member_ids {
-                let id = SpeakerId::new(mid.to_string());
-                if id != coord {
-                    members.push(id);
-                }
-            }
-            GroupIdentity {
-                id: GroupId::new(g.id.to_string()),
-                coordinator: coord,
-                members,
-            }
-        })
-        .collect();
+            ip,
+        });
+
+        // v0.1 group-of-one; real topology/bonded modeling deferred to v0.3
+        // (ARCHITECTURE open-Q1/Q4) — bonded surrounds appear as standalone
+        // here by design.
+        groups.push(GroupIdentity {
+            id: GroupId::new(format!("{sid}:0")),
+            coordinator: sid.clone(),
+            members: vec![sid],
+        });
+    }
+
     DiscoverySnapshot { speakers, groups }
 }
 
@@ -113,84 +115,191 @@ impl Wire for SonosWire {
                 ))
             });
         }
-        let system = SonosSystem::from_discovered_devices(devices)
-            .map_err(|e| WireError::Backend(e.to_string()))?;
-        Ok(map_snapshot(&system))
+        let snapshot = to_snapshot(devices);
+        if snapshot.speakers.is_empty() {
+            return Err(WireError::Backend(format!(
+                "to_snapshot produced 0 speakers from {location_count} device(s) — all IP addresses unparseable (anomalous)"
+            )));
+        }
+        Ok(snapshot)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::IpAddr;
 
-    /// Speaker identity mapping — uses `SonosSystem::with_groups` (test-support,
-    /// no network). `with_groups` pre-initialises in-memory topology so
-    /// `system.speakers()` is a pure RwLock read with zero SOAP.
+    /// Convenience constructor for synthetic test devices.
+    fn dev(id: &str, name: &str, room: &str, ip: &str, model: &str) -> Device {
+        Device {
+            id: id.to_string(),
+            name: name.to_string(),
+            room_name: room.to_string(),
+            ip_address: ip.to_string(),
+            port: 1400,
+            model_name: model.to_string(),
+        }
+    }
+
+    /// Happy path: identity fields are mapped correctly, `uuid:` prefix is
+    /// stripped, empty model_name becomes `None`, non-empty becomes `Some`.
     ///
-    /// NOTE: `with_groups` hardcodes `model_name = "Sonos One"` for every
-    /// speaker, so the `model: None` branch (empty model_name) cannot be
-    /// exercised here. That branch is covered by `model_name_empty_maps_to_none`
-    /// below, which tests the mapping logic directly without any SonosSystem.
-    ///
-    /// (The previous version used `from_discovered_devices`, which unconditionally
-    /// calls `ensure_topology()` → SOAP TCP to the device IPs with a 5-second
-    /// connect timeout each, making the test take ~14 s and CI-flaky. Fixed here.)
+    /// This test was written BEFORE `to_snapshot` existed in the codebase —
+    /// it failed to compile against the old adapter (which only had
+    /// `map_snapshot(&SonosSystem)`).  That non-compilation is the
+    /// failing-test-first state required by the systematic-debugging protocol.
     #[test]
-    fn maps_speakers_without_network() {
-        // Build via the test-support constructor — does NOT call ensure_topology(),
-        // no SOAP, no network. Production path (from_discovered_devices) is
-        // exercised on real hardware in the user-run Task 8.
-        let system = SonosSystem::with_groups(&["Kitchen", "Office"]);
-        let snap = map_snapshot(&system);
-        assert_eq!(snap.speakers.len(), 2);
+    fn to_snapshot_maps_identity() {
+        let devices = vec![
+            dev(
+                "uuid:RINCON_542A1B9463A801400",
+                "Kitchen",
+                "Kitchen",
+                "10.0.0.1",
+                "Sonos Era 100",
+            ),
+            dev(
+                "RINCON_NO_PREFIX_456",
+                "Office",
+                "Office",
+                "10.0.0.2",
+                "Sonos One",
+            ),
+            dev(
+                "uuid:RINCON_EMPTY_MODEL",
+                "Bedroom",
+                "Bedroom",
+                "10.0.0.3",
+                "", // empty → None
+            ),
+        ];
+
+        let snap = to_snapshot(devices);
+
+        assert_eq!(snap.speakers.len(), 3, "expected 3 speakers");
+
+        // uuid: prefix must be stripped
         let kitchen = snap
             .speakers
             .iter()
             .find(|s| s.room_name == "Kitchen")
-            .unwrap();
-        // with_groups sets model_name = "Sonos One" for every speaker
-        assert_eq!(kitchen.model, Some("Sonos One".to_string()));
-        // Confirm the second room name round-trips correctly
-        assert!(snap.speakers.iter().any(|s| s.room_name == "Office"));
+            .expect("Kitchen speaker missing");
+        assert_eq!(
+            kitchen.id.as_str(),
+            "RINCON_542A1B9463A801400",
+            "uuid: prefix not stripped"
+        );
+        assert_eq!(kitchen.model, Some("Sonos Era 100".to_string()));
+        assert_eq!(kitchen.ip, "10.0.0.1".parse::<IpAddr>().unwrap());
+
+        // No prefix — id passes through unchanged
+        let office = snap
+            .speakers
+            .iter()
+            .find(|s| s.room_name == "Office")
+            .expect("Office speaker missing");
+        assert_eq!(office.id.as_str(), "RINCON_NO_PREFIX_456");
+        assert_eq!(office.model, Some("Sonos One".to_string()));
+
+        // Empty model_name → None
+        let bedroom = snap
+            .speakers
+            .iter()
+            .find(|s| s.room_name == "Bedroom")
+            .expect("Bedroom speaker missing");
+        assert_eq!(bedroom.model, None, "empty model_name should map to None");
     }
 
-    /// The model_name → SpeakerIdentity.model mapping has two branches:
-    ///   "" (empty) → None
-    ///   non-empty  → Some(model_name)
-    /// `with_groups` always produces "Sonos One" so the None branch can't be
-    /// exercised through map_snapshot. Test the logic directly here instead —
-    /// pure in-process, zero I/O.
+    /// Each speaker gets exactly one group-of-one whose coordinator and sole
+    /// member is that speaker, and whose id is `{speaker_id}:0`.
     #[test]
-    fn model_name_empty_maps_to_none() {
-        let empty: &str = "";
-        let non_empty: &str = "Sonos Era 100";
-        let map = |s: &str| -> Option<String> {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
-        };
-        assert_eq!(map(empty), None);
-        assert_eq!(map(non_empty), Some("Sonos Era 100".to_string()));
-    }
+    fn to_snapshot_group_of_one() {
+        let devices = vec![
+            dev(
+                "uuid:RINCON_AAAA",
+                "Living Room",
+                "Living Room",
+                "192.168.1.10",
+                "Sonos One",
+            ),
+            dev(
+                "uuid:RINCON_BBBB",
+                "Kitchen",
+                "Kitchen",
+                "192.168.1.11",
+                "Sonos Era 300",
+            ),
+        ];
 
-    /// Group mapping — uses `SonosSystem::with_groups` (test-support, no network).
-    /// `with_groups` pre-initialises topology so `system.groups()` never
-    /// calls `ensure_topology()` over the LAN.
-    #[test]
-    fn maps_groups_coordinator_first() {
-        // with_groups creates 2 standalone speakers (each its own coordinator).
-        let system = SonosSystem::with_groups(&["Kitchen", "Office"]);
-        let snap = map_snapshot(&system);
+        let snap = to_snapshot(devices);
+
         assert_eq!(snap.speakers.len(), 2);
-        assert_eq!(snap.groups.len(), 2);
+        assert_eq!(snap.groups.len(), 2, "one group per speaker");
+
         for g in &snap.groups {
-            // coordinator must be at index 0 (GroupIdentity invariant)
-            assert_eq!(g.members[0], g.coordinator);
-            // standalone group: only the coordinator is a member
-            assert_eq!(g.members.len(), 1);
+            // coordinator must be the sole member
+            assert_eq!(
+                g.members.len(),
+                1,
+                "group-of-one must have exactly one member"
+            );
+            assert_eq!(
+                g.members[0], g.coordinator,
+                "member[0] must equal coordinator"
+            );
+            // group id is "{speaker_id}:0"
+            let expected_gid = format!("{}:0", g.coordinator);
+            assert_eq!(
+                g.id.as_str(),
+                expected_gid,
+                "group id should be {{speaker}}:0"
+            );
         }
+
+        // Each speaker has a corresponding group
+        for s in &snap.speakers {
+            let found = snap.groups.iter().any(|g| g.coordinator == s.id);
+            assert!(found, "speaker {} has no group", s.id);
+        }
+    }
+
+    /// A device with an unparseable IP address is silently skipped; valid
+    /// devices in the same batch are still returned.
+    #[test]
+    fn to_snapshot_skips_unparseable_ip() {
+        let devices = vec![
+            dev(
+                "uuid:RINCON_GOOD",
+                "Good",
+                "Good Room",
+                "10.0.0.5",
+                "Sonos One",
+            ),
+            dev(
+                "uuid:RINCON_BAD",
+                "Bad",
+                "Bad Room",
+                "not-an-ip", // should be skipped
+                "Sonos One",
+            ),
+            dev(
+                "uuid:RINCON_ALSO_GOOD",
+                "Also Good",
+                "Also Good Room",
+                "10.0.0.6",
+                "Sonos Era 100",
+            ),
+        ];
+
+        let snap = to_snapshot(devices);
+
+        assert_eq!(snap.speakers.len(), 2, "bad-IP device must be skipped");
+        assert_eq!(snap.groups.len(), 2);
+        assert!(
+            snap.speakers.iter().all(|s| s.room_name != "Bad Room"),
+            "bad-IP device must not appear in output"
+        );
     }
 
     #[test]
