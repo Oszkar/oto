@@ -1,0 +1,68 @@
+{
+  "planPath": "docs/plans/2026-05-15-frb-discover-v0.1-implementation-plan.md",
+  "tasks": [
+    {
+      "id": 8,
+      "subject": "Task 0: Workspace scaffold — create oto-app, enable test-support",
+      "status": "completed",
+      "description": "Add oto-app to the workspace and enable sonos-sdk test-support on oto-wire; build green.\n\n```json:metadata\n{\"files\":[\"native/Cargo.toml\",\"native/crates/app/Cargo.toml\",\"native/crates/app/src/lib.rs\",\"native/crates/wire/Cargo.toml\"],\"verifyCommand\":\"just bootstrap-native && just deny\",\"acceptanceCriteria\":[\"oto-app workspace member\",\"oto-wire test-support enabled\",\"cargo check + deny clean\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 1: oto-core — identity types, Wire trait, WireError",
+      "status": "completed",
+      "blockedBy": [8],
+      "description": "Pure identity types + minimal Wire trait + manual WireError in oto-core.\n\n```json:metadata\n{\"files\":[\"native/crates/core/src/identity.rs\",\"native/crates/core/src/wire.rs\",\"native/crates/core/src/lib.rs\"],\"verifyCommand\":\"cd native && cargo nextest run -p oto-core\",\"acceptanceCriteria\":[\"identity types, oto-core pure\",\"Wire one discover() method\",\"WireError manual Display/Error 3 variants\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 2: oto-mock — deterministic Wire implementation",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "Replace placeholder() with MockWire (fixture + failing).\n\n```json:metadata\n{\"files\":[\"native/crates/mock/src/lib.rs\"],\"verifyCommand\":\"cd native && cargo nextest run -p oto-mock\",\"acceptanceCriteria\":[\"MockWire::default 3-speaker/2-group\",\"MockWire::failing returns error\",\"no placeholder() remains\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 3: oto-wire — own multi-interface SSDP (BLOCKED on §7-GATE-A)",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "Promote ssdp_probe to product code: multi-NIC SSDP -> unique LOCATION URLs. BLOCKED on §7-GATE-A (interface-enumeration crate sign-off).\n\n```json:metadata\n{\"files\":[\"native/crates/wire/src/ssdp.rs\",\"native/crates/wire/src/lib.rs\",\"native/crates/wire/Cargo.toml\"],\"verifyCommand\":\"cd native && cargo nextest run -p oto-wire\",\"acceptanceCriteria\":[\"discover_locations per-iface unique URLs\",\"loopback/link-local excluded; zero->Network\",\"LOCATION parse/dedupe unit-tested no socket\"],\"blockedReason\":\"§7-GATE-A: interface-enumeration crate needs user sign-off\"}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 4: oto-wire — device fetch, SonosSystem build, Wire impl",
+      "status": "completed",
+      "blockedBy": [11],
+      "description": "Raw TCP GET device descriptions, sonos-sdk test-support DeviceDescription parse, SonosSystem::from_discovered_devices, map to identities behind impl Wire for SonosWire.\n\n```json:metadata\n{\"files\":[\"native/crates/wire/src/http.rs\",\"native/crates/wire/src/adapter.rs\",\"native/crates/wire/src/lib.rs\"],\"verifyCommand\":\"cd native && cargo nextest run -p oto-wire\",\"acceptanceCriteria\":[\"SonosWire impls Wire full pipeline\",\"zero->NoDevicesFound errors->Backend\",\"SpeakerId/GroupId->String verified not guessed\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 5: oto-app — process-global wire ownership + discover()",
+      "status": "completed",
+      "blockedBy": [12, 10],
+      "description": "oto-app owns active Wire process-global; discover()/discover_with(): replace-on-success, prior-intact-on-failure, idempotent.\n\n```json:metadata\n{\"files\":[\"native/crates/app/src/lib.rs\"],\"verifyCommand\":\"cd native && cargo nextest run -p oto-app\",\"acceptanceCriteria\":[\"discover() uses SonosWire\",\"discover_with seam success/failure semantics\",\"idempotent refresh\"]}\n```"
+    },
+    {
+      "id": 14,
+      "subject": "Task 6: FRB surface — DTOs + non-sync discover() command",
+      "status": "completed",
+      "blockedBy": [13],
+      "description": "FRB Topology/DiscoveredSpeaker/DiscoveredGroup/DiscoveryError DTOs + non-sync discover() in native/src/api.rs (D1 representational map); regenerate committed bindings; no-LAN e2e test.\n\n```json:metadata\n{\"files\":[\"native/Cargo.toml\",\"native/src/api.rs\",\"native/tests/discover_e2e.rs\",\"app/lib/src/rust\",\"native/src/frb_generated.rs\"],\"verifyCommand\":\"just gen && just check && just test && (cd native && cargo deny check) && dart app/scripts/verify_generated.dart\",\"acceptanceCriteria\":[\"discover() non-sync Dart Future\",\"init_app unchanged not on frb(init)\",\"WireError->DiscoveryError, IpAddr->String\",\"just gen + verify_generated clean\",\"discover_e2e no-LAN passes\"]}\n```"
+    },
+    {
+      "id": 15,
+      "subject": "Task 7: Riverpod FutureProvider + Dart wiring test",
+      "status": "completed",
+      "blockedBy": [14],
+      "description": "discovery FutureProvider + flutter test wiring proof (D2 part b); no UI.\n\n```json:metadata\n{\"files\":[\"app/lib/src/state/discovery.dart\",\"app/lib/src/state/discovery.g.dart\",\"app/test/discovery_provider_test.dart\"],\"verifyCommand\":\"cd app && flutter analyze && flutter test && cd .. && dart app/scripts/verify_generated.dart\",\"acceptanceCriteria\":[\"@riverpod Future<Topology> discovery\",\"discovery.g.dart regenerated+committed\",\"flutter test wiring proof no LAN\"]}\n```"
+    },
+    {
+      "id": 16,
+      "subject": "Task 8: User-run LAN verification (AGENTS.md §5)",
+      "status": "completed",
+      "blockedBy": [12],
+      "description": "USER-ORDERED GATE — NON-SKIPPABLE. #[ignore]d live LAN integration test; agent must not claim passed without user-provided real-LAN output.\n\n```json:metadata\n{\"files\":[\"native/crates/wire/tests/live_discovery.rs\"],\"verifyCommand\":\"cd native && cargo test -p oto-wire --test live_discovery -- --ignored --nocapture\",\"acceptanceCriteria\":[\"#[ignore]d test prints snapshot\",\"exact run command documented\",\"not claimed passed without user real-LAN output >=1 speaker\"],\"userGate\":true,\"tags\":[\"user-gate\"],\"gateScope\":\"hardware-lan\",\"failurePolicy\":\"stop\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-16T11:30:00Z"
+}

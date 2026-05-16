@@ -13,4 +13,19 @@ workspace = true
 
 [dependencies]
 oto-core = { workspace = true }
-sonos-sdk = { workspace = true }
+# `test-support` gates the public re-export of `sonos_discovery::{Device,
+# DeviceDescription}` — adapter.rs parses fetched device-description XML
+# with `DeviceDescription::from_xml` (a production code path, not
+# test-only). v0.1 does NOT call `SonosSystem::from_discovered_devices`
+# (snapshot is built from our own discovered devices — see the discover
+# design-doc Addendum), so do not assume this feature can be dropped.
+# Pinned =0.5.2 at the workspace; the gated API is not semver-protected —
+# do not bump without re-checking it (upstream tatimblin/sonos-sdk#76).
+sonos-sdk = { workspace = true, features = ["test-support"] }
+# Local interface enumeration for multi-NIC SSDP — std has no API for
+# this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
+if-addrs = "0.15"
+# Robust HTTP for UPnP device descriptions. Sonos replies HTTP/1.1
+# chunked; a raw TcpStream GET can't de-chunk. Already in the locked
+# graph via sonos-sdk (no new supply-chain) — unify, don't bump.
+ureq = "2"

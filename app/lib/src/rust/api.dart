@@ -5,6 +5,93 @@
 
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+part 'api.freezed.dart';
+
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
 String greet({required String name}) =>
     RustLib.instance.api.crateApiGreet(name: name);
+
+/// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
+/// NOT on the #[frb(init)] path. Identity-only snapshot.
+Future<Topology> discover() => RustLib.instance.api.crateApiDiscover();
+
+class DiscoveredGroup {
+  final String id;
+  final String coordinator;
+  final List<String> members;
+
+  const DiscoveredGroup({
+    required this.id,
+    required this.coordinator,
+    required this.members,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ coordinator.hashCode ^ members.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiscoveredGroup &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          coordinator == other.coordinator &&
+          members == other.members;
+}
+
+class DiscoveredSpeaker {
+  final String id;
+  final String roomName;
+  final String? model;
+  final String ip;
+
+  const DiscoveredSpeaker({
+    required this.id,
+    required this.roomName,
+    this.model,
+    required this.ip,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ roomName.hashCode ^ model.hashCode ^ ip.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiscoveredSpeaker &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          roomName == other.roomName &&
+          model == other.model &&
+          ip == other.ip;
+}
+
+@freezed
+sealed class DiscoveryError with _$DiscoveryError implements FrbException {
+  const DiscoveryError._();
+
+  const factory DiscoveryError.network(String field0) = DiscoveryError_Network;
+  const factory DiscoveryError.noDevicesFound() = DiscoveryError_NoDevicesFound;
+  const factory DiscoveryError.sdk(String field0) = DiscoveryError_Sdk;
+}
+
+class Topology {
+  final List<DiscoveredSpeaker> speakers;
+  final List<DiscoveredGroup> groups;
+
+  const Topology({required this.speakers, required this.groups});
+
+  @override
+  int get hashCode => speakers.hashCode ^ groups.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Topology &&
+          runtimeType == other.runtimeType &&
+          speakers == other.speakers &&
+          groups == other.groups;
+}

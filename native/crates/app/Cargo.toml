@@ -1,0 +1,19 @@
+[package]
+name = "oto-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Runtime state owner: holds the Wire, routes the discover command."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+oto-core = { workspace = true }
+oto-wire = { workspace = true }
+
+[dev-dependencies]
+oto-mock = { workspace = true }
