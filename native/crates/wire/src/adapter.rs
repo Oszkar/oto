@@ -88,9 +88,9 @@ fn to_snapshot(devices: Vec<Device>) -> DiscoverySnapshot {
             ip,
         });
 
-        // v0.1 group-of-one; real topology/bonded modeling deferred to v0.3
-        // (ARCHITECTURE open-Q1/Q4) — bonded surrounds appear as standalone
-        // here by design.
+        // v0.1 group-of-one; bonded surrounds appear as standalone here by
+        // design. TODO(v0.3): replace with real ZoneGroupTopology (bonded
+        // surrounds, stereo pairs, multi-room groups) — ARCHITECTURE open-Q1/Q4.
         groups.push(GroupIdentity {
             id: GroupId::new(format!("{sid}:0")),
             coordinator: sid.clone(),
@@ -115,10 +115,11 @@ impl Wire for SonosWire {
                 ))
             });
         }
+        let device_count = devices.len();
         let snapshot = to_snapshot(devices);
         if snapshot.speakers.is_empty() {
             return Err(WireError::Backend(format!(
-                "to_snapshot produced 0 speakers from {location_count} device(s) — all IP addresses unparseable (anomalous)"
+                "to_snapshot produced 0 speakers from {device_count} device(s) — all IP addresses unparseable (anomalous)"
             )));
         }
         Ok(snapshot)
@@ -144,11 +145,6 @@ mod tests {
 
     /// Happy path: identity fields are mapped correctly, `uuid:` prefix is
     /// stripped, empty model_name becomes `None`, non-empty becomes `Some`.
-    ///
-    /// This test was written BEFORE `to_snapshot` existed in the codebase —
-    /// it failed to compile against the old adapter (which only had
-    /// `map_snapshot(&SonosSystem)`).  That non-compilation is the
-    /// failing-test-first state required by the systematic-debugging protocol.
     #[test]
     fn to_snapshot_maps_identity() {
         let devices = vec![
