@@ -13,11 +13,14 @@ workspace = true
 
 [dependencies]
 oto-core = { workspace = true }
-# `test-support` exposes `SonosSystem::from_discovered_devices`, required for
-# the multi-NIC SSDP workaround (sonos-sdk's built-in SSDP binds 0.0.0.0).
-# This is a production code path, not test-only — see docs/ARCHITECTURE.md.
-# Pinned =0.5.2 at the workspace; do not bump without re-checking this API
-# (upstream tatimblin/sonos-sdk#76).
+# `test-support` gates the public re-export of `sonos_discovery::{Device,
+# DeviceDescription}` — adapter.rs parses fetched device-description XML
+# with `DeviceDescription::from_xml` (a production code path, not
+# test-only). v0.1 does NOT call `SonosSystem::from_discovered_devices`
+# (snapshot is built from our own discovered devices — see the discover
+# design-doc Addendum), so do not assume this feature can be dropped.
+# Pinned =0.5.2 at the workspace; the gated API is not semver-protected —
+# do not bump without re-checking it (upstream tatimblin/sonos-sdk#76).
 sonos-sdk = { workspace = true, features = ["test-support"] }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
