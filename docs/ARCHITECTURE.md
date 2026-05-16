@@ -179,6 +179,14 @@ dropped.
 - **Local-first:** LAN-only. No cloud, no account, no Sonos HTTP API.
 - **No persistence** beyond what `sonos-sdk` caches in memory. No on-disk
   state or config yet.
+- **v0.1 verified on Windows** (Rust bridge — the milestone bar). The
+  Android main manifest declares `INTERNET` +
+  `CHANGE_WIFI_MULTICAST_STATE`, but Android silently drops SSDP
+  multicast without a held `WifiManager.MulticastLock`; that platform
+  code is deferred (`TODO(v0.4)`, `native/src/api.rs`). Android
+  **release** discovery is therefore non-functional until v0.4; the
+  debug APK works (Flutter tooling supplies `INTERNET`). A documented
+  v0.1 limitation, like the bonded-surround case in Open Q4.
 
 ## Open questions
 

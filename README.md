@@ -160,6 +160,13 @@ bonded surround is listed as a standalone player. (Hardware verification
 showed `sonos-sdk`'s post-discovery topology is lazy/non-deterministic;
 see `docs/ARCHITECTURE.md` Open Q1.)
 
+v0.1 discovery is verified on **Windows** (Rust bridge — the milestone
+bar). On **Android**, the main manifest now declares `INTERNET` +
+`CHANGE_WIFI_MULTICAST_STATE`, but receiving SSDP multicast also needs a
+held `WifiManager.MulticastLock` — that platform code is `TODO(v0.4)`
+(see `native/src/api.rs`). Until then Android **release** discovery
+won't receive replies; the debug APK works (Flutter tooling).
+
 ## Development notes
 
 - State management on the Dart side is **Riverpod 3 with codegen**. Define
