@@ -14,10 +14,10 @@ jobs:
     name: Debug APK
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -30,7 +30,7 @@ jobs:
           cache: true
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: aarch64-linux-android,x86_64-linux-android
 
@@ -57,7 +57,7 @@ jobs:
         working-directory: app
         run: flutter build apk --debug
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: oto-debug-apk
           path: app/build/app/outputs/flutter-apk/app-debug.apk
