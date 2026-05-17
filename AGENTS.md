@@ -96,12 +96,13 @@ oto/
 ├── native/                      Rust workspace
 │   ├── Cargo.toml               workspace root + oto_native cdylib (FRB)
 │   ├── src/api.rs               FRB surface — thin, delegate inward
-│   └── crates/{core,wire,mock}
+│   └── crates/{core,wire,mock,app}
 └── .github/workflows/           ci.yml + build.yml
 ```
 
-`oto-app` (translation + lifecycle: owns `SonosSystem`, event-pump
-threads, `sonos_sdk`↔`oto_core` mapping) is **planned, not yet created**.
+`oto-app` owns runtime state. For v0.1 that is the active `Wire` and
+`discover` routing; v0.2/v0.3 grow it to own `SonosSystem`, the
+`sonos_sdk`↔`oto_core` mapping, and the event-pump threads.
 
 ### Architectural boundaries — agents must respect
 
@@ -114,10 +115,10 @@ threads, `sonos_sdk`↔`oto_core` mapping) is **planned, not yet created**.
    `sonos-sdk`'s `0.0.0.0` SSDP is broken on multi-NIC hosts —
    [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
    Do not call `SonosSystem::new()`.
-3. **`oto-mock` (planned) will be the test `Wire` impl** — deterministic
-   fixtures, no network; integration tests run without real Sonos.
-4. **`oto-app` (planned) is the sole owner of runtime state** and the
-   only place `sonos_sdk` types are translated to `oto_core` types.
+3. **`oto-mock` is the test `Wire` impl** — deterministic fixtures, no
+   network; integration tests run without real Sonos.
+4. **`oto-app` is the sole owner of runtime state** and the only place
+   `sonos_sdk` types are translated to `oto_core` types.
 5. **`oto_native` is glue only.** No business logic in
    `native/src/api.rs`; it delegates inward. Commands sync, events
    `Stream`.

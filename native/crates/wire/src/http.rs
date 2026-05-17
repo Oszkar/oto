@@ -10,9 +10,13 @@ use oto_core::WireError;
 
 /// GET `url` (expects `http://host:port/path`), return the decoded response body.
 ///
-/// Uses ureq (already in the locked dependency graph via sonos-sdk — no new
-/// supply-chain) which transparently handles chunked transfer-encoding and
-/// Content-Length. `timeout` bounds **both** the TCP connect phase and the
+/// Uses ureq, a *synchronous* HTTP client, which transparently handles chunked
+/// transfer-encoding and Content-Length. The choice is about **correctness**,
+/// not supply-chain weight: a raw `TcpStream` GET cannot de-chunk Sonos's
+/// HTTP/1.1 chunked replies (see the module note), and `reqwest`/`tokio`/`hyper`
+/// are already pulled transitively by the `sonos-sdk` umbrella regardless — so
+/// ureq adds a correct sync client without pulling an async runtime of its own.
+/// `timeout` bounds **both** the TCP connect phase and the
 /// overall request (read/write); a per-call `AgentBuilder` is used so that
 /// `AgentBuilder::timeout_connect(timeout)` (connect deadline) and
 /// `AgentBuilder::timeout(timeout)` (overall deadline) are both applied.
