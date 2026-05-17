@@ -35,7 +35,10 @@ updates:
       pub:
         patterns: ["*"]
 
-  # Cargokit FFI shim. Mostly boilerplate but pinned alongside.
+  # Cargokit FFI shim — vendored boilerplate carrying a local patch
+  # (see LOCAL_PATCHES.md). `ffigen` / `flutter_lints` are dev-only deps
+  # here with zero runtime impact; bumping them only risks the local
+  # patch and broke Flutter CI (closed PR #2). Ignored deliberately.
   - package-ecosystem: pub
     directory: /app/rust_builder
     schedule:
@@ -44,3 +47,6 @@ updates:
     groups:
       pub-rust-builder:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "ffigen"
+      - dependency-name: "flutter_lints"
