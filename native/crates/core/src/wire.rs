@@ -19,6 +19,10 @@ pub enum WireError {
     NoDevicesFound,
     /// Device-description fetch or parse failed (HTTP/XML stage).
     Backend(String),
+    /// Command target (speaker/group id) is not in the current snapshot,
+    /// or no discovery has populated the wire yet. A precondition error,
+    /// distinct from a transport failure.
+    NotFound(String),
 }
 
 impl fmt::Display for WireError {
@@ -29,6 +33,7 @@ impl fmt::Display for WireError {
                 write!(f, "no Sonos devices found on the network")
             }
             WireError::Backend(m) => write!(f, "discovery backend error: {m}"),
+            WireError::NotFound(w) => write!(f, "not found: {w}"),
         }
     }
 }
@@ -52,6 +57,10 @@ mod tests {
         assert_eq!(
             WireError::Backend("parse failed".into()).to_string(),
             "discovery backend error: parse failed"
+        );
+        assert_eq!(
+            WireError::NotFound("RINCON_X".into()).to_string(),
+            "not found: RINCON_X"
         );
     }
 }
