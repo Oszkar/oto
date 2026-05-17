@@ -4,14 +4,14 @@
     {
       "id": 5,
       "subject": "Task 0: Playback spike + findings doc (PR A)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [],
-      "description": "**Goal:** Throwaway hardware spike recording the exact sonos_api 0.5.2 control/read API + response shapes; gates the §7 commit (Tasks 1–2). USER-RUN on a real LAN.\n\n```json:metadata\n{\"files\": [\"native/crates/wire/examples/playback_spike.rs\", \"docs/plans/2026-05-18-playback-spike-findings.md\", \"native/crates/wire/Cargo.toml\"], \"verifyCommand\": \"cargo run -p oto-wire --example playback_spike -- <SPEAKER_IP>\", \"acceptanceCriteria\": [\"spike exercises 6 commands + 4 reads against a real speaker\", \"findings doc answers all 5 design-doc Phase-0 questions with quoted signatures\", \"findings doc states exact sonos-api dep line + crate path\", \"no product code committed\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"blocks-tasks-1-2\", \"requiresUserSpecification\": false, \"failurePolicy\": \"halt\"}\n```"
+      "description": "**Goal:** Throwaway hardware spike recording the exact sonos_api 0.5.2 control/read API + response shapes; gates the §7 commit (Tasks 1–2). USER-RUN on a real LAN.\n\n```json:metadata\n{\"files\": [\"native/crates/wire/examples/playback_spike.rs\", \"docs/plans/2026-05-18-playback-spike-findings.md\", \"native/crates/wire/Cargo.toml\"], \"verifyCommand\": \"cargo run -p oto-wire --example playback_spike -- <SPEAKER_IP>\", \"acceptanceCriteria\": [\"spike exercises 6 commands + 4 reads against a real speaker\", \"findings doc answers all 5 design-doc Phase-0 questions with quoted signatures\", \"findings doc states exact sonos-api dep line + crate path\", \"no product code committed\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"blocks-tasks-1-2\", \"requiresUserSpecification\": false, \"failurePolicy\": \"stop\"}\n```"
     },
     {
       "id": 6,
       "subject": "Task 1: oto-core SpeakerState + WireError::NotFound (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** Add SpeakerState { volume:Option<Volume>, muted:Option<bool>, transport:Option<TransportState> } + WireError::NotFound(String); pure, deps-free, unit-tested.\n\n```json:metadata\n{\"files\": [\"native/crates/core/src/state.rs\", \"native/crates/core/src/lib.rs\", \"native/crates/core/src/wire.rs\"], \"verifyCommand\": \"cd native && cargo nextest run -p oto-core\", \"acceptanceCriteria\": [\"oto_core::SpeakerState exists + re-exported, Option<T> fields\", \"WireError::NotFound(String) exists with Display 'not found: {0}'\", \"no new deps; deny(unsafe_code) holds\"]}\n```"
     },
@@ -48,7 +48,7 @@
       "subject": "Task 6: LAN-free domain e2e + hardware-gated playback smoke (PR B)",
       "status": "pending",
       "blockedBy": [10],
-      "description": "**Goal:** LAN-free playback_e2e (oto_app + stateful MockWire, command→state round-trips — the PR B acceptance bar) + #[ignore] live_playback.rs hardware smoke (USER-RUN, non-destructive). USER-ORDERED GATE.\n\n```json:metadata\n{\"files\": [\"native/tests/playback_e2e.rs\", \"native/crates/wire/tests/live_playback.rs\"], \"verifyCommand\": \"cd native && cargo nextest run --workspace -E 'test(playback_e2e)'\", \"acceptanceCriteria\": [\"LAN-free playback_e2e proves command→state via oto-app + MockWire, passes in CI\", \"live_playback.rs #[ignore] non-destructive hardware round-trip; not run by CI\", \"just test green; user-run hardware smoke passes on the LAN\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"pr-b-acceptance\", \"requiresUserSpecification\": false, \"failurePolicy\": \"halt\"}\n```"
+      "description": "**Goal:** LAN-free playback_e2e (oto_app + stateful MockWire, command→state round-trips — the PR B acceptance bar) + #[ignore] live_playback.rs hardware smoke (USER-RUN, non-destructive). USER-ORDERED GATE.\n\n```json:metadata\n{\"files\": [\"native/tests/playback_e2e.rs\", \"native/crates/wire/tests/live_playback.rs\"], \"verifyCommand\": \"cd native && cargo nextest run --workspace -E 'test(playback_e2e)'\", \"acceptanceCriteria\": [\"LAN-free playback_e2e proves command→state via oto-app + MockWire, passes in CI\", \"live_playback.rs #[ignore] non-destructive hardware round-trip; not run by CI\", \"just test green; user-run hardware smoke passes on the LAN\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"pr-b-acceptance\", \"requiresUserSpecification\": false, \"failurePolicy\": \"stop\"}\n```"
     },
     {
       "id": 11,
@@ -72,5 +72,5 @@
       "description": "**Goal:** Sync ARCHITECTURE (non-sync command flow, state-read ADR note + revisit-v0.3, Crates table, Open Q5/Q7), README milestone ladder, CHANGELOG [0.2.0] + footnote links, bump pubspec 0.2.0; resolve/retarget every TODO(v0.2).\n\n```json:metadata\n{\"files\": [\"docs/ARCHITECTURE.md\", \"README.md\", \"CHANGELOG.md\", \"app/pubspec.yaml\"], \"verifyCommand\": \"grep -rn \\\"TODO(v0.2)\\\" native app docs ; cd native && cargo nextest run --workspace\", \"acceptanceCriteria\": [\"ARCHITECTURE: non-sync command flow + state-read ADR note + revisit-v0.3 + Crates/Open-Q updates; links resolve\", \"README milestone ladder + v0.2 capability/caveats\", \"CHANGELOG [0.2.0] accurate w/ footnote links; pubspec bumped\", \"all TODO(v0.2) resolved or retargeted\", \"just check && just test green; gen-check clean\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-18"
+  "lastUpdated": "2026-05-17T16:12:39Z"
 }
