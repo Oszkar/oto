@@ -8,6 +8,8 @@ and behavior may change between any releases.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-17
+
 ### Added
 
 v0.1 — Foundation + LAN discovery. Identity-only discovery proven
@@ -47,6 +49,7 @@ surrounds/stereo pairs appear as standalone players — real
 ZoneGroupTopology is v0.3); verified on Windows — Android **release**
 discovery needs a `WifiManager.MulticastLock` (`TODO(v0.4)`).
 
-[Unreleased]: https://github.com/Oszkar/oto/commits/main
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Oszkar/oto/releases/tag/v0.1.0
 [kac]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
