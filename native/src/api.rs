@@ -1,3 +1,4 @@
+use oto_app::discover as app_discover;
 use oto_core::greeting;
 
 #[flutter_rust_bridge::frb(sync)]
@@ -9,8 +10,6 @@ pub fn greet(name: String) -> String {
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
-
-use oto_app::discover as app_discover;
 
 pub struct Topology {
     pub speakers: Vec<DiscoveredSpeaker>,
