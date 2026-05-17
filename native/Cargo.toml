@@ -33,6 +33,12 @@ oto-wire = { path = "crates/wire" }
 # docs/plans/2026-05-15-discovery-spike-findings.md.
 sonos-sdk = "=0.5.2"
 
+# Low-level UPnP SOAP client that sonos-sdk depends on. Exact pin matches
+# the sonos-sdk 0.5.2 transitive dep; used directly only in the throwaway
+# playback_spike dev-dep (oto-wire). Do not use in production crates — all
+# production control calls go through sonos-sdk. See AGENTS.md §4.
+sonos-api = "=0.5.2"
+
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.
 [package]

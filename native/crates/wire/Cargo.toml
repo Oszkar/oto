@@ -29,3 +29,11 @@ if-addrs = "0.15"
 # chunked; a raw TcpStream GET can't de-chunk. Already in the locked
 # graph via sonos-sdk (no new supply-chain) — unify, don't bump.
 ureq = "2"
+
+[dev-dependencies]
+# Direct access to the sonos_api UPnP client for the throwaway
+# playback_spike example. sonos-sdk does not re-export SonosClient or
+# services::av_transport / rendering_control, so a direct dep is
+# required here. Exact pin matches the workspace pin. SPIKE ONLY —
+# do not promote to [dependencies]. See AGENTS.md §4.
+sonos-api = { workspace = true }
