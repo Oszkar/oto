@@ -1262,6 +1262,7 @@ version = "0.1.0"
 dependencies = [
  "if-addrs",
  "oto-core",
+ "sonos-api",
  "sonos-sdk",
  "ureq",
 ]
