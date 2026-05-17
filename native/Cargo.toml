@@ -52,6 +52,18 @@ flutter_rust_bridge = "=2.12.0"
 oto-app = { workspace = true }
 oto-core = { workspace = true }
 
+# Android cross-compile only. `sonos-sdk` pulls `reqwest` with default
+# features → `native-tls` → `openssl-sys`, and the Android NDK ships no
+# system OpenSSL, so the `aarch64/x86_64-linux-android` build fails to
+# build `openssl-sys`. Depending on `openssl` with `vendored` here flips
+# the transitively-shared `openssl-sys` to build a vendored OpenSSL with
+# the NDK toolchain. We make zero HTTPS calls (ureq + raw UDP); this
+# exists solely so the Android link succeeds. Not pulled on Windows
+# (native-tls uses SChannel there). TODO(v0.2): drop if sonos-sdk moves
+# off native-tls / we narrow the dep per ARCHITECTURE Open Q7.
+[target.'cfg(target_os = "android")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
 [dev-dependencies]
 oto-app = { workspace = true }
 oto-mock = { workspace = true }
