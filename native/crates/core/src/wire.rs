@@ -3,12 +3,33 @@
 
 use std::fmt;
 
-use crate::identity::DiscoverySnapshot;
+use crate::{
+    identifiers::{GroupId, SpeakerId},
+    identity::DiscoverySnapshot,
+    state::SpeakerState,
+    volume::Volume,
+};
 
-/// One-shot identity discovery. Blocking. Implemented by `oto-wire`
-/// (production) and `oto-mock` (tests).
+/// The `Wire` seam. `oto-app` depends on this trait, never on `sonos-sdk`.
+///
+/// Addressing is the v0.3 seam: playback is per-coordinator, so
+/// play/pause/next/previous take a `GroupId`; the impl resolves
+/// group-of-one → coordinator → IP. v0.2 resolution is trivial (the
+/// group's sole member is its coordinator); v0.3 swaps in real
+/// ZoneGroupTopology resolution **without changing these signatures**.
+/// volume/mute/state are per-`SpeakerId`. All methods block (SOAP).
 pub trait Wire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError>;
+
+    fn play(&self, group: &GroupId) -> Result<(), WireError>;
+    fn pause(&self, group: &GroupId) -> Result<(), WireError>;
+    fn next(&self, group: &GroupId) -> Result<(), WireError>;
+    fn previous(&self, group: &GroupId) -> Result<(), WireError>;
+
+    fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError>;
+    fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
+
+    fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
