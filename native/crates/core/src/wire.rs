@@ -1,34 +1,65 @@
-//! The `Wire` seam. `oto-app` depends on this trait, never on `sonos-sdk`.
-//! Minimal for v0.1: one identity-only discovery method.
+//! The `Wire` seam — the trait `oto-app` depends on instead of
+//! `sonos-sdk`. v0.2: discovery + playback commands + a one-shot state
+//! read; see the `Wire` doc for the v0.3 addressing seam.
 
 use std::fmt;
 
-use crate::identity::DiscoverySnapshot;
+use crate::{
+    identifiers::{GroupId, SpeakerId},
+    identity::DiscoverySnapshot,
+    state::SpeakerState,
+    volume::Volume,
+};
 
-/// One-shot identity discovery. Blocking. Implemented by `oto-wire`
-/// (production) and `oto-mock` (tests).
+/// The `Wire` seam. `oto-app` depends on this trait, never on `sonos-sdk`.
+///
+/// Addressing is the v0.3 seam: playback is per-coordinator, so
+/// play/pause/next/previous take a `GroupId`; the impl resolves
+/// group-of-one → coordinator → IP. v0.2 resolution is trivial (the
+/// group's sole member is its coordinator); v0.3 swaps in real
+/// ZoneGroupTopology resolution **without changing these signatures**.
+/// volume/mute/state are per-`SpeakerId`. All methods block (SOAP).
 pub trait Wire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError>;
+
+    fn play(&self, group: &GroupId) -> Result<(), WireError>;
+    fn pause(&self, group: &GroupId) -> Result<(), WireError>;
+    fn next(&self, group: &GroupId) -> Result<(), WireError>;
+    fn previous(&self, group: &GroupId) -> Result<(), WireError>;
+
+    fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError>;
+    fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
+
+    fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireError {
-    /// No usable IPv4 interface, or SSDP send/socket failure.
+    /// Transport-level failure: no usable IPv4 interface / SSDP socket
+    /// error during discovery, or a connection failure on a command or
+    /// state-read SOAP call.
     Network(String),
     /// SSDP completed but found zero Sonos devices.
     NoDevicesFound,
-    /// Device-description fetch or parse failed (HTTP/XML stage).
+    /// A device was reached but the request failed: device-description
+    /// fetch/parse during discovery, or a SOAP fault / response-parse
+    /// failure on a command or state read.
     Backend(String),
+    /// Command target (speaker/group id) is not in the current snapshot,
+    /// or no discovery has populated the wire yet. A precondition error,
+    /// distinct from a transport failure.
+    NotFound(String),
 }
 
 impl fmt::Display for WireError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            WireError::Network(m) => write!(f, "discovery network error: {m}"),
+            WireError::Network(m) => write!(f, "network error: {m}"),
             WireError::NoDevicesFound => {
                 write!(f, "no Sonos devices found on the network")
             }
-            WireError::Backend(m) => write!(f, "discovery backend error: {m}"),
+            WireError::Backend(m) => write!(f, "backend error: {m}"),
+            WireError::NotFound(w) => write!(f, "not found: {w}"),
         }
     }
 }
@@ -47,11 +78,15 @@ mod tests {
         );
         assert_eq!(
             WireError::Network("bind failed".into()).to_string(),
-            "discovery network error: bind failed"
+            "network error: bind failed"
         );
         assert_eq!(
             WireError::Backend("parse failed".into()).to_string(),
-            "discovery backend error: parse failed"
+            "backend error: parse failed"
+        );
+        assert_eq!(
+            WireError::NotFound("RINCON_X".into()).to_string(),
+            "not found: RINCON_X"
         );
     }
 }

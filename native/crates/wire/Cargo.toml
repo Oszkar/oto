@@ -22,6 +22,12 @@ oto-core = { workspace = true }
 # Pinned =0.5.2 at the workspace; the gated API is not semver-protected —
 # do not bump without re-checking it (upstream tatimblin/sonos-sdk#76).
 sonos-sdk = { workspace = true, features = ["test-support"] }
+# Direct access to the sonos_api UPnP SOAP client for control operations
+# (play/pause/next/previous/volume/mute/state). sonos-sdk does not
+# re-export SonosClient or services::av_transport / rendering_control,
+# so a direct dep is required. Promoted from dev-dep per Task 4 (v0.2).
+# Exact pin matches the workspace pin (=0.5.2).
+sonos-api = { workspace = true }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
 if-addrs = "0.15"
@@ -29,11 +35,8 @@ if-addrs = "0.15"
 # chunked; a raw TcpStream GET can't de-chunk. Already in the locked
 # graph via sonos-sdk (no new supply-chain) — unify, don't bump.
 ureq = "2"
+# DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
+# the locked graph via sonos-sdk (transitive) — unify, don't bump.
+quick-xml = { workspace = true }
 
 [dev-dependencies]
-# Direct access to the sonos_api UPnP client for the throwaway
-# playback_spike example. sonos-sdk does not re-export SonosClient or
-# services::av_transport / rendering_control, so a direct dep is
-# required here. Exact pin matches the workspace pin. SPIKE ONLY —
-# do not promote to [dependencies]. See AGENTS.md §4.
-sonos-api = { workspace = true }

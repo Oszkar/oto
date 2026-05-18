@@ -15,12 +15,17 @@ use oto_core::{DiscoverySnapshot, WireError};
 
 use crate::api::{DiscoveredGroup, DiscoveredSpeaker, DiscoveryError, Topology};
 
-/// `WireError` → the FRB-facing `DiscoveryError` (1:1; `Backend` → `Sdk`).
+/// `WireError` → the FRB-facing `DiscoveryError` (1:1; `Backend`/`NotFound` → `Sdk`).
+///
+/// `NotFound` cannot arise from `discover()` itself (it is a command-level
+/// precondition error), but the match must be exhaustive. Map it to `Sdk` so
+/// if it ever surfaces unexpectedly it is surfaced as a diagnostic string.
 pub fn to_discovery_error(e: WireError) -> DiscoveryError {
     match e {
         WireError::Network(m) => DiscoveryError::Network(m),
         WireError::NoDevicesFound => DiscoveryError::NoDevicesFound,
         WireError::Backend(m) => DiscoveryError::Sdk(m),
+        WireError::NotFound(m) => DiscoveryError::Sdk(format!("not found: {m}")),
     }
 }
 
@@ -68,6 +73,11 @@ mod tests {
         assert!(matches!(
             to_discovery_error(WireError::Backend("xml".into())),
             DiscoveryError::Sdk(m) if m == "xml"
+        ));
+        // NotFound → Sdk (cannot arise from discover(), but must be exhaustive)
+        assert!(matches!(
+            to_discovery_error(WireError::NotFound("RINCON_X".into())),
+            DiscoveryError::Sdk(_)
         ));
     }
 }

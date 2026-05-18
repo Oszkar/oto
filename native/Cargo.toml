@@ -34,10 +34,14 @@ oto-wire = { path = "crates/wire" }
 sonos-sdk = "=0.5.2"
 
 # Low-level UPnP SOAP client that sonos-sdk depends on. Exact pin matches
-# the sonos-sdk 0.5.2 transitive dep; used directly only in the throwaway
-# playback_spike dev-dep (oto-wire). Do not use in production crates — all
-# production control calls go through sonos-sdk. See AGENTS.md §4.
+# the sonos-sdk 0.5.2 transitive dep; used directly in oto-wire for
+# production control operations (play/pause/vol/mute/state). See AGENTS.md §4.
 sonos-api = "=0.5.2"
+
+# XML parser used by oto-wire's DIDL-Lite track-metadata parser
+# (parse_track_didl in control.rs). Already in the locked graph via
+# sonos-sdk — unify, don't bump.
+quick-xml = "=0.31.0"
 
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.

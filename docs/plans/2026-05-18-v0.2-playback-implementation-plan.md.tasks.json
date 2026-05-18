@@ -4,51 +4,51 @@
     {
       "id": 5,
       "subject": "Task 0: Playback spike + findings doc (PR A)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [],
-      "description": "**Goal:** Throwaway hardware spike recording the exact sonos_api 0.5.2 control/read API + response shapes; gates the §7 commit (Tasks 1–2). USER-RUN on a real LAN.\n\n```json:metadata\n{\"files\": [\"native/crates/wire/examples/playback_spike.rs\", \"docs/plans/2026-05-18-playback-spike-findings.md\", \"native/crates/wire/Cargo.toml\"], \"verifyCommand\": \"cargo run -p oto-wire --example playback_spike -- <SPEAKER_IP>\", \"acceptanceCriteria\": [\"spike exercises 6 commands + 4 reads against a real speaker\", \"findings doc answers all 5 design-doc Phase-0 questions with quoted signatures\", \"findings doc states exact sonos-api dep line + crate path\", \"no product code committed\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"blocks-tasks-1-2\", \"requiresUserSpecification\": false, \"failurePolicy\": \"halt\"}\n```"
+      "description": "**Goal:** Throwaway hardware spike recording the exact sonos_api 0.5.2 control/read API + response shapes; gates the §7 commit (Tasks 1–2). USER-RUN on a real LAN.\n\n```json:metadata\n{\"files\": [\"native/crates/wire/examples/playback_spike.rs\", \"docs/plans/2026-05-18-playback-spike-findings.md\", \"native/crates/wire/Cargo.toml\"], \"verifyCommand\": \"cargo run -p oto-wire --example playback_spike -- <SPEAKER_IP>\", \"acceptanceCriteria\": [\"spike exercises 6 commands + 4 reads against a real speaker\", \"findings doc answers all 5 design-doc Phase-0 questions with quoted signatures\", \"findings doc states exact sonos-api dep line + crate path\", \"no product code committed\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"blocks-tasks-1-2\", \"requiresUserSpecification\": false, \"failurePolicy\": \"stop\"}\n```"
     },
     {
       "id": 6,
       "subject": "Task 1: oto-core SpeakerState + WireError::NotFound (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** Add SpeakerState { volume:Option<Volume>, muted:Option<bool>, transport:Option<TransportState> } + WireError::NotFound(String); pure, deps-free, unit-tested.\n\n```json:metadata\n{\"files\": [\"native/crates/core/src/state.rs\", \"native/crates/core/src/lib.rs\", \"native/crates/core/src/wire.rs\"], \"verifyCommand\": \"cd native && cargo nextest run -p oto-core\", \"acceptanceCriteria\": [\"oto_core::SpeakerState exists + re-exported, Option<T> fields\", \"WireError::NotFound(String) exists with Display 'not found: {0}'\", \"no new deps; deny(unsafe_code) holds\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 2: Wire trait growth §7 (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5, 6],
       "description": "**Goal:** Grow Wire to discover + play/pause/next/previous(&GroupId) + set_volume/set_mute(&SpeakerId,..) + speaker_state(&SpeakerId)->Result<SpeakerState,WireError>; doc the GroupId→coordinator v0.3 seam. Trait-only; impls in Tasks 3–4.\n\n```json:metadata\n{\"files\": [\"native/crates/core/src/wire.rs\"], \"verifyCommand\": \"cd native && cargo check -p oto-core\", \"acceptanceCriteria\": [\"Wire has discover + 6 commands + speaker_state, all -> Result<_,WireError>, no defaults\", \"doc comment states the GroupId→coordinator v0.3 seam\", \"cargo check -p oto-core clean\"]}\n```"
     },
     {
       "id": 9,
       "subject": "Task 3: Stateful MockWire (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6, 7],
       "description": "**Goal:** Stateful in-memory MockWire: commands mutate per-speaker model, speaker_state reflects it, unknown id → NotFound. LAN-free command→state proof.\n\n```json:metadata\n{\"files\": [\"native/crates/mock/src/lib.rs\"], \"verifyCommand\": \"cd native && cargo nextest run -p oto-mock\", \"acceptanceCriteria\": [\"MockWire stateful: commands mutate per-speaker model, speaker_state reflects it\", \"unknown id → WireError::NotFound\", \"set_volume→read and pause→transport round-trip tests pass\", \"existing fixture tests still pass\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 4: SonosWire direct-SOAP + id→IP cache §7 (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5, 6, 7],
       "description": "**Goal:** Implement the 7 Wire methods on SonosWire via sonos_api direct SOAP (no SonosSystem), interior-mutable id→addr + group→coordinator caches populated by discover(); pure mapping helpers unit-tested LAN-free per Task 0 findings. Adds sonos-api =0.5.2.\n\n```json:metadata\n{\"files\": [\"native/crates/wire/src/control.rs\", \"native/crates/wire/src/adapter.rs\", \"native/crates/wire/src/lib.rs\", \"native/crates/wire/Cargo.toml\", \"native/Cargo.toml\"], \"verifyCommand\": \"cd native && cargo nextest run -p oto-wire\", \"acceptanceCriteria\": [\"SonosWire id→addr + group→coordinator caches populated by discover()\", \"7 methods via sonos_api SOAP per findings; unknown/pre-discovery → NotFound\", \"speaker_state per-read failure → None field, not all-or-nothing Err\", \"control.rs mapping (incl. DIDL Track) unit-tested LAN-free\", \"just check && just test && just deny clean; =0.5.2 pin\"]}\n```"
     },
     {
       "id": 10,
       "subject": "Task 5: oto-app command routing + slot accessor (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7, 8, 9],
       "description": "**Goal:** Route the 7 commands through the held Wire (empty slot → WireError::NotFound, no panic); add the slot accessor (resolves in-code TODO(v0.2)); document the lock-across-SOAP concurrency decision.\n\n```json:metadata\n{\"files\": [\"native/crates/app/src/lib.rs\"], \"verifyCommand\": \"cd native && cargo nextest run -p oto-app\", \"acceptanceCriteria\": [\"7 routing fns delegate to held Wire; empty slot → WireError::NotFound (no panic)\", \"slot accessor added; replace-on-success asserted (TODO(v0.2) resolved)\", \"lock-across-SOAP concurrency decision documented\", \"tests pass driven by stateful MockWire\"]}\n```"
     },
     {
       "id": 15,
       "subject": "Task 6: LAN-free domain e2e + hardware-gated playback smoke (PR B)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10],
-      "description": "**Goal:** LAN-free playback_e2e (oto_app + stateful MockWire, command→state round-trips — the PR B acceptance bar) + #[ignore] live_playback.rs hardware smoke (USER-RUN, non-destructive). USER-ORDERED GATE.\n\n```json:metadata\n{\"files\": [\"native/tests/playback_e2e.rs\", \"native/crates/wire/tests/live_playback.rs\"], \"verifyCommand\": \"cd native && cargo nextest run --workspace -E 'test(playback_e2e)'\", \"acceptanceCriteria\": [\"LAN-free playback_e2e proves command→state via oto-app + MockWire, passes in CI\", \"live_playback.rs #[ignore] non-destructive hardware round-trip; not run by CI\", \"just test green; user-run hardware smoke passes on the LAN\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"pr-b-acceptance\", \"requiresUserSpecification\": false, \"failurePolicy\": \"halt\"}\n```"
+      "description": "**Goal:** LAN-free playback_e2e (oto_app + stateful MockWire, command→state round-trips — the PR B acceptance bar) + #[ignore] live_playback.rs hardware smoke (USER-RUN, non-destructive). USER-ORDERED GATE.\n\n```json:metadata\n{\"files\": [\"native/tests/playback_e2e.rs\", \"native/crates/wire/tests/live_playback.rs\"], \"verifyCommand\": \"cd native && cargo nextest run --workspace -E 'test(playback_e2e)'\", \"acceptanceCriteria\": [\"LAN-free playback_e2e proves command→state via oto-app + MockWire, passes in CI\", \"live_playback.rs #[ignore] non-destructive hardware round-trip; not run by CI\", \"just test green; user-run hardware smoke passes on the LAN\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"gateScope\": \"pr-b-acceptance\", \"requiresUserSpecification\": false, \"failurePolicy\": \"stop\"}\n```"
     },
     {
       "id": 11,
@@ -72,5 +72,5 @@
       "description": "**Goal:** Sync ARCHITECTURE (non-sync command flow, state-read ADR note + revisit-v0.3, Crates table, Open Q5/Q7), README milestone ladder, CHANGELOG [0.2.0] + footnote links, bump pubspec 0.2.0; resolve/retarget every TODO(v0.2).\n\n```json:metadata\n{\"files\": [\"docs/ARCHITECTURE.md\", \"README.md\", \"CHANGELOG.md\", \"app/pubspec.yaml\"], \"verifyCommand\": \"grep -rn \\\"TODO(v0.2)\\\" native app docs ; cd native && cargo nextest run --workspace\", \"acceptanceCriteria\": [\"ARCHITECTURE: non-sync command flow + state-read ADR note + revisit-v0.3 + Crates/Open-Q updates; links resolve\", \"README milestone ladder + v0.2 capability/caveats\", \"CHANGELOG [0.2.0] accurate w/ footnote links; pubspec bumped\", \"all TODO(v0.2) resolved or retargeted\", \"just check && just test green; gen-check clean\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-18"
+  "lastUpdated": "2026-05-18T03:05:55Z"
 }
