@@ -53,24 +53,24 @@
     {
       "id": 11,
       "subject": "Task 7: FRB surface + DTOs + map; map-crossing e2e; remove greet (PR C)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10, 15],
       "description": "**Goal:** Non-sync FRB command/speaker_state fns + DTOs (SpeakerStateDto/TransportDto/TrackDto, all Option) + CommandError + pure map.rs translation + pinning tests + map-crossing e2e (D2 pattern); remove greet from api.rs + core import; just gen + gen-check clean.\n\n```json:metadata\n{\"files\": [\"native/src/api.rs\", \"native/src/map.rs\", \"native/tests/discover_e2e.rs\", \"native/src/frb_generated.rs\", \"app/lib/src/rust\"], \"verifyCommand\": \"cd native && cargo nextest run --workspace && cd .. && just gen-check\", \"acceptanceCriteria\": [\"7 non-sync FRB fns (glue) + DTOs + CommandError; no #[frb(sync)]\", \"map.rs to_command_error/to_speaker_state_dto pure + pinning-tested\", \"greet removed from api.rs + core import\", \"map-crossing e2e LAN-free; just gen-check clean; just check && just test green\"]}\n```"
     },
     {
       "id": 12,
       "subject": "Task 8: Dart providers + headless tests; remove greet scaffold (PR C)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [11],
       "description": "**Goal:** @riverpod playback providers wrapping the new FRB bindings + headless compile-level provider test (mirror discovery_provider_test.dart); remove greeting.dart/.g + smoke_test.dart, main.dart neutral scaffold; flutter analyze/test + gen-check clean.\n\n```json:metadata\n{\"files\": [\"app/lib/src/state/playback.dart\", \"app/lib/main.dart\", \"app/test/playback_provider_test.dart\", \"app/lib/src/state/greeting.dart\", \"app/test/smoke_test.dart\"], \"verifyCommand\": \"cd app && flutter analyze && flutter test\", \"acceptanceCriteria\": [\"@riverpod playback providers wrap new FRB bindings; gen-dart clean\", \"greet scaffold + greeting.dart/.g + smoke_test.dart removed; main.dart neutral\", \"playback_provider_test.dart compile-level bridge proof (mirrors discovery)\", \"flutter analyze + flutter test clean; just gen-check clean\"]}\n```"
     },
     {
       "id": 14,
       "subject": "Task 9: Doc sync — ARCHITECTURE/README/CHANGELOG + ADR (PR C)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [11, 12],
       "description": "**Goal:** Sync ARCHITECTURE (non-sync command flow, state-read ADR note + revisit-v0.3, Crates table, Open Q5/Q7), README milestone ladder, CHANGELOG [0.2.0] + footnote links, bump pubspec 0.2.0; resolve/retarget every TODO(v0.2).\n\n```json:metadata\n{\"files\": [\"docs/ARCHITECTURE.md\", \"README.md\", \"CHANGELOG.md\", \"app/pubspec.yaml\"], \"verifyCommand\": \"grep -rn \\\"TODO(v0.2)\\\" native app docs ; cd native && cargo nextest run --workspace\", \"acceptanceCriteria\": [\"ARCHITECTURE: non-sync command flow + state-read ADR note + revisit-v0.3 + Crates/Open-Q updates; links resolve\", \"README milestone ladder + v0.2 capability/caveats\", \"CHANGELOG [0.2.0] accurate w/ footnote links; pubspec bumped\", \"all TODO(v0.2) resolved or retargeted\", \"just check && just test green; gen-check clean\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-18T03:05:55Z"
+  "lastUpdated": "2026-05-18T05:06:45Z"
 }
