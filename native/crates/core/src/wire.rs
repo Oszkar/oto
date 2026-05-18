@@ -1,5 +1,6 @@
-//! The `Wire` seam. `oto-app` depends on this trait, never on `sonos-sdk`.
-//! Minimal for v0.1: one identity-only discovery method.
+//! The `Wire` seam — the trait `oto-app` depends on instead of
+//! `sonos-sdk`. v0.2: discovery + playback commands + a one-shot state
+//! read; see the `Wire` doc for the v0.3 addressing seam.
 
 use std::fmt;
 
