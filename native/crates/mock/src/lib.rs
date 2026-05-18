@@ -27,6 +27,10 @@ struct Model {
     coords: HashMap<GroupId, SpeakerId>,
 }
 
+/// Volume every speaker is seeded at. Shared by `Model::seeded` and the
+/// `seeded_state_initial_values` test so the invariant can't silently drift.
+const SEED_VOLUME: u8 = 30;
+
 impl Model {
     fn empty() -> Self {
         Self {
@@ -41,7 +45,7 @@ impl Model {
             speakers.insert(
                 s.id.clone(),
                 SpeakerState {
-                    volume: Some(Volume::new(30).expect("30 is valid")),
+                    volume: Some(Volume::new(SEED_VOLUME).expect("SEED_VOLUME in range")),
                     muted: Some(false),
                     transport: Some(TransportState {
                         state: PlaybackState::Stopped,
@@ -158,6 +162,9 @@ impl Wire for MockWire {
             .speakers
             .get_mut(&coord)
             .ok_or_else(|| WireError::NotFound(coord.to_string()))?;
+        // Keep the loaded track (Sonos retains it across pause/stop); clear
+        // position — the mock has no playhead, and the Task 6 e2e asserts
+        // transport.state, not position.
         let prev_track = entry.transport.take().and_then(|t| t.current_track);
         entry.transport = Some(TransportState {
             state: PlaybackState::Playing,
@@ -178,6 +185,7 @@ impl Wire for MockWire {
             .speakers
             .get_mut(&coord)
             .ok_or_else(|| WireError::NotFound(coord.to_string()))?;
+        // Track-preserve / position-clear rationale as play().
         let prev_track = entry.transport.take().and_then(|t| t.current_track);
         entry.transport = Some(TransportState {
             state: PlaybackState::Paused,
@@ -354,7 +362,7 @@ mod tests {
         let w = MockWire::default();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         let state = w.speaker_state(&kitchen).unwrap();
-        assert_eq!(state.volume, Some(Volume::new(30).unwrap()));
+        assert_eq!(state.volume, Some(Volume::new(SEED_VOLUME).unwrap()));
         assert_eq!(state.muted, Some(false));
         assert_eq!(state.transport.unwrap().state, PlaybackState::Stopped);
     }
