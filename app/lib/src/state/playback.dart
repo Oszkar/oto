@@ -37,6 +37,6 @@ class PlaybackCommands {
   Future<void> setVolume(String speakerId, int volume) =>
       rust_api.setVolume(speakerId: speakerId, volume: volume);
 
-  Future<void> setMute(String speakerId, {required bool muted}) =>
+  Future<void> setMute(String speakerId, bool muted) =>
       rust_api.setMute(speakerId: speakerId, muted: muted);
 }
