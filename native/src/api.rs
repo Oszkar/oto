@@ -113,9 +113,10 @@ pub fn previous(group_id: String) -> Result<(), CommandError> {
 /// boundary (Dart may send any `u32`). Blocking SOAP round-trip; Dart `Future`.
 pub fn set_volume(speaker_id: String, volume: u32) -> Result<(), CommandError> {
     let id = oto_core::SpeakerId::new(speaker_id);
-    // `as i32` then clamp(0,100): a `u32 > i32::MAX` wraps negative and
-    // floors to 0 — a volume setter is forgiving (never panics/rejects).
-    let vol = oto_core::Volume::clamped(volume as i32);
+    // `volume.min(100)` keeps the cast in range for EVERY u32, so the
+    // documented 0..=100 clamp actually holds — a huge u32 saturates to
+    // 100 (not 0 via a negative `as i32` wrap).
+    let vol = oto_core::Volume::clamped(volume.min(100) as i32);
     oto_app::set_volume(&id, vol).map_err(crate::map::to_command_error)
 }
 
