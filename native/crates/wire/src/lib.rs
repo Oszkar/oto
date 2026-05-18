@@ -8,6 +8,7 @@
 //! See `docs/ARCHITECTURE.md` for the wire-layer design.
 
 pub mod adapter;
+pub mod control;
 pub mod http;
 pub mod ssdp;
 
