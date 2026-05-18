@@ -9,9 +9,7 @@
 //! A real Sonos LAN run is the user-run hardware smoke in
 //! `native/crates/wire/tests/live_playback.rs`.
 
-use oto_app::{
-    discover_with, next, pause, play, previous, set_mute, set_volume, speaker_state,
-};
+use oto_app::{discover_with, next, pause, play, previous, set_mute, set_volume, speaker_state};
 use oto_core::{GroupId, PlaybackState, SpeakerId, Volume, WireError};
 use oto_mock::MockWire;
 
@@ -35,7 +33,8 @@ fn playback_command_state_round_trips() {
     let office_group = GroupId::new("RINCON_OFFICE:0");
 
     // ── Seed the slot ─────────────────────────────────────────────────────────
-    let snap = discover_with(|| Box::new(MockWire::default())).expect("mock discovery must succeed");
+    let snap =
+        discover_with(|| Box::new(MockWire::default())).expect("mock discovery must succeed");
     assert_eq!(snap.speakers.len(), 3, "fixture must have 3 speakers");
     assert_eq!(snap.groups.len(), 2, "fixture must have 2 groups");
 
@@ -61,7 +60,10 @@ fn playback_command_state_round_trips() {
     play(&kitchen_group).expect("play must succeed");
     let state_c = speaker_state(&kitchen).expect("speaker_state must succeed after play");
     assert_eq!(
-        state_c.transport.expect("transport present after play").state,
+        state_c
+            .transport
+            .expect("transport present after play")
+            .state,
         PlaybackState::Playing,
         "(c) transport must be Playing after play"
     );
@@ -70,7 +72,10 @@ fn playback_command_state_round_trips() {
     pause(&kitchen_group).expect("pause must succeed");
     let state_d = speaker_state(&kitchen).expect("speaker_state must succeed after pause");
     assert_eq!(
-        state_d.transport.expect("transport present after pause").state,
+        state_d
+            .transport
+            .expect("transport present after pause")
+            .state,
         PlaybackState::Paused,
         "(d) transport must be Paused after pause"
     );

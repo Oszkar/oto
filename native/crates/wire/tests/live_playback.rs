@@ -21,10 +21,7 @@ fn live_playback_round_trip() {
         snap.groups.len()
     );
 
-    assert!(
-        !snap.speakers.is_empty(),
-        "expected ≥1 speaker on the LAN"
-    );
+    assert!(!snap.speakers.is_empty(), "expected ≥1 speaker on the LAN");
 
     // Pick the first speaker and its group.
     // SonosWire::to_snapshot produces group-of-one IDs as "{speaker_id}:0".
@@ -107,9 +104,7 @@ fn live_playback_round_trip() {
             );
         }
         Some(state) => {
-            println!(
-                "transport: {state:?} — skipping transport mutation (only safe when Playing)"
-            );
+            println!("transport: {state:?} — skipping transport mutation (only safe when Playing)");
         }
         None => {
             println!("transport: None — speaker reported no transport state; skipping mutation");
