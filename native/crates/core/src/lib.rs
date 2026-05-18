@@ -31,21 +31,3 @@ pub use track::Track;
 pub use transport::{PlaybackState, TransportState};
 pub use volume::Volume;
 pub use wire::{Wire, WireError};
-
-/// Demo bridge target that proves the FRB pipeline. Removed in step 2/3 when
-/// real Sonos plumbing replaces `greet` in `oto_native::api`.
-pub mod greeting {
-    pub fn greet(name: &str) -> String {
-        format!("Hello, {name}!")
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::greet;
-
-        #[test]
-        fn greet_returns_expected_string() {
-            assert_eq!(greet("world"), "Hello, world!");
-        }
-    }
-}

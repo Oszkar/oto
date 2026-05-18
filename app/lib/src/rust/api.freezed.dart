@@ -12,6 +12,401 @@ part of 'api.dart';
 // dart format off
 T _$identity<T>(T value) => value;
 /// @nodoc
+mixin _$CommandError {
+
+ String get field0;
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CommandErrorCopyWith<CommandError> get copyWith => _$CommandErrorCopyWithImpl<CommandError>(this as CommandError, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CommandError&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'CommandError(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CommandErrorCopyWith<$Res>  {
+  factory $CommandErrorCopyWith(CommandError value, $Res Function(CommandError) _then) = _$CommandErrorCopyWithImpl;
+@useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$CommandErrorCopyWithImpl<$Res>
+    implements $CommandErrorCopyWith<$Res> {
+  _$CommandErrorCopyWithImpl(this._self, this._then);
+
+  final CommandError _self;
+  final $Res Function(CommandError) _then;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? field0 = null,}) {
+  return _then(_self.copyWith(
+field0: null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [CommandError].
+extension CommandErrorPatterns on CommandError {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CommandError_NotFound value)?  notFound,TResult Function( CommandError_Network value)?  network,TResult Function( CommandError_Sonos value)?  sonos,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case CommandError_NotFound() when notFound != null:
+return notFound(_that);case CommandError_Network() when network != null:
+return network(_that);case CommandError_Sonos() when sonos != null:
+return sonos(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CommandError_NotFound value)  notFound,required TResult Function( CommandError_Network value)  network,required TResult Function( CommandError_Sonos value)  sonos,}){
+final _that = this;
+switch (_that) {
+case CommandError_NotFound():
+return notFound(_that);case CommandError_Network():
+return network(_that);case CommandError_Sonos():
+return sonos(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CommandError_NotFound value)?  notFound,TResult? Function( CommandError_Network value)?  network,TResult? Function( CommandError_Sonos value)?  sonos,}){
+final _that = this;
+switch (_that) {
+case CommandError_NotFound() when notFound != null:
+return notFound(_that);case CommandError_Network() when network != null:
+return network(_that);case CommandError_Sonos() when sonos != null:
+return sonos(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  notFound,TResult Function( String field0)?  network,TResult Function( String field0)?  sonos,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case CommandError_NotFound() when notFound != null:
+return notFound(_that.field0);case CommandError_Network() when network != null:
+return network(_that.field0);case CommandError_Sonos() when sonos != null:
+return sonos(_that.field0);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  notFound,required TResult Function( String field0)  network,required TResult Function( String field0)  sonos,}) {final _that = this;
+switch (_that) {
+case CommandError_NotFound():
+return notFound(_that.field0);case CommandError_Network():
+return network(_that.field0);case CommandError_Sonos():
+return sonos(_that.field0);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  notFound,TResult? Function( String field0)?  network,TResult? Function( String field0)?  sonos,}) {final _that = this;
+switch (_that) {
+case CommandError_NotFound() when notFound != null:
+return notFound(_that.field0);case CommandError_Network() when network != null:
+return network(_that.field0);case CommandError_Sonos() when sonos != null:
+return sonos(_that.field0);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class CommandError_NotFound extends CommandError {
+  const CommandError_NotFound(this.field0): super._();
+  
+
+@override final  String field0;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CommandError_NotFoundCopyWith<CommandError_NotFound> get copyWith => _$CommandError_NotFoundCopyWithImpl<CommandError_NotFound>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CommandError_NotFound&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'CommandError.notFound(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CommandError_NotFoundCopyWith<$Res> implements $CommandErrorCopyWith<$Res> {
+  factory $CommandError_NotFoundCopyWith(CommandError_NotFound value, $Res Function(CommandError_NotFound) _then) = _$CommandError_NotFoundCopyWithImpl;
+@override @useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$CommandError_NotFoundCopyWithImpl<$Res>
+    implements $CommandError_NotFoundCopyWith<$Res> {
+  _$CommandError_NotFoundCopyWithImpl(this._self, this._then);
+
+  final CommandError_NotFound _self;
+  final $Res Function(CommandError_NotFound) _then;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(CommandError_NotFound(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CommandError_Network extends CommandError {
+  const CommandError_Network(this.field0): super._();
+  
+
+@override final  String field0;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CommandError_NetworkCopyWith<CommandError_Network> get copyWith => _$CommandError_NetworkCopyWithImpl<CommandError_Network>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CommandError_Network&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'CommandError.network(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CommandError_NetworkCopyWith<$Res> implements $CommandErrorCopyWith<$Res> {
+  factory $CommandError_NetworkCopyWith(CommandError_Network value, $Res Function(CommandError_Network) _then) = _$CommandError_NetworkCopyWithImpl;
+@override @useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$CommandError_NetworkCopyWithImpl<$Res>
+    implements $CommandError_NetworkCopyWith<$Res> {
+  _$CommandError_NetworkCopyWithImpl(this._self, this._then);
+
+  final CommandError_Network _self;
+  final $Res Function(CommandError_Network) _then;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(CommandError_Network(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CommandError_Sonos extends CommandError {
+  const CommandError_Sonos(this.field0): super._();
+  
+
+@override final  String field0;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CommandError_SonosCopyWith<CommandError_Sonos> get copyWith => _$CommandError_SonosCopyWithImpl<CommandError_Sonos>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CommandError_Sonos&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'CommandError.sonos(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CommandError_SonosCopyWith<$Res> implements $CommandErrorCopyWith<$Res> {
+  factory $CommandError_SonosCopyWith(CommandError_Sonos value, $Res Function(CommandError_Sonos) _then) = _$CommandError_SonosCopyWithImpl;
+@override @useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$CommandError_SonosCopyWithImpl<$Res>
+    implements $CommandError_SonosCopyWith<$Res> {
+  _$CommandError_SonosCopyWithImpl(this._self, this._then);
+
+  final CommandError_Sonos _self;
+  final $Res Function(CommandError_Sonos) _then;
+
+/// Create a copy of CommandError
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(CommandError_Sonos(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$DiscoveryError {
 
 

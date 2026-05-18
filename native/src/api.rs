@@ -1,10 +1,4 @@
 use oto_app::discover as app_discover;
-use oto_core::greeting;
-
-#[flutter_rust_bridge::frb(sync)]
-pub fn greet(name: String) -> String {
-    greeting::greet(&name)
-}
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
@@ -35,6 +29,46 @@ pub enum DiscoveryError {
     Sdk(String),
 }
 
+// ── v0.2 DTOs ────────────────────────────────────────────────────────────────
+
+pub struct SpeakerStateDto {
+    pub volume: Option<u32>,
+    pub muted: Option<bool>,
+    pub transport: Option<TransportDto>,
+}
+
+pub struct TransportDto {
+    pub state: PlaybackStateDto,
+    pub position_secs: Option<u64>,
+    pub current_track: Option<TrackDto>,
+}
+
+pub enum PlaybackStateDto {
+    Stopped,
+    Playing,
+    Paused,
+    Transitioning,
+}
+
+pub struct TrackDto {
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub track_number: Option<u32>,
+    pub duration_secs: Option<u64>,
+    pub art_uri: Option<String>,
+    pub uri: Option<String>,
+}
+
+pub enum CommandError {
+    NotFound(String),
+    Network(String),
+    Sonos(String),
+}
+
+// ── Discovery ─────────────────────────────────────────────────────────────────
+
 // TODO(v0.4): Android release discovery needs a held WifiManager.MulticastLock
 // (perms are declared in app/android/app/src/main/AndroidManifest.xml); SSDP
 // multicast is dropped without it. v0.1 discovery is verified on Windows via
@@ -48,4 +82,56 @@ pub fn discover() -> Result<Topology, DiscoveryError> {
     Ok(crate::map::to_topology(snap))
 }
 
-// TODO(v0.2): remove the `greet` demo bridge target.
+// ── v0.2 commands ─────────────────────────────────────────────────────────────
+
+/// Start playback on `group_id` (routed to its coordinator). Blocking SOAP
+/// round-trip; FRB surfaces this as a Dart `Future`.
+pub fn play(group_id: String) -> Result<(), CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    oto_app::play(&id).map_err(crate::map::to_command_error)
+}
+
+/// Pause playback on `group_id`. Blocking SOAP round-trip; Dart `Future`.
+pub fn pause(group_id: String) -> Result<(), CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    oto_app::pause(&id).map_err(crate::map::to_command_error)
+}
+
+/// Skip to the next track on `group_id`. Blocking SOAP round-trip; Dart `Future`.
+pub fn next(group_id: String) -> Result<(), CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    oto_app::next(&id).map_err(crate::map::to_command_error)
+}
+
+/// Skip to the previous track on `group_id`. Blocking SOAP round-trip; Dart `Future`.
+pub fn previous(group_id: String) -> Result<(), CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    oto_app::previous(&id).map_err(crate::map::to_command_error)
+}
+
+/// Set `speaker_id`'s volume, clamped to `0..=100` by `oto_core::Volume`.
+/// The param is **signed** so a negative Dart `int` reaches Rust and
+/// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
+/// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
+/// unreachable for a volume; the v0.4 UI bounds the slider regardless.
+/// Blocking SOAP round-trip; Dart `Future`.
+pub fn set_volume(speaker_id: String, volume: i32) -> Result<(), CommandError> {
+    let id = oto_core::SpeakerId::new(speaker_id);
+    // oto_core::Volume::clamped(i32) is the authoritative 0..=100 clamp.
+    let vol = oto_core::Volume::clamped(volume);
+    oto_app::set_volume(&id, vol).map_err(crate::map::to_command_error)
+}
+
+/// Set `speaker_id`'s mute state. Blocking SOAP round-trip; Dart `Future`.
+pub fn set_mute(speaker_id: String, muted: bool) -> Result<(), CommandError> {
+    let id = oto_core::SpeakerId::new(speaker_id);
+    oto_app::set_mute(&id, muted).map_err(crate::map::to_command_error)
+}
+
+/// One-shot read of `speaker_id`'s current volume/mute/transport snapshot.
+/// Blocking SOAP round-trip; Dart `Future`.
+pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError> {
+    let id = oto_core::SpeakerId::new(speaker_id);
+    let state = oto_app::speaker_state(&id).map_err(crate::map::to_command_error)?;
+    Ok(crate::map::to_speaker_state_dto(state))
+}

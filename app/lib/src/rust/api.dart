@@ -8,12 +8,56 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'api.freezed.dart';
 
-String greet({required String name}) =>
-    RustLib.instance.api.crateApiGreet(name: name);
-
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. Identity-only snapshot.
 Future<Topology> discover() => RustLib.instance.api.crateApiDiscover();
+
+/// Start playback on `group_id` (routed to its coordinator). Blocking SOAP
+/// round-trip; FRB surfaces this as a Dart `Future`.
+Future<void> play({required String groupId}) =>
+    RustLib.instance.api.crateApiPlay(groupId: groupId);
+
+/// Pause playback on `group_id`. Blocking SOAP round-trip; Dart `Future`.
+Future<void> pause({required String groupId}) =>
+    RustLib.instance.api.crateApiPause(groupId: groupId);
+
+/// Skip to the next track on `group_id`. Blocking SOAP round-trip; Dart `Future`.
+Future<void> next({required String groupId}) =>
+    RustLib.instance.api.crateApiNext(groupId: groupId);
+
+/// Skip to the previous track on `group_id`. Blocking SOAP round-trip; Dart `Future`.
+Future<void> previous({required String groupId}) =>
+    RustLib.instance.api.crateApiPrevious(groupId: groupId);
+
+/// Set `speaker_id`'s volume, clamped to `0..=100` by `oto_core::Volume`.
+/// The param is **signed** so a negative Dart `int` reaches Rust and
+/// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
+/// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
+/// unreachable for a volume; the v0.4 UI bounds the slider regardless.
+/// Blocking SOAP round-trip; Dart `Future`.
+Future<void> setVolume({required String speakerId, required int volume}) =>
+    RustLib.instance.api.crateApiSetVolume(
+      speakerId: speakerId,
+      volume: volume,
+    );
+
+/// Set `speaker_id`'s mute state. Blocking SOAP round-trip; Dart `Future`.
+Future<void> setMute({required String speakerId, required bool muted}) =>
+    RustLib.instance.api.crateApiSetMute(speakerId: speakerId, muted: muted);
+
+/// One-shot read of `speaker_id`'s current volume/mute/transport snapshot.
+/// Blocking SOAP round-trip; Dart `Future`.
+Future<SpeakerStateDto> speakerState({required String speakerId}) =>
+    RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
+
+@freezed
+sealed class CommandError with _$CommandError implements FrbException {
+  const CommandError._();
+
+  const factory CommandError.notFound(String field0) = CommandError_NotFound;
+  const factory CommandError.network(String field0) = CommandError_Network;
+  const factory CommandError.sonos(String field0) = CommandError_Sonos;
+}
 
 class DiscoveredGroup {
   final String id;
@@ -76,6 +120,28 @@ sealed class DiscoveryError with _$DiscoveryError implements FrbException {
   const factory DiscoveryError.sdk(String field0) = DiscoveryError_Sdk;
 }
 
+enum PlaybackStateDto { stopped, playing, paused, transitioning }
+
+class SpeakerStateDto {
+  final int? volume;
+  final bool? muted;
+  final TransportDto? transport;
+
+  const SpeakerStateDto({this.volume, this.muted, this.transport});
+
+  @override
+  int get hashCode => volume.hashCode ^ muted.hashCode ^ transport.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SpeakerStateDto &&
+          runtimeType == other.runtimeType &&
+          volume == other.volume &&
+          muted == other.muted &&
+          transport == other.transport;
+}
+
 class Topology {
   final List<DiscoveredSpeaker> speakers;
   final List<DiscoveredGroup> groups;
@@ -92,4 +158,76 @@ class Topology {
           runtimeType == other.runtimeType &&
           speakers == other.speakers &&
           groups == other.groups;
+}
+
+class TrackDto {
+  final String? id;
+  final String? title;
+  final String? artist;
+  final String? album;
+  final int? trackNumber;
+  final BigInt? durationSecs;
+  final String? artUri;
+  final String? uri;
+
+  const TrackDto({
+    this.id,
+    this.title,
+    this.artist,
+    this.album,
+    this.trackNumber,
+    this.durationSecs,
+    this.artUri,
+    this.uri,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      title.hashCode ^
+      artist.hashCode ^
+      album.hashCode ^
+      trackNumber.hashCode ^
+      durationSecs.hashCode ^
+      artUri.hashCode ^
+      uri.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TrackDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          title == other.title &&
+          artist == other.artist &&
+          album == other.album &&
+          trackNumber == other.trackNumber &&
+          durationSecs == other.durationSecs &&
+          artUri == other.artUri &&
+          uri == other.uri;
+}
+
+class TransportDto {
+  final PlaybackStateDto state;
+  final BigInt? positionSecs;
+  final TrackDto? currentTrack;
+
+  const TransportDto({
+    required this.state,
+    this.positionSecs,
+    this.currentTrack,
+  });
+
+  @override
+  int get hashCode =>
+      state.hashCode ^ positionSecs.hashCode ^ currentTrack.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TransportDto &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          positionSecs == other.positionSecs &&
+          currentTrack == other.currentTrack;
 }

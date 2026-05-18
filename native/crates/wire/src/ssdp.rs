@@ -67,7 +67,7 @@ fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
     // sleep below is clamped to the remaining window, so total wall time is
     // strictly O(timeout): bounded by at most one socket's read-timeout
     // granularity (~250 ms) past `deadline`, independent of socket count.
-    // TODO(v0.2): per-socket consecutive-error budget instead of a blanket
+    // TODO(v0.3): per-socket consecutive-error budget instead of a blanket
     // sleep (e.g. drop a socket after N hard errors) — lower priority now
     // that both busy-spin and overshoot are bounded.
     while Instant::now() < deadline {
