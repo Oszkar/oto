@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oto/src/rust/frb_generated.dart';
-import 'package:oto/src/state/greeting.dart';
 
 Future<void> main() async {
   await RustLib.init();
@@ -17,15 +16,14 @@ class OtoApp extends StatelessWidget {
   }
 }
 
-class HomePage extends ConsumerWidget {
+/// Neutral placeholder scaffold. Real UI is v0.4.
+class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final greeting = ref.watch(greetingProvider(name: 'oto'));
-    return Scaffold(
-      appBar: AppBar(title: const Text('oto — scaffold')),
-      body: Center(child: Text('Rust says: $greeting')),
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: Text('oto')),
     );
   }
 }
