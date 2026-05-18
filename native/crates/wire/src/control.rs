@@ -80,7 +80,7 @@ pub(crate) fn parse_hms(s: &str) -> Option<Duration> {
 ///
 /// Handles namespace prefixes `dc:`, `upnp:`, `r:`, and `&amp;` entity
 /// decoding (quick-xml decodes entities in text content automatically).
-pub fn parse_track_didl(xml: &str) -> Option<Track> {
+pub(crate) fn parse_track_didl(xml: &str) -> Option<Track> {
     if xml.trim().is_empty() {
         return None;
     }
@@ -145,11 +145,9 @@ pub fn parse_track_didl(xml: &str) -> Option<Track> {
                     }
                     "title" => inside = Inside::Title,
                     "creator" => inside = Inside::Creator,
-                    "album" => {
-                        // both "album" (upnp:album) and "albumArtURI" start with "album"
-                        // but we handle albumArtURI separately below
-                        inside = Inside::Album;
-                    }
+                    // Exact local-name match: `albumArtURI` is its own arm,
+                    // so it never collides with `album`.
+                    "album" => inside = Inside::Album,
                     "albumArtURI" => inside = Inside::AlbumArtUri,
                     _ => inside = Inside::Other,
                 }
