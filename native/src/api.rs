@@ -109,14 +109,16 @@ pub fn previous(group_id: String) -> Result<(), CommandError> {
     oto_app::previous(&id).map_err(crate::map::to_command_error)
 }
 
-/// Set `speaker_id`'s volume. `volume` is clamped to `0..=100` at the bridge
-/// boundary (Dart may send any `u32`). Blocking SOAP round-trip; Dart `Future`.
-pub fn set_volume(speaker_id: String, volume: u32) -> Result<(), CommandError> {
+/// Set `speaker_id`'s volume, clamped to `0..=100` by `oto_core::Volume`.
+/// The param is **signed** so a negative Dart `int` reaches Rust and
+/// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
+/// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
+/// unreachable for a volume; the v0.4 UI bounds the slider regardless.
+/// Blocking SOAP round-trip; Dart `Future`.
+pub fn set_volume(speaker_id: String, volume: i32) -> Result<(), CommandError> {
     let id = oto_core::SpeakerId::new(speaker_id);
-    // `volume.min(100)` keeps the cast in range for EVERY u32, so the
-    // documented 0..=100 clamp actually holds — a huge u32 saturates to
-    // 100 (not 0 via a negative `as i32` wrap).
-    let vol = oto_core::Volume::clamped(volume.min(100) as i32);
+    // oto_core::Volume::clamped(i32) is the authoritative 0..=100 clamp.
+    let vol = oto_core::Volume::clamped(volume);
     oto_app::set_volume(&id, vol).map_err(crate::map::to_command_error)
 }
 

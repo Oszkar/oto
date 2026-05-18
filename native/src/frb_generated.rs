@@ -301,7 +301,7 @@ fn wire__crate__api__set_volume_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_speaker_id = <String>::sse_decode(&mut deserializer);
-            let api_volume = <u32>::sse_decode(&mut deserializer);
+            let api_volume = <i32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::CommandError>((move || {

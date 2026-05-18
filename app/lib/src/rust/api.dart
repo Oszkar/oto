@@ -29,8 +29,12 @@ Future<void> next({required String groupId}) =>
 Future<void> previous({required String groupId}) =>
     RustLib.instance.api.crateApiPrevious(groupId: groupId);
 
-/// Set `speaker_id`'s volume. `volume` is clamped to `0..=100` at the bridge
-/// boundary (Dart may send any `u32`). Blocking SOAP round-trip; Dart `Future`.
+/// Set `speaker_id`'s volume, clamped to `0..=100` by `oto_core::Volume`.
+/// The param is **signed** so a negative Dart `int` reaches Rust and
+/// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
+/// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
+/// unreachable for a volume; the v0.4 UI bounds the slider regardless.
+/// Blocking SOAP round-trip; Dart `Future`.
 Future<void> setVolume({required String speakerId, required int volume}) =>
     RustLib.instance.api.crateApiSetVolume(
       speakerId: speakerId,

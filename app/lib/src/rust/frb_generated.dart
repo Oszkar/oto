@@ -321,7 +321,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(speakerId, serializer);
-          sse_encode_u_32(volume, serializer);
+          sse_encode_i_32(volume, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
