@@ -9,8 +9,10 @@
 //! `api.rs` a pure shim (AGENTS.md §4: `oto_native` is glue only).
 //!
 //! Pure and total: no I/O, no failure modes of its own — every `WireError`
-//! has exactly one `DiscoveryError` / `CommandError` image and every snapshot
-//! maps 1:1.
+//! has exactly one `DiscoveryError` / `CommandError` image. Snapshots map
+//! field-for-field; the one deliberate narrowing is `Duration` → whole
+//! `u64` seconds (Sonos SOAP time fields carry no sub-second component, so
+//! this is lossless in practice).
 
 use oto_core::{DiscoverySnapshot, PlaybackState, SpeakerState, WireError};
 
