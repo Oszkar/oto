@@ -64,6 +64,30 @@ impl SonosWire {
         };
         self.resolve_speaker(&coordinator)
     }
+
+    /// Populate the interior-mutable caches from a discovery snapshot.
+    /// Shared by `discover()` and the cache unit test so the test drives
+    /// the real cache-population path, not a hand-duplicated copy (a
+    /// duplicate would still pass if `discover()`'s update were removed).
+    fn populate_caches(&self, snapshot: &DiscoverySnapshot) {
+        {
+            let mut cache = self.id_to_addr.lock().unwrap_or_else(|p| p.into_inner());
+            cache.clear();
+            for speaker in &snapshot.speakers {
+                cache.insert(speaker.id.clone(), SocketAddr::new(speaker.ip, 1400));
+            }
+        }
+        {
+            let mut cache = self
+                .group_to_coordinator
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            cache.clear();
+            for group in &snapshot.groups {
+                cache.insert(group.id.clone(), group.coordinator.clone());
+            }
+        }
+    }
 }
 
 impl Default for SonosWire {
@@ -168,27 +192,9 @@ impl Wire for SonosWire {
             )));
         }
 
-        // Populate the interior-mutable caches from the snapshot.
-        // speaker_id → SocketAddr(ip, 1400)
-        {
-            let mut cache = self.id_to_addr.lock().unwrap_or_else(|p| p.into_inner());
-            cache.clear();
-            for speaker in &snapshot.speakers {
-                let addr = SocketAddr::new(speaker.ip, 1400);
-                cache.insert(speaker.id.clone(), addr);
-            }
-        }
-        // group_id → coordinator speaker_id
-        {
-            let mut cache = self
-                .group_to_coordinator
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-            cache.clear();
-            for group in &snapshot.groups {
-                cache.insert(group.id.clone(), group.coordinator.clone());
-            }
-        }
+        // Populate the interior-mutable caches from the snapshot (the
+        // same `populate_caches` path the cache unit test exercises).
+        self.populate_caches(&snapshot);
 
         Ok(snapshot)
     }
@@ -431,11 +437,10 @@ mod tests {
     /// a snapshot (uses the pure to_snapshot path, not real SSDP).
     #[test]
     fn caches_populated_after_discover_snapshot() {
-        // We can't call discover() (needs LAN), so test the cache logic
-        // directly by populating the snapshot through to_snapshot and then
-        // manually verifying the cache-population logic.
-        //
-        // We replicate what discover() does post-to_snapshot:
+        // discover() needs a LAN, but its cache-population step is the
+        // shared `populate_caches` helper — drive that directly so this
+        // test exercises the real production path. It would fail if the
+        // cache update were removed/changed in discover().
         let wire = SonosWire::new();
         let snap = to_snapshot(vec![dev(
             "uuid:RINCON_CACHE_TEST",
@@ -445,22 +450,7 @@ mod tests {
             "Sonos One",
         )]);
 
-        // Simulate cache population (mirrors the discover() logic)
-        {
-            let mut cache = wire.id_to_addr.lock().unwrap();
-            cache.clear();
-            for speaker in &snap.speakers {
-                let addr = SocketAddr::new(speaker.ip, 1400);
-                cache.insert(speaker.id.clone(), addr);
-            }
-        }
-        {
-            let mut cache = wire.group_to_coordinator.lock().unwrap();
-            cache.clear();
-            for group in &snap.groups {
-                cache.insert(group.id.clone(), group.coordinator.clone());
-            }
-        }
+        wire.populate_caches(&snap);
 
         // Now resolve should succeed
         let sid = SpeakerId::new("RINCON_CACHE_TEST");

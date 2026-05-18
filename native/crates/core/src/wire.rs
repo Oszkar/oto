@@ -35,11 +35,15 @@ pub trait Wire {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireError {
-    /// No usable IPv4 interface, or SSDP send/socket failure.
+    /// Transport-level failure: no usable IPv4 interface / SSDP socket
+    /// error during discovery, or a connection failure on a command or
+    /// state-read SOAP call.
     Network(String),
     /// SSDP completed but found zero Sonos devices.
     NoDevicesFound,
-    /// Device-description fetch or parse failed (HTTP/XML stage).
+    /// A device was reached but the request failed: device-description
+    /// fetch/parse during discovery, or a SOAP fault / response-parse
+    /// failure on a command or state read.
     Backend(String),
     /// Command target (speaker/group id) is not in the current snapshot,
     /// or no discovery has populated the wire yet. A precondition error,
@@ -50,11 +54,11 @@ pub enum WireError {
 impl fmt::Display for WireError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            WireError::Network(m) => write!(f, "discovery network error: {m}"),
+            WireError::Network(m) => write!(f, "network error: {m}"),
             WireError::NoDevicesFound => {
                 write!(f, "no Sonos devices found on the network")
             }
-            WireError::Backend(m) => write!(f, "discovery backend error: {m}"),
+            WireError::Backend(m) => write!(f, "backend error: {m}"),
             WireError::NotFound(w) => write!(f, "not found: {w}"),
         }
     }
@@ -74,11 +78,11 @@ mod tests {
         );
         assert_eq!(
             WireError::Network("bind failed".into()).to_string(),
-            "discovery network error: bind failed"
+            "network error: bind failed"
         );
         assert_eq!(
             WireError::Backend("parse failed".into()).to_string(),
-            "discovery backend error: parse failed"
+            "backend error: parse failed"
         );
         assert_eq!(
             WireError::NotFound("RINCON_X".into()).to_string(),

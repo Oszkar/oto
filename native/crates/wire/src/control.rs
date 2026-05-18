@@ -69,6 +69,20 @@ pub(crate) fn parse_hms(s: &str) -> Option<Duration> {
     Some(Duration::from_secs(h * 3600 + m * 60 + s_val))
 }
 
+/// Fill `Track.duration` from the response's top-level `track_duration`
+/// when the DIDL `<res duration>` was absent. `GetPositionInfo` carries
+/// both; some sources (radio, line-in) omit the DIDL duration but still
+/// report a top-level one. The stopped/no-track `"0:00:00"` sentinel
+/// (parsed as a zero `Duration`) is ignored so it can't mask "unknown".
+pub(crate) fn merge_track_duration(track: Option<Track>, track_duration: &str) -> Option<Track> {
+    track.map(|mut t| {
+        if t.duration.is_none() {
+            t.duration = parse_hms(track_duration).filter(|d| !d.is_zero());
+        }
+        t
+    })
+}
+
 // ---------------------------------------------------------------------------
 // DIDL-Lite parser
 // ---------------------------------------------------------------------------
@@ -335,7 +349,10 @@ pub(crate) fn soap_speaker_state(addr: SocketAddr) -> Result<SpeakerState, WireE
                         let track = if pi_resp.track_meta_data.trim().is_empty() {
                             None
                         } else {
-                            parse_track_didl(&pi_resp.track_meta_data)
+                            merge_track_duration(
+                                parse_track_didl(&pi_resp.track_meta_data),
+                                &pi_resp.track_duration,
+                            )
                         };
 
                         (track, pos)
@@ -366,6 +383,53 @@ pub(crate) fn soap_speaker_state(addr: SocketAddr) -> Result<SpeakerState, WireE
 mod tests {
     use super::*;
     use oto_core::WireError;
+
+    // -----------------------------------------------------------------------
+    // merge_track_duration
+    // -----------------------------------------------------------------------
+
+    fn bare_track(duration: Option<Duration>) -> Track {
+        Track {
+            id: None,
+            title: Some("X".into()),
+            artist: None,
+            album: None,
+            track_number: None,
+            duration,
+            art_uri: None,
+            uri: None,
+        }
+    }
+
+    #[test]
+    fn merge_fills_missing_duration_from_top_level() {
+        let merged = merge_track_duration(Some(bare_track(None)), "0:03:17").unwrap();
+        assert_eq!(merged.duration, Some(Duration::from_secs(197)));
+    }
+
+    #[test]
+    fn merge_keeps_existing_didl_duration() {
+        let merged =
+            merge_track_duration(Some(bare_track(Some(Duration::from_secs(300)))), "0:03:17")
+                .unwrap();
+        assert_eq!(
+            merged.duration,
+            Some(Duration::from_secs(300)),
+            "DIDL <res duration> must win over the top-level fallback"
+        );
+    }
+
+    #[test]
+    fn merge_ignores_zero_sentinel_and_none_track() {
+        assert_eq!(
+            merge_track_duration(Some(bare_track(None)), "0:00:00")
+                .unwrap()
+                .duration,
+            None,
+            "stopped/no-track 0:00:00 must not mask unknown duration"
+        );
+        assert_eq!(merge_track_duration(None, "0:03:17"), None);
+    }
 
     // -----------------------------------------------------------------------
     // map_sdk_err

@@ -4,8 +4,8 @@
 //!
 //! Non-destructive: writes volume back to its read value; only toggles
 //! transport if already Playing (Pause-when-Stopped → device 500; see
-//! docs/findings-playback-spike.txt). Does NOT call next/previous
-//! (queue-mutating).
+//! docs/plans/2026-05-18-playback-spike-findings.md). Does NOT call
+//! next/previous (queue-mutating).
 
 use oto_core::Wire;
 use oto_wire::SonosWire;
@@ -78,8 +78,15 @@ fn live_playback_round_trip() {
             println!("transport: Playing — running pause→play round-trip");
 
             w.pause(gid).expect("pause must succeed when Playing");
-            let paused = w
-                .speaker_state(sid)
+            // Capture post-pause state WITHOUT unwrapping, then restore
+            // immediately. `play` must run whenever `pause` succeeded —
+            // before any assertion or read failure can abort the test and
+            // leave the user's speaker paused. Non-destructiveness depends
+            // on this ordering (see the module header).
+            let after_pause = w.speaker_state(sid);
+            let restore = w.play(gid);
+
+            let paused = after_pause
                 .expect("speaker_state after pause")
                 .transport
                 .expect("transport present after pause");
@@ -90,7 +97,7 @@ fn live_playback_round_trip() {
                 "transport must be Paused after pause"
             );
 
-            w.play(gid).expect("play (restore) must succeed");
+            restore.expect("play (restore) must succeed");
             let restored = w
                 .speaker_state(sid)
                 .expect("speaker_state after play restore")
