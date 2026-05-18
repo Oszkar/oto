@@ -8,16 +8,12 @@ part of 'playback.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// One-shot read of a speaker's current volume/mute/transport snapshot.
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 
 @ProviderFor(speakerState)
 const speakerStateProvider = SpeakerStateFamily._();
 
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// One-shot read of a speaker's current volume/mute/transport snapshot.
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 
@@ -31,8 +27,6 @@ final class SpeakerStateProvider
     with
         $FutureModifier<rust_api.SpeakerStateDto>,
         $FutureProvider<rust_api.SpeakerStateDto> {
-  /// Thin v0.2 playback bindings; UI is v0.4.
-  ///
   /// One-shot read of a speaker's current volume/mute/transport snapshot.
   /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
   const SpeakerStateProvider._({
@@ -81,8 +75,6 @@ final class SpeakerStateProvider
 
 String _$speakerStateHash() => r'23b8036eb487c907ce8691053f04ec1904435a72';
 
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// One-shot read of a speaker's current volume/mute/transport snapshot.
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 
@@ -97,8 +89,6 @@ final class SpeakerStateFamily extends $Family
         isAutoDispose: true,
       );
 
-  /// Thin v0.2 playback bindings; UI is v0.4.
-  ///
   /// One-shot read of a speaker's current volume/mute/transport snapshot.
   /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 
@@ -109,8 +99,6 @@ final class SpeakerStateFamily extends $Family
   String toString() => r'speakerStateProvider';
 }
 
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
 /// layer (error handling, optimistic UI) is deferred to v0.4.
@@ -118,8 +106,6 @@ final class SpeakerStateFamily extends $Family
 @ProviderFor(playbackCommands)
 const playbackCommandsProvider = PlaybackCommandsProvider._();
 
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
 /// layer (error handling, optimistic UI) is deferred to v0.4.
@@ -132,8 +118,6 @@ final class PlaybackCommandsProvider
           PlaybackCommands
         >
     with $Provider<PlaybackCommands> {
-  /// Thin v0.2 playback bindings; UI is v0.4.
-  ///
   /// Facade for the six transport/volume commands. Methods are thin pass-throughs
   /// to the FRB-generated Dart bindings; no state is held here. A real command
   /// layer (error handling, optimistic UI) is deferred to v0.4.

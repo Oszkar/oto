@@ -36,9 +36,9 @@ oto/
 │  ├─ src/map.rs         # domain → FRB-DTO map (off the bridged surface, so testable)
 │  ├─ src/lib.rs         # mounts api + map + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types + Wire trait
-│  ├─ crates/wire/       # oto-wire: production Wire — multi-NIC SSDP + ureq fetch + sonos-sdk adapter
+│  ├─ crates/wire/       # oto-wire: production Wire — multi-NIC SSDP + ureq fetch + direct sonos_api SOAP
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
-│  ├─ crates/app/        # oto-app: owns runtime state, routes the discover command
+│  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml
 ├─ docs/                 # ARCHITECTURE.md + design docs
 ├─ scripts/
@@ -148,22 +148,32 @@ bounded, externally-tested end state; after it, maintenance only.
 
 | Version | Capability |
 |---|---|
-| **v0.1** &larr; current | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
-| v0.2 | **Playback control** — play/pause/next/prev, volume, mute, and reading current state. |
+| v0.1 ✓ | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
+| **v0.2** &larr; current | **Playback control** — play/pause/next/prev, volume, mute, and reading current state. |
 | v0.3 | **Grouping + live events** — group form/break, topology changes, reactive state. |
 | v0.4 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
 v0.1 discovery is **identity-only**: each LAN-discovered player is listed
 with its room / model / IP, built directly from the device descriptions
-oto-wire fetches itself. Real ZoneGroupTopology — multi-room groups,
-bonded stereo pairs / home-theater surrounds — is **v0.3**; until then a
-bonded surround is listed as a standalone player. (Hardware verification
-showed `sonos-sdk`'s post-discovery topology is lazy/non-deterministic;
-see `docs/ARCHITECTURE.md` Open Q1.)
+oto-wire fetches itself.
 
-v0.1 discovery is verified on **Windows** (Rust bridge — the milestone
-bar). On **Android**, the main manifest now declares `INTERNET` +
+v0.2 adds **playback control and one-shot state read**, proven
+end-to-end through the Rust↔Dart bridge: `play/pause/next/previous`
+(addressed by group), `set_volume`/`set_mute` (per speaker), and
+`speaker_state` (one snapshot of volume/mute/transport per speaker,
+`Option<T>` fields for honest partial failure). Commands are **non-sync
+Dart `Future`s** — every command is a blocking SOAP round-trip to the
+device. This milestone uses **group-of-one addressing**: each discovered
+speaker is its own group, so there is no real multi-room coordination
+yet. Real ZoneGroupTopology — multi-room groups, bonded stereo pairs /
+home-theater surrounds, coordinator election — is **v0.3**; until then a
+bonded surround is listed as a standalone player and grouped playback
+requires controlling each speaker individually. Live event streams
+(reactive state updates without polling) are also **v0.3**.
+
+v0.2 is verified on **Windows** (discovery + playback against real
+hardware). On **Android**, the main manifest declares `INTERNET` +
 `CHANGE_WIFI_MULTICAST_STATE`, but receiving SSDP multicast also needs a
 held `WifiManager.MulticastLock` — that platform code is `TODO(v0.4)`
 (see `native/src/api.rs`). Until then Android **release** discovery

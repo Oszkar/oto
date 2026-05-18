@@ -1,11 +1,12 @@
+/// Thin v0.2 playback bindings; UI is v0.4.
+library;
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../rust/api.dart' as rust_api;
 
 part 'playback.g.dart';
 
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// One-shot read of a speaker's current volume/mute/transport snapshot.
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 @riverpod
@@ -14,8 +15,6 @@ Future<rust_api.SpeakerStateDto> speakerState(
   String speakerId,
 ) => rust_api.speakerState(speakerId: speakerId);
 
-/// Thin v0.2 playback bindings; UI is v0.4.
-///
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
 /// layer (error handling, optimistic UI) is deferred to v0.4.

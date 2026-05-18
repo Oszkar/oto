@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/app", "crates/core", "crates/mock", "crates/wire"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.94"
 license = "MIT"
@@ -69,8 +69,10 @@ oto-core = { workspace = true }
 # the transitively-shared `openssl-sys` to build a vendored OpenSSL with
 # the NDK toolchain. We make zero HTTPS calls (ureq + raw UDP); this
 # exists solely so the Android link succeeds. Not pulled on Windows
-# (native-tls uses SChannel there). TODO(v0.2): drop if sonos-sdk moves
-# off native-tls / we narrow the dep per ARCHITECTURE Open Q7.
+# (native-tls uses SChannel there). Stays as long as sonos-sdk (still
+# pinned =0.5.2) pulls reqwest/native-tls.
+# TODO(v0.3): re-evaluate when the event-path decision (ARCHITECTURE Open
+# Q7) is made — narrowing to sonos-api+callback-server may drop reqwest.
 [target.'cfg(target_os = "android")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
