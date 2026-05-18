@@ -60,7 +60,9 @@ fn with_wire<R>(f: impl FnOnce(&dyn Wire) -> Result<R, WireError>) -> Result<R, 
 pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapshot, WireError> {
     let wire = make();
     let snapshot = wire.discover()?;
-    *slot().lock().expect("wire slot poisoned") = Some(wire);
+    *slot()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(wire);
     Ok(snapshot)
 }
 
@@ -69,30 +71,37 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
     discover_with(|| Box::new(SonosWire::new()))
 }
 
+/// Start playback on `group` (routed to its coordinator).
 pub fn play(group: &GroupId) -> Result<(), WireError> {
     with_wire(|w| w.play(group))
 }
 
+/// Pause playback on `group` (routed to its coordinator).
 pub fn pause(group: &GroupId) -> Result<(), WireError> {
     with_wire(|w| w.pause(group))
 }
 
+/// Skip to the next track on `group`.
 pub fn next(group: &GroupId) -> Result<(), WireError> {
     with_wire(|w| w.next(group))
 }
 
+/// Skip to the previous track on `group`.
 pub fn previous(group: &GroupId) -> Result<(), WireError> {
     with_wire(|w| w.previous(group))
 }
 
+/// Set `speaker`'s volume (per-speaker, not per-group).
 pub fn set_volume(speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
     with_wire(|w| w.set_volume(speaker, volume))
 }
 
+/// Set `speaker`'s mute state (per-speaker, not per-group).
 pub fn set_mute(speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
     with_wire(|w| w.set_mute(speaker, muted))
 }
 
+/// One-shot read of `speaker`'s current volume/mute/transport snapshot.
 pub fn speaker_state(speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
     with_wire(|w| w.speaker_state(speaker))
 }
@@ -113,9 +122,9 @@ mod tests {
     use oto_mock::MockWire;
     use std::sync::Mutex;
 
-    /// Serialise all slot-touching tests so that the process-global
-    /// `OnceLock<Mutex<Option<HeldWire>>>` does not cause cross-test
-    /// interference when `cargo nextest` runs tests in parallel threads.
+    /// Serialises all slot-touching tests under `cargo test`, which runs
+    /// tests in parallel threads within one process; redundant but
+    /// harmless under `cargo nextest` (a separate process per test).
     static TEST_SERIAL: Mutex<()> = Mutex::new(());
 
     /// Comprehensive slot test:
@@ -173,6 +182,9 @@ mod tests {
             PlaybackState::Paused
         );
 
+        // MockWire next/previous are coordinator-lookup stubs (no queue
+        // model); meaningful state assertion is deferred to Task 6 /
+        // the SonosWire hardware smoke.
         next(&office_group).unwrap();
         previous(&office_group).unwrap();
 
