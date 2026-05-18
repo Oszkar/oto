@@ -38,5 +38,3 @@ ureq = "2"
 # DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
 # the locked graph via sonos-sdk (transitive) — unify, don't bump.
 quick-xml = { workspace = true }
-
-[dev-dependencies]
