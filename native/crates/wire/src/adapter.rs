@@ -285,6 +285,10 @@ mod tests {
             wire.resolve_group(&gid),
             Err(WireError::NotFound(_))
         ));
+        assert!(matches!(
+            wire.resolve_transport_addr(&sid),
+            Err(WireError::NotFound(_))
+        ));
     }
 
     /// Verifies that `resolve_transport_addr` routes non-coordinator speakers to
