@@ -303,12 +303,22 @@ pub(crate) fn soap_set_mute(addr: SocketAddr, muted: bool) -> Result<(), WireErr
         .map_err(map_sdk_err)
 }
 
-/// Read the full speaker state from `addr`.
+/// Read the full speaker state.
+///
+/// Volume and mute are read at `speaker_addr` (per-speaker, always correct).
+/// Transport (`GetTransportInfo`/`GetPositionInfo`) is read at
+/// `transport_addr`, which is the speaker's group coordinator (oto-core D2).
+/// For a solo speaker both addresses are identical, so behaviour is the
+/// same as v0.2.
 ///
 /// Per-read failure → that `SpeakerState` field is `None`; the others are
 /// still populated. Only an unresolvable id → `Err(NotFound)`.
-pub(crate) fn soap_speaker_state(addr: SocketAddr) -> Result<SpeakerState, WireError> {
-    let ip = addr.ip().to_string();
+pub(crate) fn soap_speaker_state(
+    speaker_addr: SocketAddr,
+    transport_addr: SocketAddr,
+) -> Result<SpeakerState, WireError> {
+    let ip = speaker_addr.ip().to_string();
+    let tip = transport_addr.ip().to_string();
     let client = SonosClient::new();
 
     // GetVolume
@@ -330,12 +340,13 @@ pub(crate) fn soap_speaker_state(addr: SocketAddr) -> Result<SpeakerState, WireE
     };
 
     // GetTransportInfo + GetPositionInfo (combined into Option<TransportState>)
+    // Both calls go to the coordinator (transport_addr / tip — oto-core D2).
     let transport: Option<TransportState> = {
         let ti_op = av_transport::get_transport_info().build().ok();
         let pi_op = av_transport::get_position_info().build().ok();
 
-        let ti = ti_op.and_then(|o| client.execute_enhanced(&ip, o).ok());
-        let pi = pi_op.and_then(|o| client.execute_enhanced(&ip, o).ok());
+        let ti = ti_op.and_then(|o| client.execute_enhanced(&tip, o).ok());
+        let pi = pi_op.and_then(|o| client.execute_enhanced(&tip, o).ok());
 
         match ti {
             None => None,

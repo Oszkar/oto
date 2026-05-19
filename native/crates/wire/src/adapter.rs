@@ -17,8 +17,9 @@ const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Production wire implementation backed by `sonos_api` direct SOAP calls.
 ///
-/// Interior-mutable caches (`id_to_addr`, `group_to_coordinator`) are
-/// populated by `discover()` and used by the playback/read methods.
+/// Interior-mutable caches (`id_to_addr`, `group_to_coordinator`,
+/// `speaker_to_coordinator`) are populated by `discover()` and used by
+/// the playback/read methods.
 /// All methods return `Err(WireError::NotFound)` if called before a
 /// successful `discover()` has populated the relevant entry.
 pub struct SonosWire {
@@ -26,6 +27,9 @@ pub struct SonosWire {
     id_to_addr: Mutex<HashMap<SpeakerId, SocketAddr>>,
     /// Maps `GroupId` → coordinator `SpeakerId` for transport-control calls.
     group_to_coordinator: Mutex<HashMap<GroupId, SpeakerId>>,
+    /// Maps each member `SpeakerId` → its group coordinator `SpeakerId`
+    /// (oto-core D2). Coordinator maps to itself.
+    speaker_to_coordinator: Mutex<HashMap<SpeakerId, SpeakerId>>,
 }
 
 impl SonosWire {
@@ -33,6 +37,7 @@ impl SonosWire {
         Self {
             id_to_addr: Mutex::new(HashMap::new()),
             group_to_coordinator: Mutex::new(HashMap::new()),
+            speaker_to_coordinator: Mutex::new(HashMap::new()),
         }
     }
 
@@ -85,6 +90,35 @@ impl SonosWire {
             for group in &snapshot.groups {
                 cache.insert(group.id.clone(), group.coordinator.clone());
             }
+        }
+        {
+            let mut cache = self
+                .speaker_to_coordinator
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            cache.clear();
+            for group in &snapshot.groups {
+                for m in &group.members {
+                    cache.insert(m.clone(), group.coordinator.clone());
+                }
+            }
+        }
+    }
+
+    /// Transport lives on the coordinator (oto-core D2). Resolve the
+    /// speaker's group coordinator's addr; fall back to the speaker
+    /// itself (solo, or pre-discovery) so behaviour degrades to v0.2.
+    fn resolve_transport_addr(&self, speaker: &SpeakerId) -> Result<SocketAddr, WireError> {
+        let coord = {
+            self.speaker_to_coordinator
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .get(speaker)
+                .cloned()
+        };
+        match coord {
+            Some(c) => self.resolve_speaker(&c),
+            None => self.resolve_speaker(speaker),
         }
     }
 }
@@ -217,8 +251,9 @@ impl Wire for SonosWire {
     }
 
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
-        let addr = self.resolve_speaker(speaker)?;
-        control::soap_speaker_state(addr)
+        let speaker_addr = self.resolve_speaker(speaker)?;
+        let transport_addr = self.resolve_transport_addr(speaker)?;
+        control::soap_speaker_state(speaker_addr, transport_addr)
     }
 }
 
@@ -250,6 +285,36 @@ mod tests {
             wire.resolve_group(&gid),
             Err(WireError::NotFound(_))
         ));
+    }
+
+    /// Verifies that `resolve_transport_addr` routes non-coordinator speakers to
+    /// their group coordinator (oto-core D2) and coordinators to themselves.
+    #[test]
+    fn resolve_transport_addr_uses_coordinator() {
+        let w = SonosWire::new();
+        let snap = to_snapshot(
+            sonos_api::services::zone_group_topology::parse_zone_group_state_xml(
+                super::topology_tests::GROUPED_XML,
+            )
+            .expect("parse"),
+        );
+        w.populate_caches(&snap);
+        // Living Room is the coordinator; Kitchen is a non-coordinator member.
+        let coord = SpeakerId::new("RINCON_542A1B9463A801400");
+        let kitchen = SpeakerId::new("RINCON_7828CAE858CA01400");
+        let coord_addr = w.resolve_speaker(&coord).expect("coord addr");
+        assert_eq!(
+            w.resolve_transport_addr(&kitchen)
+                .expect("kitchen transport addr"),
+            coord_addr,
+            "non-coordinator transport must resolve to the coordinator (D2)"
+        );
+        assert_eq!(
+            w.resolve_transport_addr(&coord)
+                .expect("coord transport addr"),
+            coord_addr,
+            "coordinator transport resolves to itself"
+        );
     }
 
     /// Verifies that the caches are correctly populated via `populate_caches`.
