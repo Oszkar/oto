@@ -27,12 +27,12 @@ use sonos_api::{
 /// The `"status code"` substring is the **only** discriminator between a
 /// rejected command and a network failure. This depends on `sonos-api`'s
 /// error-message format remaining stable.
-/// TODO(v0.3): replace string-sniff with structured error if sonos-api gains one
+/// TODO(v0.4): replace string-sniff with structured error if sonos-api gains one
 pub(crate) fn map_sdk_err(e: ApiError) -> WireError {
     match e {
         ApiError::NetworkError(msg) => {
             if msg.contains("status code") {
-                // TODO(v0.3): replace string-sniff with structured error if sonos-api gains one
+                // TODO(v0.4): replace string-sniff with structured error if sonos-api gains one
                 WireError::Backend(msg)
             } else {
                 WireError::Network(msg)
