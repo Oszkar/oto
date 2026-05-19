@@ -7,10 +7,27 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use oto_core::{PlaybackState, SpeakerState, Track, TrackId, TransportState, Volume, WireError};
+use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::{
-    services::{av_transport, rendering_control},
+    services::{av_transport, rendering_control, zone_group_topology},
     ApiError, SonosClient,
 };
+
+// ---------------------------------------------------------------------------
+// ZoneGroupTopology fetch
+// ---------------------------------------------------------------------------
+
+/// Fetch + parse ZoneGroupTopology from one speaker IP. Household-global
+/// (`ServiceScope::PerNetwork`) — any working speaker answers for all.
+pub(crate) fn fetch_zone_group_state(ip: &str) -> Result<Vec<ZoneGroupInfo>, WireError> {
+    let client = SonosClient::new();
+    let op = zone_group_topology::get_zone_group_state()
+        .build()
+        .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
+    let resp = client.execute_enhanced(ip, op).map_err(map_sdk_err)?;
+    zone_group_topology::parse_zone_group_state_xml(&resp.zone_group_state)
+        .map_err(|e| WireError::Backend(format!("ZoneGroupState parse: {e:?}")))
+}
 
 // ---------------------------------------------------------------------------
 // Error mapping
