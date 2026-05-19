@@ -532,6 +532,13 @@ mod topology_tests {
 
     const COORD_NOT_FIRST_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_542A1B9463A801400" ID="RINCON_542A1B9463A801400:3426502563"><ZoneGroupMember UUID="RINCON_7828CAE858CA01400" Location="http://10.83.0.105:1400/xml/device_description.xml" ZoneName="Kitchen" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="TargetRoomName:Kitchen" SSLPort="1443" HHSSLPort="1843"/><ZoneGroupMember UUID="RINCON_542A1B9463A801400" Location="http://10.83.0.103:1400/xml/device_description.xml" ZoneName="Living Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B92755401400:LR;RINCON_38420B9275BE01400:RR" ActiveZoneID="00745a67-249c-4240-a8c0-4c43b1758510" BootSeq="38" TVConfigurationError="0" HdmiCecAvailable="1" WirelessMode="1" ConnectionType="5" ChannelFreq="2417" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="1" SecureRegState="3" VoiceConfigState="2" MicEnabled="1" HeadphoneSwapActive="0" AirPlayEnabled="1" VirtualLineInSource="spotify" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"><Satellite UUID="RINCON_38420B9275BE01400" Location="http://10.83.0.187:1400/xml/device_description.xml" ZoneName="Living Room" Icon="" Configuration="1" Invisible="1" SoftwareVersion="94.1-76220" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B9275BE01400:RR" ActiveZoneID="00745a67-249c-4240-a8c0-4c43b1758510" BootSeq="108" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="2" ConnectionType="6" ChannelFreq="5660" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="5" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="0" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroupMember></ZoneGroup></ZoneGroups><VanishedDevices><Device UUID="RINCON_38420B92755401400" ZoneName="Living Room" Reason="UNKNOWN" ModelInfo="S33" Mac="38:42:0B:92:75:54" LastKnownIP="10.83.0.115" LastSeenUTC="2026-05-17T12:38:06Z" MoreInfo="" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B92755401400:LR" ActiveZoneID="00745a67-249c-4240-a8c0-4c43b1758510" SWGen="2"/></VanishedDevices></ZoneGroupState>"#;
 
+    // Minimal but parser-valid doc: one group with two members.
+    // RINCON_GOOD has a valid IP; RINCON_BAD has "not-an-ip" as host (fails
+    // IpAddr::parse) → topology_to_snapshot must skip it.
+    // Attribute set copied verbatim from the Kitchen member in GROUPED_XML so
+    // parse_zone_group_state_xml accepts the document without modification.
+    const BAD_IP_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_GOOD" ID="RINCON_GOOD:1"><ZoneGroupMember UUID="RINCON_GOOD" Location="http://10.83.0.50:1400/xml/device_description.xml" ZoneName="Good Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/><ZoneGroupMember UUID="RINCON_BAD" Location="http://not-an-ip/xml/device_description.xml" ZoneName="Bad Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroup></ZoneGroups></ZoneGroupState>"#;
+
     fn snap(xml: &str) -> DiscoverySnapshot {
         topology_to_snapshot(parse_zone_group_state_xml(xml).expect("parse"))
     }
@@ -555,7 +562,7 @@ mod topology_tests {
             .speakers
             .iter()
             .find(|sp| sp.room_name == "Living Room")
-            .unwrap();
+            .expect("Living Room speaker missing in grouped snapshot");
         assert_eq!(lr.model, None, "D1: model is None");
         assert_eq!(
             lr.id.as_str(),
@@ -571,6 +578,19 @@ mod topology_tests {
         assert_eq!(
             g.members[0], g.coordinator,
             "must reorder coordinator to index 0"
+        );
+    }
+
+    #[test]
+    fn skips_member_with_unparseable_ip() {
+        let s = snap(BAD_IP_XML);
+        assert_eq!(s.speakers.len(), 1, "bad-IP member skipped");
+        assert_eq!(s.speakers[0].id.as_str(), "RINCON_GOOD");
+        assert_eq!(s.groups.len(), 1);
+        assert_eq!(
+            s.groups[0].members,
+            vec![s.groups[0].coordinator.clone()],
+            "skipped member absent from group membership too"
         );
     }
 }
