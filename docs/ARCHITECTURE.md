@@ -5,20 +5,24 @@ networking (SSDP, SOAP, GENA) handled in Rust via `sonos-api` and own
 multi-NIC SSDP (see [`tatimblin/sonos-sdk`][sdk] for the upstream family).
 
 > **Status.** v0.2 (Foundation + LAN **discovery** + **playback control**
-> + one-shot **state read**) and v0.3 (**real ZoneGroupTopology grouping**)
-> are **implemented** and hardware-verified.
+> + one-shot **state read**) is **implemented** and hardware-verified.
+> v0.3 (**real ZoneGroupTopology grouping**) is **implemented** and
+> verified LAN-free (stateful mock + e2e); the ZoneGroupTopology read
+> path was hardware-proven by the v0.3 spike, and full real-hardware
+> grouping acceptance (the directive-7 multi-room check) is **pending**
+> (plan Task 8, user-run).
 > `oto-core` domain types, the `Wire` trait (discovery + 7 playback
 > methods), `oto-wire` (own multi-NIC SSDP + direct `sonos_api` SOAP
 > control/read/topology), `oto-mock` (stateful), `oto-app` (holds the
 > `Wire`, routes all commands), and the FRB surface (non-sync `discover` +
 > 7 non-sync playback commands + DTOs + `CommandError`) all exist.
 > v0.3 delivers real ZoneGroupTopology via direct `sonos_api`
-> `GetZoneGroupState` SOAP — no `SonosSystem`, no `DeviceDescription`, no
-> `sonos-sdk` umbrella (Open Q1 resolved; Open Q5 closed; see below).
+> `GetZoneGroupState` SOAP (Open Q1 resolved; Open Q5 closed; see below).
 > `oto-wire` now depends only on `sonos-api =0.5.2`.
-> D2: `speaker_state` reads transport at the group coordinator; `Wire`
-> signatures are unchanged. D3: refresh = re-`discover()`; stale
-> `GroupId` → `NotFound`. The `SonosSystem` / `StateManager` /
+> `speaker_state` reads volume/mute per speaker and transport at the group
+> coordinator (Wire signatures unchanged); topology refresh is one-shot —
+> re-running `discover()`, with a stale `GroupId` returning `NotFound`.
+> The `SonosSystem` / `StateManager` /
 > `ChangeIterator` / event prose below (State ownership, Concurrency, the
 > sequence diagram) describes the **v0.4 target**; it is not current code.
 > The Crates table marks what is current vs. targeted.
@@ -81,7 +85,7 @@ Consequences:
 
 ## Command and event flow
 
-**v0.2 model: all commands are non-sync Dart `Future`s.** Every FRB
+**Non-sync commands (v0.2+): all commands are non-sync Dart `Future`s.** Every FRB
 function — including `discover()` and all playback commands — is a
 default (non-sync) FRB fn returning a Dart `Future`, run off the UI
 isolate by FRB's worker executor. This is a deliberate delta from the
@@ -150,7 +154,7 @@ sequenceDiagram
     participant W as oto-wire (sonos_api)
     participant K as Sonos speaker
 
-    Note over U,K: Command — non-sync Dart Future (v0.2 current)
+    Note over U,K: Command — non-sync Dart Future (v0.2/v0.3 current)
     U->>B: play groupId (Future)
     B->>A: route command (lock held)
     A->>W: Wire::play(&group_id)
@@ -238,7 +242,7 @@ resolved v0.3); `sonos_discovery::DeviceDescription` is **no longer used**
 (+ `quick-xml =0.31.0` for DIDL-Lite). An upstream SSDP fix is tracked
 (Open Q8).
 
-**Playback control (v0.2, as implemented).** `oto-wire` holds an
+**Playback control (v0.2; speaker_to_coordinator cache added v0.3).** `oto-wire` holds an
 interior-mutable id→addr / group→coordinator / speaker→coordinator cache
 (populated by `discover()`). Commands issue direct `sonos_api::SonosClient::
 execute_enhanced(ip, op)` SOAP calls — **no `SonosSystem`**. `quick-xml`
@@ -252,6 +256,10 @@ execute_enhanced(ip, op)` SOAP calls — **no `SonosSystem`**. `quick-xml`
 - **No persistence** — no on-disk state or config yet; all state is
   in-process.
 - **v0.2 verified on Windows** (discovery + playback against real hardware).
+- **v0.3 grouping** verified LAN-free (stateful mock + `native/tests` e2e);
+  the ZoneGroupTopology read path is hardware-proven by the v0.3 spike (see
+  `docs/plans/2026-05-19-v0.3-grouping-spike-findings.md`). Full
+  real-hardware grouping acceptance (directive-7) is pending (plan Task 8).
   The Android main manifest declares `INTERNET` +
   `CHANGE_WIFI_MULTICAST_STATE`, but Android silently drops SSDP
   multicast without a held `WifiManager.MulticastLock`; that platform

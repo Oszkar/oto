@@ -3,9 +3,10 @@
 A fast, local-first Sonos controller for Windows and Android, without the 
 bloat of the official app. Flutter UI on top of a Rust core, bridged with 
 [`flutter_rust_bridge`][frb] v2. All discovery, SOAP control, and 
-event-subscription logic stays in Rust built on 
-[sonos-sdk](https://github.com/tatimblin/sonos-sdk); the UI talks to it
-only through generated FRB bindings.
+event-subscription logic stays in Rust via the
+[`sonos-api`](https://github.com/tatimblin/sonos-sdk) crate (from the
+tatimblin/sonos-sdk family) and oto's own multi-NIC SSDP; the UI talks to
+it only through generated FRB bindings.
 
 > note: `oto` is a working name for now. It means `sound` in Japanese and
 > it is a palindrome, just like Sonos 
@@ -36,7 +37,7 @@ oto/
 │  ├─ src/map.rs         # domain → FRB-DTO map (off the bridged surface, so testable)
 │  ├─ src/lib.rs         # mounts api + map + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types + Wire trait
-│  ├─ crates/wire/       # oto-wire: production Wire — multi-NIC SSDP + ureq fetch + direct sonos_api SOAP
+│  ├─ crates/wire/       # oto-wire: production Wire — own multi-NIC SSDP + direct sonos-api SOAP
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml

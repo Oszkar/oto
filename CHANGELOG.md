@@ -11,8 +11,7 @@ and behavior may change between any releases.
 ### Added
 
 v0.3 — Real ZoneGroupTopology grouping. Multi-room groups and coordinator
-election via direct `sonos_api` `GetZoneGroupState` SOAP — no `SonosSystem`,
-no `DeviceDescription`, no `sonos-sdk` umbrella.
+election — delivered via direct `sonos_api` SOAP with no `SonosSystem` dependency.
 
 - **Grouping — D1 (speakers from topology):** `discover()` reads
   `ZoneGroupTopology` directly from a responding speaker; speakers are built
@@ -30,8 +29,8 @@ no `DeviceDescription`, no `sonos-sdk` umbrella.
   was valid before a re-discover but is absent from the new topology returns
   `WireError::NotFound` (`TODO(v0.5)` miss-retry).
 - **Open Q1 resolved (v0.3):** real ZoneGroupTopology via direct-SOAP
-  `GetZoneGroupState`; `SonosSystem` / `from_discovered_devices` still never
-  called.
+  `GetZoneGroupState`; `SonosSystem` / `from_discovered_devices` not needed
+  and never called.
 - **Open Q4 resolved (v0.3):** bonded satellites folded into the primary
   speaker; not surfaced as standalone players (was the documented v0.1/v0.2
   limitation).
