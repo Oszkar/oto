@@ -9,13 +9,14 @@ ignore = [
     # until FRB bumps its dep tree to use `adler2`. Revisit when FRB > 2.12.
     { id = "RUSTSEC-2025-0056", reason = "transitive via flutter_rust_bridge; no upgrade path locally" },
     # `paste` macro crate: unmaintained but no security impact; used transitively
-    # via sonos-sdk → warp. Revisit when sonos-sdk bumps off warp 0.3.
-    # TODO(v0.3): re-evaluate if sonos-sdk pin is changed for the event path.
-    { id = "RUSTSEC-2024-0436", reason = "transitive via sonos-sdk → warp; no upgrade path on pinned sonos-sdk =0.5.2" },
-    # `rustls-pemfile` v1: superseded by v2; used transitively via reqwest 0.11
-    # inside sonos-sdk. No upgrade path on pinned sonos-sdk =0.5.2.
-    # TODO(v0.3): re-evaluate if sonos-sdk pin is changed for the event path.
-    { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-sdk → reqwest 0.11; no upgrade path on pinned sonos-sdk =0.5.2" },
+    # via sonos-api directly. No upgrade path on pinned sonos-api =0.5.2.
+    # TODO(v0.4): re-evaluate if sonos-api pin is changed.
+    { id = "RUSTSEC-2024-0436", reason = "transitive via sonos-api; no upgrade path on pinned sonos-api =0.5.2" },
+    # `rustls-pemfile` v1: superseded by v2; used transitively via
+    # sonos-api → sonos-sdk-discovery → reqwest 0.11. No upgrade path on
+    # pinned sonos-api =0.5.2.
+    # TODO(v0.4): re-evaluate if sonos-api pin is changed.
+    { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-api → sonos-sdk-discovery → reqwest 0.11; no upgrade path on pinned sonos-api =0.5.2" },
 ]
 
 [licenses]
@@ -35,7 +36,7 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
-    # webpki-roots (via ureq → sonos-sdk-soap-client → sonos-sdk → oto-wire → oto-app).
+    # webpki-roots (via sonos-api → sonos-sdk-soap-client → ureq → oto-wire → oto-app).
     # CDLA-Permissive-2.0 is a permissive, patent-grant licence; compatible with MIT.
     "CDLA-Permissive-2.0",
 ]

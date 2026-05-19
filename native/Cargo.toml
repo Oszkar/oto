@@ -26,21 +26,14 @@ oto-core = { path = "crates/core" }
 oto-mock = { path = "crates/mock" }
 oto-wire = { path = "crates/wire" }
 
-# Wire-layer foundation. tatimblin/sonos-sdk handles SSDP discovery, UPnP
-# SOAP control, and reactive event subscriptions. See docs/ARCHITECTURE.md.
-# Exact pin: we depend (later, in oto-wire) on the `test-support`-gated
-# `from_discovered_devices`, which is not semver-protected. See
-# docs/plans/2026-05-15-discovery-spike-findings.md.
-sonos-sdk = "=0.5.2"
-
-# Low-level UPnP SOAP client that sonos-sdk depends on. Exact pin matches
-# the sonos-sdk 0.5.2 transitive dep; used directly in oto-wire for
-# production control operations (play/pause/vol/mute/state). See AGENTS.md §4.
+# Low-level UPnP SOAP client used directly in oto-wire for production
+# control operations (play/pause/vol/mute/state). Exact pin =0.5.2.
+# See AGENTS.md §4.
 sonos-api = "=0.5.2"
 
 # XML parser used by oto-wire's DIDL-Lite track-metadata parser
 # (parse_track_didl in control.rs). Already in the locked graph via
-# sonos-sdk — unify, don't bump.
+# sonos-api — unify, don't bump.
 quick-xml = "=0.31.0"
 
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
@@ -62,17 +55,15 @@ flutter_rust_bridge = "=2.12.0"
 oto-app = { workspace = true }
 oto-core = { workspace = true }
 
-# Android cross-compile only. `sonos-sdk` pulls `reqwest` with default
+# Android cross-compile only. `sonos-api` pulls `reqwest` with default
 # features → `native-tls` → `openssl-sys`, and the Android NDK ships no
 # system OpenSSL, so the `aarch64/x86_64-linux-android` build fails to
 # build `openssl-sys`. Depending on `openssl` with `vendored` here flips
 # the transitively-shared `openssl-sys` to build a vendored OpenSSL with
 # the NDK toolchain. We make zero HTTPS calls (ureq + raw UDP); this
 # exists solely so the Android link succeeds. Not pulled on Windows
-# (native-tls uses SChannel there). Stays as long as sonos-sdk (still
-# pinned =0.5.2) pulls reqwest/native-tls.
-# TODO(v0.3): re-evaluate when the event-path decision (ARCHITECTURE Open
-# Q7) is made — narrowing to sonos-api+callback-server may drop reqwest.
+# (native-tls uses SChannel there). Stays as long as sonos-api (pinned
+# =0.5.2) pulls reqwest/native-tls.
 [target.'cfg(target_os = "android")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
