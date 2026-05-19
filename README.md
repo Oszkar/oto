@@ -150,21 +150,20 @@ bounded, externally-tested end state; after it, maintenance only.
 |---|---|
 | v0.1 ✓ | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
 | v0.2 ✓ | **Playback control** — play/pause/next/prev, volume, mute, one-shot state read. |
-| **v0.3** &larr; next | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded/surround modeling. Reads stay one-shot (no event streams yet). |
+| v0.3 ✓ | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded satellites folded. Reads one-shot (no event streams yet). |
 | v0.4 | **Live events** — reactive state via GENA: the Rust→Dart event stream, no polling. |
 | v0.5 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
-Shipped: `v0.1.0` (identity-only discovery) and `v0.2.0` (playback +
-one-shot state read). v0.2 uses **group-of-one addressing** — each
-discovered speaker is its own group, so there is no real multi-room
-coordination yet; commands are non-sync Dart `Future`s (every command is
-a blocking SOAP round-trip). Verified on **Windows**; Android **release**
-discovery still needs a held `WifiManager.MulticastLock` (deferred — see
-`native/src/api.rs`). Design rationale, the state-read ADR, the
-group-of-one → ZoneGroupTopology seam, and open questions live in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); per-release detail in
-[CHANGELOG.md](CHANGELOG.md).
+Shipped: `v0.1.0` (identity-only discovery), `v0.2.0` (playback +
+one-shot state read, group-of-one addressing), and v0.3 (real
+ZoneGroupTopology: multi-room groups, coordinator election, bonded
+satellites folded). Commands are non-sync Dart `Future`s (every command
+is a blocking SOAP round-trip). Verified on **Windows**; Android
+**release** discovery still needs a held `WifiManager.MulticastLock`
+(deferred — see `native/src/api.rs`). Design rationale, ADRs, and open
+questions live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
+per-release detail in [CHANGELOG.md](CHANGELOG.md).
 
 ## Development notes
 

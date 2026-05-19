@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-//! `oto-wire` — production wire layer backed by [`sonos_sdk`].
+//! `oto-wire` — production wire layer backed by `sonos-api` and own SSDP.
 //!
 //! Owns multi-NIC SSDP discovery and direct `sonos_api` SOAP calls
 //! (ZoneGroupTopology for discovery/topology; AVTransport/RenderingControl

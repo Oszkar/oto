@@ -1,4 +1,4 @@
-//! Production `Wire`: own SSDP + sonos-sdk (test-support) adapter.
+//! Production `Wire`: own SSDP + direct `sonos-api` SOAP.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};

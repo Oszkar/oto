@@ -1,6 +1,7 @@
 //! The `Wire` seam — the trait `oto-app` depends on instead of
-//! `sonos-sdk`. v0.2: discovery + playback commands + a one-shot state
-//! read; see the `Wire` doc for the v0.3 addressing seam.
+//! `sonos-sdk` (or any direct Sonos library). v0.2: discovery + playback
+//! commands + a one-shot state read. v0.3: real ZoneGroupTopology grouping;
+//! signatures unchanged as designed.
 
 use std::fmt;
 
@@ -11,14 +12,16 @@ use crate::{
     volume::Volume,
 };
 
-/// The `Wire` seam. `oto-app` depends on this trait, never on `sonos-sdk`.
+/// The `Wire` seam. `oto-app` depends on this trait, never on a Sonos
+/// library directly (`oto-wire` uses `sonos-api`; `oto-mock` is LAN-free).
 ///
-/// Addressing is the v0.3 seam: playback is per-coordinator, so
-/// play/pause/next/previous take a `GroupId`; the impl resolves
-/// group-of-one → coordinator → IP. v0.2 resolution is trivial (the
-/// group's sole member is its coordinator); v0.3 swaps in real
-/// ZoneGroupTopology resolution **without changing these signatures**.
-/// volume/mute/state are per-`SpeakerId`. All methods block (SOAP).
+/// Addressing: playback is per-coordinator, so play/pause/next/previous take
+/// a `GroupId`; the impl resolves group → coordinator → IP from the
+/// ZoneGroupTopology cache (v0.1/v0.2 used group-of-one — each speaker was
+/// its own group; v0.3 uses real ZoneGroupTopology without changing these
+/// signatures). `speaker_state` reads volume/mute per-speaker and transport
+/// at the group coordinator (D2). volume/mute/state are per-`SpeakerId`.
+/// All methods block (SOAP).
 pub trait Wire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError>;
 

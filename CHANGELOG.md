@@ -8,6 +8,38 @@ and behavior may change between any releases.
 
 ## [Unreleased]
 
+### Added
+
+v0.3 — Real ZoneGroupTopology grouping. Multi-room groups and coordinator
+election via direct `sonos_api` `GetZoneGroupState` SOAP — no `SonosSystem`,
+no `DeviceDescription`, no `sonos-sdk` umbrella.
+
+- **Grouping — D1 (speakers from topology):** `discover()` reads
+  `ZoneGroupTopology` directly from a responding speaker; speakers are built
+  from topology members (`model: None` — ZoneGroupTopology carries no model;
+  `TODO(v0.5)` to repopulate). Bonded satellites (`Invisible="1"` child nodes)
+  are folded into their primary and never surfaced as standalone speakers (Open
+  Q4 resolved).
+- **Grouping — D2 (transport at coordinator, `Wire` signature unchanged):**
+  `speaker_state` reads volume/mute per-speaker and transport at the group
+  coordinator via the `speaker_to_coordinator` cache. `Wire` signatures are
+  identical to v0.2 — the addressing seam was designed for this swap.
+- **Grouping — D3 (refresh = re-discover; stale `GroupId` → `NotFound`):**
+  `oto-wire` populates its group→coordinator/speaker→coordinator caches on
+  every `discover()` call; there is no incremental refresh. A `GroupId` that
+  was valid before a re-discover but is absent from the new topology returns
+  `WireError::NotFound` (`TODO(v0.5)` miss-retry).
+- **Open Q1 resolved (v0.3):** real ZoneGroupTopology via direct-SOAP
+  `GetZoneGroupState`; `SonosSystem` / `from_discovered_devices` still never
+  called.
+- **Open Q4 resolved (v0.3):** bonded satellites folded into the primary
+  speaker; not surfaced as standalone players (was the documented v0.1/v0.2
+  limitation).
+- **Open Q5 closed (v0.3):** `sonos-sdk` umbrella crate (`test-support`
+  feature, `sonos_discovery::DeviceDescription`) removed; `oto-wire` now
+  depends only on `sonos-api =0.5.2` (already a direct dep for v0.2 playback).
+  `quick-xml` (=0.31.0) retained for DIDL-Lite parsing.
+
 ## [0.2.0] - 2026-05-18
 
 ### Added
