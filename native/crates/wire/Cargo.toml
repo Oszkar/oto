@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Production wire layer: adapts tatimblin/sonos-sdk onto oto-core domain types."
+description = "Production wire layer: adapts sonos-api (tatimblin/sonos-sdk) onto oto-core domain types."
 publish = false
 
 [lints]
