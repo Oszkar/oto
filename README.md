@@ -3,9 +3,10 @@
 A fast, local-first Sonos controller for Windows and Android, without the 
 bloat of the official app. Flutter UI on top of a Rust core, bridged with 
 [`flutter_rust_bridge`][frb] v2. All discovery, SOAP control, and 
-event-subscription logic stays in Rust built on 
-[sonos-sdk](https://github.com/tatimblin/sonos-sdk); the UI talks to it
-only through generated FRB bindings.
+event-subscription logic stays in Rust via the
+[`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the
+[`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP; the UI talks to
+it only through generated FRB bindings.
 
 > note: `oto` is a working name for now. It means `sound` in Japanese and
 > it is a palindrome, just like Sonos 
@@ -36,7 +37,7 @@ oto/
 │  ├─ src/map.rs         # domain → FRB-DTO map (off the bridged surface, so testable)
 │  ├─ src/lib.rs         # mounts api + map + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types + Wire trait
-│  ├─ crates/wire/       # oto-wire: production Wire — multi-NIC SSDP + ureq fetch + direct sonos_api SOAP
+│  ├─ crates/wire/       # oto-wire: production Wire — own multi-NIC SSDP + direct sonos-api SOAP
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml
@@ -150,19 +151,21 @@ bounded, externally-tested end state; after it, maintenance only.
 |---|---|
 | v0.1 ✓ | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
 | v0.2 ✓ | **Playback control** — play/pause/next/prev, volume, mute, one-shot state read. |
-| **v0.3** &larr; next | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded/surround modeling. Reads stay one-shot (no event streams yet). |
+| v0.3 ✓ | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded satellites folded. Reads one-shot (no event streams yet). |
 | v0.4 | **Live events** — reactive state via GENA: the Rust→Dart event stream, no polling. |
 | v0.5 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
-Shipped: `v0.1.0` (identity-only discovery) and `v0.2.0` (playback +
-one-shot state read). v0.2 uses **group-of-one addressing** — each
-discovered speaker is its own group, so there is no real multi-room
-coordination yet; commands are non-sync Dart `Future`s (every command is
-a blocking SOAP round-trip). Verified on **Windows**; Android **release**
-discovery still needs a held `WifiManager.MulticastLock` (deferred — see
-`native/src/api.rs`). Design rationale, the state-read ADR, the
-group-of-one → ZoneGroupTopology seam, and open questions live in
+Released: `v0.1.0` (identity-only discovery) and `v0.2.0` (playback +
+one-shot state read, group-of-one addressing). v0.3 (real
+ZoneGroupTopology: multi-room groups, coordinator election, bonded
+satellites folded) is implemented on `main`; release cut pending.
+Commands are non-sync Dart `Future`s (every command is a blocking SOAP
+round-trip). v0.1/v0.2 verified on **Windows**; v0.3 grouping verified
+LAN-free with its read path hardware-proven by the v0.3 spike — full
+real-hardware acceptance pending. Android **release** discovery still
+needs a held `WifiManager.MulticastLock` (deferred — see
+`native/src/api.rs`). Design rationale, ADRs, and open questions live in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); per-release detail in
 [CHANGELOG.md](CHANGELOG.md).
 

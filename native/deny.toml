@@ -8,14 +8,17 @@ ignore = [
     # flutter_rust_bridge → backtrace → miniz_oxide → adler. No upgrade path
     # until FRB bumps its dep tree to use `adler2`. Revisit when FRB > 2.12.
     { id = "RUSTSEC-2025-0056", reason = "transitive via flutter_rust_bridge; no upgrade path locally" },
-    # `paste` macro crate: unmaintained but no security impact; used transitively
-    # via sonos-sdk → warp. Revisit when sonos-sdk bumps off warp 0.3.
-    # TODO(v0.3): re-evaluate if sonos-sdk pin is changed for the event path.
-    { id = "RUSTSEC-2024-0436", reason = "transitive via sonos-sdk → warp; no upgrade path on pinned sonos-sdk =0.5.2" },
-    # `rustls-pemfile` v1: superseded by v2; used transitively via reqwest 0.11
-    # inside sonos-sdk. No upgrade path on pinned sonos-sdk =0.5.2.
-    # TODO(v0.3): re-evaluate if sonos-sdk pin is changed for the event path.
-    { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-sdk → reqwest 0.11; no upgrade path on pinned sonos-sdk =0.5.2" },
+    # `paste` is an unmaintained proc-macro crate (advisory = unmaintained only,
+    # no security impact). It is a transitive dependency of sonos-api: the full
+    # path is paste → sonos-api → oto-wire. No upgrade path while sonos-api is
+    # pinned =0.5.2.
+    # TODO(v0.4): re-evaluate if the sonos-api pin is changed.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api (paste → sonos-api → oto-wire); no upgrade path on pinned sonos-api =0.5.2" },
+    # `rustls-pemfile` v1: superseded by v2; used transitively via
+    # sonos-api → sonos-sdk-discovery → reqwest 0.11. No upgrade path on
+    # pinned sonos-api =0.5.2.
+    # TODO(v0.4): re-evaluate if sonos-api pin is changed.
+    { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-api → sonos-sdk-discovery → reqwest 0.11; no upgrade path on pinned sonos-api =0.5.2" },
 ]
 
 [licenses]
@@ -35,7 +38,7 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
-    # webpki-roots (via ureq → sonos-sdk-soap-client → sonos-sdk → oto-wire → oto-app).
+    # webpki-roots (CDLA-Permissive-2.0): webpki-roots → ureq → sonos-sdk-soap-client → sonos-api → oto-wire.
     # CDLA-Permissive-2.0 is a permissive, patent-grant licence; compatible with MIT.
     "CDLA-Permissive-2.0",
 ]

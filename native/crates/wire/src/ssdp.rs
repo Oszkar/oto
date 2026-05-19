@@ -1,6 +1,7 @@
-//! Own multi-interface SSDP. sonos-sdk's discovery binds 0.0.0.0 and
-//! fails on multi-NIC hosts (spike findings / tatimblin/sonos-sdk#76);
-//! we enumerate interfaces and bind each explicitly.
+//! Own multi-interface SSDP. sonos-sdk's discovery bound 0.0.0.0 and
+//! failed on multi-NIC hosts (spike findings / tatimblin/sonos-sdk#76),
+//! which is why oto-wire runs its own SSDP — we enumerate interfaces and
+//! bind each explicitly.
 //!
 //! Discovery is two-phase: first send an M-SEARCH on *every* usable
 //! interface, then receive across *all* of them (round-robin) until a

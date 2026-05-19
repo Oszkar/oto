@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Production wire layer: adapts tatimblin/sonos-sdk onto oto-core domain types."
+description = "Production wire layer: adapts sonos-api (tatimblin/sonos-sdk) onto oto-core domain types."
 publish = false
 
 [lints]
@@ -13,24 +13,14 @@ workspace = true
 
 [dependencies]
 oto-core = { workspace = true }
-# `test-support` gates the public re-export of `sonos_discovery::{Device,
-# DeviceDescription}` — adapter.rs parses fetched device-description XML
-# with `DeviceDescription::from_xml` (a production code path, not
-# test-only). v0.1 does NOT call `SonosSystem::from_discovered_devices`
-# (snapshot is built from our own discovered devices — see the discover
-# design-doc Addendum), so do not assume this feature can be dropped.
-# Pinned =0.5.2 at the workspace; the gated API is not semver-protected —
-# do not bump without re-checking it (upstream tatimblin/sonos-sdk#76).
-sonos-sdk = { workspace = true, features = ["test-support"] }
-# Direct access to the sonos_api UPnP SOAP client for control operations
-# (play/pause/next/previous/volume/mute/state). sonos-sdk does not
-# re-export SonosClient or services::av_transport / rendering_control,
-# so a direct dep is required. Promoted from dev-dep per Task 4 (v0.2).
-# Exact pin matches the workspace pin (=0.5.2).
+# UPnP SOAP client for control operations (play/pause/next/previous/
+# volume/mute/state). Direct dep; SonosClient + services::av_transport /
+# rendering_control are not re-exported by any other dep.
+# Promoted from dev-dep per Task 4 (v0.2). Pin =0.5.2 (workspace).
 sonos-api = { workspace = true }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
 if-addrs = "0.15"
 # DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
-# the locked graph via sonos-sdk (transitive) — unify, don't bump.
+# the locked graph via sonos-api (transitive) — unify, don't bump.
 quick-xml = { workspace = true }
