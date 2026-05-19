@@ -21,7 +21,7 @@
 //! - **Simplicity.** No fine-grained per-device locking, no queue, no
 //!   deadlock surface.
 //!
-//! Revisit if v0.3 event-pump threads contend on the same lock; at that
+//! Revisit if v0.4 event-pump threads contend on the same lock; at that
 //! point a command channel or per-device granularity may be warranted.
 
 use std::sync::{Mutex, OnceLock};

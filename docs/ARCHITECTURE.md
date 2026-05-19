@@ -14,10 +14,12 @@ networking delegated to [`tatimblin/sonos-sdk`][sdk].
 > or `sonos-sdk`'s ZoneGroupTopology**, which hardware proved lazy /
 > non-deterministic (see **Open Q1** and the
 > [discover design](plans/2026-05-15-frb-discover-command-design.md)
-> addendum). The `SonosSystem` / `StateManager` / `ChangeIterator` /
-> event prose below (State ownership, Concurrency, the sequence diagram)
-> describes the **v0.3 target**, not current code. The Crates table marks
-> what is current vs. targeted.
+> addendum). Real ZoneGroupTopology — multi-room grouping and
+> coordinator election — is the **v0.3 target**. The `SonosSystem` /
+> `StateManager` / `ChangeIterator` / event prose below (State ownership,
+> Concurrency, the sequence diagram) describes the **v0.4 target**;
+> neither is current code. The Crates table marks what is current vs.
+> targeted.
 
 ## Layers
 
@@ -36,7 +38,7 @@ flowchart TD
 
     UI --> RP
     RP -->|"Future commands"| FRB
-    FRB -->|"Stream&lt;Event&gt; (v0.3)"| RP
+    FRB -->|"Stream&lt;Event&gt; (v0.4)"| RP
     FRB --> APP
     APP --> CORE
     APP --> WIRE
@@ -50,8 +52,8 @@ flowchart TD
 
 | Crate | Path | Responsibility |
 |---|---|---|
-| `oto_native` | `native/` | FRB cdylib. Thin shim — `discover()` + 7 non-sync playback commands + identity/playback DTOs + `CommandError`; delegates to `oto-app`. (v0.3: event streams.) |
-| `oto-app` | `native/crates/app` | Owns runtime state (the active `Wire` in a process-global, lock held across SOAP); routes `discover()` and the 7 v0.2 playback/state commands. (v0.3: event pump threads.) |
+| `oto_native` | `native/` | FRB cdylib. Thin shim — `discover()` + 7 non-sync playback commands + identity/playback DTOs + `CommandError`; delegates to `oto-app`. (v0.4: event streams.) |
+| `oto-app` | `native/crates/app` | Owns runtime state (the active `Wire` in a process-global, lock held across SOAP); routes `discover()` and the 7 v0.2 playback/state commands. (v0.4: event pump threads.) |
 | `oto-core` | `native/crates/core` | Pure domain types (`Speaker`, `Group`, `TransportState`, `Track`, `Volume`, identifiers, `SpeakerState`) + v0.1 identity types (`SpeakerIdentity`, `GroupIdentity`, `DiscoverySnapshot`) + the `Wire` trait (discovery + playback) + `WireError` (4 variants). No networking, no async, no third-party deps. |
 | `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP, `ureq` device-description fetch (HTTP/1.1-chunked-safe), `sonos_discovery::DeviceDescription` parse for identity. **Direct `sonos_api` (=0.5.2) SOAP** for playback control and state reads — no `SonosSystem`. Interior-mutable id→addr / group→coordinator cache populated by `discover()`. |
 | `oto-mock` | `native/crates/mock` | **Stateful** `Wire` implementation (`MockWire`) — in-memory per-speaker model (commands mutate it, `speaker_state` reflects it); integration tests run without a LAN. |
@@ -106,27 +108,27 @@ group-of-one; `GroupId` resolution is trivial (the group's sole member
 coordinator from ZoneGroupTopology) — `Wire` signatures are unchanged.
 Per-speaker volume/mute/state addressing is identical in v0.3.
 
-**State-read shape — ADR summary (v0.2; revisit at v0.3).** Three shapes
+**State-read shape — ADR summary (v0.2; revisit at v0.4).** Three shapes
 were considered for the `speaker_state` read:
 
 - **A — snapshot command per speaker** (`speaker_state(SpeakerId) →
   SpeakerState`) with `Option<T>` fields (chosen). Mirrors the proven
   `discover→snapshot→FutureProvider` pattern; smallest `Wire` seam (one
-  method); best v0.3 survival — signature unchanged when the impl swaps
+  method); best v0.4 survival — signature unchanged when the impl swaps
   fetch→event-cache; honest partial failure (`Option<T>` = any of the
-  ~4 SOAP calls may fail, matching SDK `get()` and the v0.3 cold cache).
+  ~4 SOAP calls may fail, matching SDK `get()` and the v0.4 cold cache).
 - **B — granular per-property reads.** 1:1 with SDK handles but
-  multiplies the `Wire`/mock surface 3–4× for a v0.4-UI need (YAGNI).
-- **C — fold state into `discover()`.** Fewest round-trips but worst v0.3
+  multiplies the `Wire`/mock surface 3–4× for a v0.5-UI need (YAGNI).
+- **C — fold state into `discover()`.** Fewest round-trips but worst v0.4
   survival; couples slow discovery to the state contract.
 
 **Chosen: A.** `SpeakerState { volume: Option<Volume>, muted: Option<bool>,
-transport: Option<TransportState> }`. **Revisit at v0.3**: when state
+transport: Option<TransportState> }`. **Revisit at v0.4**: when state
 moves to the event-fed cache the read impl changes behind the unchanged
 `Wire` signature; transport re-addressing (conceptually per-`Group` in
 oto-core design) is the main open question to settle then.
 
-Events are an asynchronous Rust → Dart stream (**v0.3 target**, not yet
+Events are an asynchronous Rust → Dart stream (**v0.4 target**, not yet
 implemented). A command's success/failure is separate from the state
 change it eventually causes.
 
@@ -148,7 +150,7 @@ sequenceDiagram
     A-->>B: Ok / CommandError
     B-->>U: Future resolves
 
-    Note over U,K: Event — async, Rust to Dart (v0.3 target)
+    Note over U,K: Event — async, Rust to Dart (v0.4 target)
     K->>K: GENA NOTIFY LastChange
     K-->>A: ChangeIterator recv on bg thread
     A->>A: map ChangeEvent to domain event
@@ -166,8 +168,8 @@ the bridge.
   **locked across the SOAP call** — deliberate: commands are
   user-initiated and low-frequency; serializing all commands is the
   LAN-politeness story (no command storms against the user's speakers).
-  Revisit only if v0.3 event threads and commands contend on the lock.
-- **Events (v0.3 target):** `sonos-sdk`'s `ChangeIterator::recv()` blocks.
+  Revisit only if v0.4 event threads and commands contend on the lock.
+- **Events (v0.4 target):** `sonos-sdk`'s `ChangeIterator::recv()` blocks.
   Each event stream exposed to Dart will be pumped by a dedicated OS
   thread that reads the iterator and pushes onto an FRB `Stream`.
 
@@ -247,8 +249,8 @@ remains for `sonos_discovery` (discovery path).
   The Android main manifest declares `INTERNET` +
   `CHANGE_WIFI_MULTICAST_STATE`, but Android silently drops SSDP
   multicast without a held `WifiManager.MulticastLock`; that platform
-  code is deferred (`TODO(v0.4)`, `native/src/api.rs`). Android
-  **release** discovery is therefore non-functional until v0.4; the
+  code is deferred (`TODO(v0.5)`, `native/src/api.rs`). Android
+  **release** discovery is therefore non-functional until v0.5; the
   debug APK works (Flutter tooling supplies `INTERNET`). A documented
   limitation, like the bonded-surround case in Open Q4.
 
@@ -294,29 +296,29 @@ Progress tracked against the
    `rendering_control` services. Both the `test-support` umbrella and the
    direct `sonos-api` dep are load-bearing. The `=0.5.2` exact pin
    neutralises the non-semver `test-support` fragility; do not bump without
-   re-checking both. Revisit at v0.3 (event path) whether the umbrella's
+   re-checking both. Revisit at v0.4 (event path) whether the umbrella's
    reactive layer — `sonos-state/-stream/-event-manager` — is the
    right event path or whether narrowing to `sonos-api`+`callback-server`
    is preferable (see Q7).
-6. **`watch()`-after-`fetch()` event suppression (v0.2/v0.3 constraint).**
+6. **`watch()`-after-`fetch()` event suppression (v0.2/v0.4 constraint).**
    _Open — design constraint, not a bug._ Upstream change-detection
    suppresses the initial `.watch()` notification if a prior `.fetch()`
    already cached the same value (documented upstream as by-design;
    unlikely to change). The natural oto pattern — fetch initial state,
    then subscribe — will silently miss the first event. Constraint for
-   v0.2/v0.3: treat `.watch()` itself as the reachability/seed probe;
+   v0.2/v0.4: treat `.watch()` itself as the reachability/seed probe;
    do not rely on a post-`fetch()` watch firing an initial event.
-7. **Event-path reliability is the v0.3 risk; contingency is narrowing,
+7. **Event-path reliability is the v0.4 risk; contingency is narrowing,
    not forking.** _Tracked._ Upstream's reactive layer (`sonos-state/
    -stream/-event-manager`) carries the only live correctness concern
    (intermittent `position` updates, open upstream) and has no upstream
    CI integration coverage (all hardware-gated). The lower layers
    (`soap-client`, `sonos-api`, `callback-server`) are solid — v0.2
    confirms `sonos-api` SOAP is reliable for direct control and reads.
-   If v0.3 event delivery proves unreliable, the fallback is **not** a
+   If v0.4 event delivery proves unreliable, the fallback is **not** a
    fork: `oto-app` (already the sole runtime-state owner) narrows its
    dependency to `sonos-api` fetch + `callback-server`/GENA raw events
-   and does change-detection itself. Decide at v0.3 with real-hardware
+   and does change-detection itself. Decide at v0.4 with real-hardware
    data.
 8. **Contribute the #76 multi-NIC SSDP fix upstream.** _Action, low
    cost._ `oto-wire/src/ssdp.rs` is a near-drop-in better implementation;

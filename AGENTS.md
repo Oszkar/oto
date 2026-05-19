@@ -101,8 +101,9 @@ oto/
 ```
 
 `oto-app` owns runtime state. For v0.1 that is the active `Wire` and
-`discover` routing; v0.2/v0.3 grow it to own `SonosSystem`, the
-`sonos_sdk`↔`oto_core` mapping, and the event-pump threads.
+`discover` routing; v0.2 added playback/state command routing. v0.3
+grows it to own `SonosSystem`, the `sonos_sdk`↔`oto_core` topology
+mapping; v0.4 the event-pump threads.
 
 ### Architectural boundaries — agents must respect
 
@@ -188,6 +189,6 @@ together — drift between them is the most likely doc bug.
 
 - Be concise; short bullets, concrete next steps.
 - Ask targeted questions early; present 1–3 options with trade-offs.
-- Push back on security risk, architectural violations, over-engineering, premature scope expansion (UI is v0.4 — not earlier, however easy it looks).
+- Push back on security risk, architectural violations, over-engineering, premature scope expansion (UI is v0.5 — not earlier, however easy it looks).
 - Correct first, agreeable second. No busywork docs/status files unless asked.
 - Persist until done or genuinely blocked; if blocked, say what you tried and what you need.

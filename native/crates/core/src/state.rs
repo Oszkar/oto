@@ -1,7 +1,7 @@
 //! v0.2 one-shot read snapshot for a single speaker (group-of-one).
 //! `Option` fields = honest partial-failure: a snapshot is ~4 SOAP
 //! reads, any subset may fail (matches SDK `get() -> Option` and the
-//! v0.3 cold cache). Revisit at v0.3 (state moves to the event cache).
+//! v0.4 cold cache). Revisit at v0.4 (state moves to the event cache).
 
 use crate::{transport::TransportState, volume::Volume};
 

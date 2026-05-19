@@ -149,35 +149,22 @@ bounded, externally-tested end state; after it, maintenance only.
 | Version | Capability |
 |---|---|
 | v0.1 ✓ | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
-| **v0.2** &larr; current | **Playback control** — play/pause/next/prev, volume, mute, and reading current state. |
-| v0.3 | **Grouping + live events** — group form/break, topology changes, reactive state. |
-| v0.4 | **UI** — the designed Flutter interface on the proven capability layers. |
+| v0.2 ✓ | **Playback control** — play/pause/next/prev, volume, mute, one-shot state read. |
+| **v0.3** &larr; next | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded/surround modeling. Reads stay one-shot (no event streams yet). |
+| v0.4 | **Live events** — reactive state via GENA: the Rust→Dart event stream, no polling. |
+| v0.5 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
-v0.1 discovery is **identity-only**: each LAN-discovered player is listed
-with its room / model / IP, built directly from the device descriptions
-oto-wire fetches itself.
-
-v0.2 adds **playback control and one-shot state read**, proven
-end-to-end through the Rust↔Dart bridge: `play/pause/next/previous`
-(addressed by group), `set_volume`/`set_mute` (per speaker), and
-`speaker_state` (one snapshot of volume/mute/transport per speaker,
-`Option<T>` fields for honest partial failure). Commands are **non-sync
-Dart `Future`s** — every command is a blocking SOAP round-trip to the
-device. This milestone uses **group-of-one addressing**: each discovered
-speaker is its own group, so there is no real multi-room coordination
-yet. Real ZoneGroupTopology — multi-room groups, bonded stereo pairs /
-home-theater surrounds, coordinator election — is **v0.3**; until then a
-bonded surround is listed as a standalone player and grouped playback
-requires controlling each speaker individually. Live event streams
-(reactive state updates without polling) are also **v0.3**.
-
-v0.2 is verified on **Windows** (discovery + playback against real
-hardware). On **Android**, the main manifest declares `INTERNET` +
-`CHANGE_WIFI_MULTICAST_STATE`, but receiving SSDP multicast also needs a
-held `WifiManager.MulticastLock` — that platform code is `TODO(v0.4)`
-(see `native/src/api.rs`). Until then Android **release** discovery
-won't receive replies; the debug APK works (Flutter tooling).
+Shipped: `v0.1.0` (identity-only discovery) and `v0.2.0` (playback +
+one-shot state read). v0.2 uses **group-of-one addressing** — each
+discovered speaker is its own group, so there is no real multi-room
+coordination yet; commands are non-sync Dart `Future`s (every command is
+a blocking SOAP round-trip). Verified on **Windows**; Android **release**
+discovery still needs a held `WifiManager.MulticastLock` (deferred — see
+`native/src/api.rs`). Design rationale, the state-read ADR, the
+group-of-one → ZoneGroupTopology seam, and open questions live in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); per-release detail in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Development notes
 
