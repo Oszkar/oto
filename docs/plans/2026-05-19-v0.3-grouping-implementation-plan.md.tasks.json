@@ -1,0 +1,61 @@
+{
+  "planPath": "docs/plans/2026-05-19-v0.3-grouping-implementation-plan.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Real to_snapshot from ZoneGroupTopology (pure mapping)",
+      "status": "pending",
+      "description": "**Goal:** Replace group-of-one to_snapshot(Vec<Device>) with to_snapshot(Vec<ZoneGroupInfo>) -> DiscoverySnapshot (real speakers+groups, satellites folded, coordinator-first, vanished ignored) — pure fn, TDD against captured real spike XML.\n\n**Files:** Modify native/crates/wire/src/adapter.rs (replace to_snapshot + to_snapshot_* tests; add use sonos_api::services::zone_group_topology::{self, ZoneGroupInfo};)\n\n**Acceptance Criteria:** SpeakerIdentity per top-level member (unparseable IP skipped); satellites not emitted; GroupIdentity per ZoneGroupInfo coordinator-first, coordinator-absent skipped; grouped XML -> 1 group/2 speakers/coordinator-first; .105 coordinator-not-first reordered.\n\n**Verify:** cargo nextest run -p oto-wire grouped_topology coordinator_reordered -> PASS\n\n```json:metadata\n{\"files\": [\"native/crates/wire/src/adapter.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-wire grouped_topology coordinator_reordered\", \"acceptanceCriteria\": [\"SpeakerIdentity per top-level member, unparseable IP skipped\", \"satellites not emitted\", \"GroupIdentity coordinator-first, coordinator-absent skipped\", \"grouped XML -> 1 group 2 speakers coordinator-first\", \".105 coordinator-not-first reordered\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: discover() fetches ZoneGroupState (multi-responder); drop DeviceDescription",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Rewrite discover() to SSDP->extract IP->fetch+parse GetZoneGroupState (try responders until success)->to_snapshot; delete to_devices + sonos_sdk::sonos_discovery identity path.\n\n**Files:** Modify native/crates/wire/src/adapter.rs (rewrite discover(); remove to_devices + sonos_discovery import; keep extract_ip); native/crates/wire/src/control.rs (add fetch_zone_group_state; extend services import with zone_group_topology).\n\n**Acceptance Criteria:** fetch_zone_group_state build/execute/map_sdk_err/parse (parse fail->Backend); discover() multi-responder fallback (all fail->Network; 0->NoDevicesFound); to_devices+sonos_discovery removed (grep empty); cache test updated; oto-wire suite green.\n\n**Verify:** just check clean AND cargo nextest run -p oto-wire -> all PASS\n\n```json:metadata\n{\"files\": [\"native/crates/wire/src/adapter.rs\", \"native/crates/wire/src/control.rs\"], \"verifyCommand\": \"just check && cargo nextest run -p oto-wire\", \"acceptanceCriteria\": [\"fetch_zone_group_state build/execute/map_sdk_err/parse; parse fail->Backend\", \"discover() multi-responder; all fail->Network; 0->NoDevicesFound\", \"to_devices + sonos_discovery removed\", \"cache test updated; oto-wire suite green\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: D2 — speaker_state resolves transport to the coordinator",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** speaker_state(SpeakerId) keeps its signature; volume/mute at the speaker, transport at the speaker's group coordinator (solo=itself). Add internal speaker_to_coordinator cache.\n\n**Files:** Modify native/crates/wire/src/adapter.rs (SonosWire struct + new/Default, populate_caches, Wire::speaker_state, resolve_transport_addr); native/crates/wire/src/control.rs (soap_speaker_state(speaker_addr, transport_addr)).\n\n**Acceptance Criteria:** speaker_to_coordinator cache populated member->coordinator; speaker_state vol/mute@speaker transport@coordinator solo==self; unknown->NotFound; unit: non-coordinator transport addr == coordinator addr.\n\n**Verify:** cargo nextest run -p oto-wire resolve_transport_addr && just check\n\n```json:metadata\n{\"files\": [\"native/crates/wire/src/adapter.rs\", \"native/crates/wire/src/control.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-wire resolve_transport_addr && just check\", \"acceptanceCriteria\": [\"speaker_to_coordinator populated member->coordinator\", \"vol/mute@speaker transport@coordinator solo==self\", \"unknown->NotFound\", \"unit: non-coordinator transport addr == coordinator addr\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: oto-mock — D2-aware stateful MockWire",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** MockWire::speaker_state mirrors D2 (own vol/mute + coordinator's transport) so the e2e proves D2 LAN-free; keep the 2-member+solo fixture.\n\n**Files:** Modify native/crates/mock/src/lib.rs (Model.member_to_coord; seeded populates it; speaker_state returns own vol/mute + coordinator transport; add test).\n\n**Acceptance Criteria:** Model.member_to_coord from snap.groups; speaker_state own vol/mute + coordinator transport, solo unchanged; play(Kitchen) then speaker_state(Dining)=Playing volume independent; existing mock tests pass.\n\n**Verify:** cargo nextest run -p oto-mock -> all PASS\n\n```json:metadata\n{\"files\": [\"native/crates/mock/src/lib.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-mock\", \"acceptanceCriteria\": [\"Model.member_to_coord from snap.groups\", \"speaker_state own vol/mute + coordinator transport; solo unchanged\", \"play Kitchen then speaker_state(Dining)=Playing volume independent\", \"existing mock tests pass\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: native/tests e2e — multi-member group through map + D2",
+      "status": "pending",
+      "blockedBy": [3, 4],
+      "description": "**Goal:** Prove LAN-free via oto-app + MockWire + real oto_native::map that a multi-member DiscoveredGroup crosses the bridge and a grouped non-coordinator speaker_state returns coordinator transport.\n\n**Files:** Modify native/tests/discover_e2e.rs (2-member DiscoveredGroup survives to_topology); native/tests/playback_e2e.rs (grouped non-coordinator speaker_state -> Playing).\n\n**Acceptance Criteria:** e2e: Topology.groups has members.len()==2 and members[0]==coordinator post-map; e2e: play Kitchen then speaker_state(Dining) DTO transport==Playing; cargo nextest run --workspace fully green.\n\n**Verify:** cargo nextest run --workspace -> all PASS\n\n```json:metadata\n{\"files\": [\"native/tests/discover_e2e.rs\", \"native/tests/playback_e2e.rs\"], \"verifyCommand\": \"cargo nextest run --workspace\", \"acceptanceCriteria\": [\"e2e Topology.groups members.len()==2 members[0]==coordinator post-map\", \"e2e play Kitchen then speaker_state(Dining) DTO transport==Playing\", \"workspace nextest fully green\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Open Q5 — drop sonos-sdk test-support feature (conditional) + cargo-deny",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** With DeviceDescription removed (Task 2), drop sonos-sdk's test-support feature from oto-wire iff no other sonos_discovery use-site remains; else document narrowing. §7 sign-off item (flag in PR; pin stays =0.5.2).\n\n**Files:** Modify native/crates/wire/Cargo.toml (sonos-sdk dep + comment); native/Cargo.toml (workspace comment).\n\n**Acceptance Criteria:** grep no sonos_discovery/sonos_sdk:: use-site; if clean sonos-sdk={workspace=true} comment=closed else keep+narrowed+PR note; cargo deny ok; just check + workspace nextest green.\n\n**Verify:** cd native && cargo deny check && cargo build --workspace -> clean\n\n```json:metadata\n{\"files\": [\"native/crates/wire/Cargo.toml\", \"native/Cargo.toml\"], \"verifyCommand\": \"cd native && cargo deny check && cargo build --workspace\", \"acceptanceCriteria\": [\"no sonos_discovery/sonos_sdk:: use-site\", \"feature dropped+comment=closed OR kept+narrowed+PR note\", \"cargo deny ok; just check + workspace nextest green\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Doc-sync (v0.3) — ARCHITECTURE / README / CHANGELOG / TODO sweep",
+      "status": "pending",
+      "blockedBy": [3, 6],
+      "description": "**Goal:** Sync living docs to shipped v0.3 (AGENTS.md §7). The version bump/tag/release cut is the user's separate step (RELEASING.md) — NOT done here.\n\n**Files:** Modify docs/ARCHITECTURE.md (Status, Crates, command flow + D2, Open Q1/Q4 resolved, Open Q5 closed/narrowed, v0.2 ADR resolved, group-of-one->real); README.md (ladder v0.3 ✓); CHANGELOG.md ([Unreleased] v0.3 bullets); native/crates/core/src/wire.rs (trait doc present-tense); sweep grep TODO(v0.3).\n\n**Acceptance Criteria:** ARCHITECTURE no v0.3-target prose, Q1/Q4 resolved, Q5 closed/narrowed (match Task 6), D2 documented; README ladder v0.3 ✓; CHANGELOG [Unreleased] v0.3 entry; TODO(v0.3) only ssdp.rs or none; md links resolve; just check clean.\n\n**Verify:** grep -rn 'TODO(v0.3)' native/ -> only ssdp.rs (or empty) AND just check clean\n\n```json:metadata\n{\"files\": [\"docs/ARCHITECTURE.md\", \"README.md\", \"CHANGELOG.md\", \"native/crates/core/src/wire.rs\"], \"verifyCommand\": \"grep -rn 'TODO(v0.3)' native/ ; just check\", \"acceptanceCriteria\": [\"ARCHITECTURE no v0.3-target prose; Q1/Q4 resolved; Q5 closed/narrowed; D2 documented\", \"README ladder v0.3 ✓\", \"CHANGELOG [Unreleased] v0.3 entry\", \"TODO(v0.3) only ssdp.rs or none\", \"md links resolve; just check clean\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Hardware-gated acceptance (user-run) — USER-ORDERED GATE",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** A hardware-gated #[ignore] test proving real discover() returns real groups, plus findings directive-7 manual acceptance: form a 2-room group in the Sonos app -> play at the resolved coordinator -> all member rooms respond.\n\n**USER-ORDERED GATE — NON-SKIPPABLE.** Requested by the user in the current conversation. MUST NOT be closed by walking around it, declaring it verified inline, or substituting a cheaper check. Close only after every acceptanceCriteria item is re-validated independently, with output captured.\n\n**Files:** Create native/crates/wire/tests/live_topology.rs (#[ignore], sibling of v0.1/v0.2 live test).\n\n**Acceptance Criteria:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN: real discover() >=1 GroupIdentity; 2-room group => members.len()>=2 members[0]==coordinator; manual: grouped+queued, play at coordinator -> Ok AND all member rooms audibly start (directive-7); captured stdout pasted into the PR.\n\n**Verify:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN -> PASS + manual observation captured\n\n```json:metadata\n{\"files\": [\"native/crates/wire/tests/live_topology.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-wire --run-ignored ignored-only live_topology\", \"acceptanceCriteria\": [\"real discover() >=1 GroupIdentity; 2-room => members.len()>=2 members[0]==coordinator\", \"manual: grouped+queued play at coordinator -> Ok AND all member rooms audibly start\", \"captured stdout of both pasted into the PR\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"requiresUserSpecification\": false, \"gateScope\": \"v0.3 hardware acceptance — spike findings directive-7; user-run on the real Sonos LAN\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-19"
+}
