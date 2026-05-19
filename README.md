@@ -4,8 +4,8 @@ A fast, local-first Sonos controller for Windows and Android, without the
 bloat of the official app. Flutter UI on top of a Rust core, bridged with 
 [`flutter_rust_bridge`][frb] v2. All discovery, SOAP control, and 
 event-subscription logic stays in Rust via the
-[`sonos-api`](https://github.com/tatimblin/sonos-sdk) crate (from the
-tatimblin/sonos-sdk family) and oto's own multi-NIC SSDP; the UI talks to
+[`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the
+[`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP; the UI talks to
 it only through generated FRB bindings.
 
 > note: `oto` is a working name for now. It means `sound` in Japanese and
@@ -156,15 +156,18 @@ bounded, externally-tested end state; after it, maintenance only.
 | v0.5 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
-Shipped: `v0.1.0` (identity-only discovery), `v0.2.0` (playback +
-one-shot state read, group-of-one addressing), and v0.3 (real
+Released: `v0.1.0` (identity-only discovery) and `v0.2.0` (playback +
+one-shot state read, group-of-one addressing). v0.3 (real
 ZoneGroupTopology: multi-room groups, coordinator election, bonded
-satellites folded). Commands are non-sync Dart `Future`s (every command
-is a blocking SOAP round-trip). Verified on **Windows**; Android
-**release** discovery still needs a held `WifiManager.MulticastLock`
-(deferred — see `native/src/api.rs`). Design rationale, ADRs, and open
-questions live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
-per-release detail in [CHANGELOG.md](CHANGELOG.md).
+satellites folded) is implemented on `main`; release cut pending.
+Commands are non-sync Dart `Future`s (every command is a blocking SOAP
+round-trip). v0.1/v0.2 verified on **Windows**; v0.3 grouping verified
+LAN-free with its read path hardware-proven by the v0.3 spike — full
+real-hardware acceptance pending. Android **release** discovery still
+needs a held `WifiManager.MulticastLock` (deferred — see
+`native/src/api.rs`). Design rationale, ADRs, and open questions live in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); per-release detail in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Development notes
 

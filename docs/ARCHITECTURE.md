@@ -1,8 +1,10 @@
 # Architecture
 
-How oto is structured: a Flutter UI over a Rust core, with all Sonos
-networking (SSDP, SOAP, GENA) handled in Rust via `sonos-api` and own
-multi-NIC SSDP (see [`tatimblin/sonos-sdk`][sdk] for the upstream family).
+How oto is structured: a Flutter UI over a Rust core, with Sonos
+networking handled in Rust — SSDP and SOAP today via `sonos-api` and
+oto's own multi-NIC SSDP; GENA/event subscription is the v0.4 target
+(see the Status note below and [`tatimblin/sonos-sdk`][sdk] for the
+upstream family).
 
 > **Status.** v0.2 (Foundation + LAN **discovery** + **playback control**
 > + one-shot **state read**) is **implemented** and hardware-verified.

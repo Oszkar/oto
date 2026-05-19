@@ -38,7 +38,7 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
-    # webpki-roots (via sonos-api → sonos-sdk-soap-client → ureq → oto-wire → oto-app).
+    # webpki-roots (CDLA-Permissive-2.0): webpki-roots → ureq → sonos-sdk-soap-client → sonos-api → oto-wire.
     # CDLA-Permissive-2.0 is a permissive, patent-grant licence; compatible with MIT.
     "CDLA-Permissive-2.0",
 ]
