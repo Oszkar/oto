@@ -105,9 +105,11 @@ impl SonosWire {
         }
     }
 
-    /// Transport lives on the coordinator (oto-core D2). Resolve the
-    /// speaker's group coordinator's addr; fall back to the speaker
-    /// itself (solo, or pre-discovery) so behaviour degrades to v0.2.
+    /// Transport lives on the coordinator (oto-core D2): resolve the
+    /// speaker's group coordinator's addr. With no coordinator mapping
+    /// (solo speaker, or empty/stale cache) fall back to the speaker's
+    /// own addr — correct for a solo speaker, and otherwise yields the
+    /// same `NotFound` as v0.2 until `discover()` has populated the caches.
     fn resolve_transport_addr(&self, speaker: &SpeakerId) -> Result<SocketAddr, WireError> {
         let coord = {
             self.speaker_to_coordinator
@@ -153,6 +155,10 @@ fn to_snapshot(groups: Vec<ZoneGroupInfo>) -> DiscoverySnapshot {
     for zg in groups {
         let coord = SpeakerId::new(zg.coordinator.clone());
 
+        // Accumulate this group's speakers locally so that a skipped group
+        // (coordinator absent from members — anomalous) does not leave orphan
+        // speakers in the snapshot that belong to no group.
+        let mut group_speakers: Vec<SpeakerIdentity> = Vec::with_capacity(zg.members.len());
         let mut members: Vec<SpeakerId> = Vec::with_capacity(zg.members.len());
         for m in &zg.members {
             let ip: IpAddr = match extract_ip(&m.location).and_then(|s| s.parse().ok()) {
@@ -160,7 +166,7 @@ fn to_snapshot(groups: Vec<ZoneGroupInfo>) -> DiscoverySnapshot {
                 None => continue, // anomalous; skip (mirrors existing path)
             };
             let sid = SpeakerId::new(m.uuid.clone());
-            speakers.push(SpeakerIdentity {
+            group_speakers.push(SpeakerIdentity {
                 id: sid.clone(),
                 room_name: m.zone_name.clone(),
                 model: None, // ZoneGroupTopology carries no model (D1)
@@ -170,11 +176,13 @@ fn to_snapshot(groups: Vec<ZoneGroupInfo>) -> DiscoverySnapshot {
         }
 
         // D3: coordinator first; skip a group whose coordinator is absent
-        // from its own member list (anomalous).
+        // from its own member list (anomalous). On the None path group_speakers
+        // is dropped — no orphan speakers enter the snapshot.
         match members.iter().position(|s| *s == coord) {
             Some(i) => members.swap(0, i),
             None => continue,
         }
+        speakers.extend(group_speakers);
         out_groups.push(GroupIdentity {
             id: GroupId::new(zg.id),
             coordinator: coord,
@@ -198,8 +206,12 @@ impl Wire for SonosWire {
         // Try responders until one answers (a vanished/asleep unit fails).
         let mut last_err = WireError::NoDevicesFound;
         let mut groups = None;
+        // C2: track whether at least one responder had a parseable LOCATION so
+        // we can surface a precise error when all locations are unparseable.
+        let mut attempted = false;
         for loc in &locations {
             let Some(ip) = extract_ip(loc) else { continue };
+            attempted = true;
             match control::fetch_zone_group_state(&ip) {
                 Ok(g) => {
                     groups = Some(g);
@@ -207,6 +219,17 @@ impl Wire for SonosWire {
                 }
                 Err(e) => last_err = e,
             }
+        }
+        // If groups is still None but no responder was ever attempted, every
+        // LOCATION was unparseable — surface a precise diagnostic (not the
+        // misleading NoDevicesFound).
+        if groups.is_none() && !attempted {
+            return Err(WireError::Backend(format!(
+                "SSDP found {} responder(s) but none had a parseable LOCATION \
+                 (e.g. {}); cannot reach ZoneGroupTopology",
+                locations.len(),
+                locations.first().map(String::as_str).unwrap_or("?"),
+            )));
         }
         let groups = groups.ok_or(last_err)?;
         let snapshot = to_snapshot(groups);
@@ -321,6 +344,39 @@ mod tests {
         );
     }
 
+    /// T-C1: a group whose coordinator is absent from its members must be
+    /// skipped entirely — zero speakers from that group must leak into the
+    /// snapshot (C1 fix). The second, valid group must appear normally.
+    #[test]
+    fn skipped_group_contributes_no_speakers() {
+        let snap = to_snapshot(
+            sonos_api::services::zone_group_topology::parse_zone_group_state_xml(
+                super::topology_tests::GHOST_COORD_XML,
+            )
+            .expect("parse"),
+        );
+        // Ghost group skipped → RINCON_REAL must not appear
+        assert!(
+            !snap.speakers.iter().any(|s| s.id.as_str() == "RINCON_REAL"),
+            "RINCON_REAL (member of ghost group) must NOT leak into speakers"
+        );
+        assert!(
+            !snap
+                .groups
+                .iter()
+                .any(|g| g.id.as_str() == "RINCON_GHOST:1"),
+            "ghost group must not appear in groups"
+        );
+        // Valid group is present
+        assert_eq!(snap.groups.len(), 1, "exactly one valid group");
+        assert_eq!(
+            snap.speakers.len(),
+            1,
+            "exactly one speaker from the valid group"
+        );
+        assert_eq!(snap.speakers[0].id.as_str(), "RINCON_VALID");
+    }
+
     /// Verifies that the caches are correctly populated via `populate_caches`.
     ///
     /// Uses the real ZoneGroupTopology fixture so the test exercises the same
@@ -386,6 +442,13 @@ mod topology_tests {
     // Attribute set copied verbatim from the Kitchen member in GROUPED_XML so
     // parse_zone_group_state_xml accepts the document without modification.
     pub(crate) const BAD_IP_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_GOOD" ID="RINCON_GOOD:1"><ZoneGroupMember UUID="RINCON_GOOD" Location="http://10.83.0.50:1400/xml/device_description.xml" ZoneName="Good Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/><ZoneGroupMember UUID="RINCON_BAD" Location="http://not-an-ip/xml/device_description.xml" ZoneName="Bad Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroup></ZoneGroups></ZoneGroupState>"#;
+
+    // Two groups: the first (RINCON_GHOST) has a coordinator that is NOT among
+    // its members (RINCON_REAL is the only member). The second (RINCON_VALID)
+    // is a normal solo group. to_snapshot must skip the ghost group entirely —
+    // RINCON_REAL must not appear in snapshot.speakers (C1).
+    // Member attribute set copied from Kitchen member in GROUPED_XML.
+    pub(crate) const GHOST_COORD_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_GHOST" ID="RINCON_GHOST:1"><ZoneGroupMember UUID="RINCON_REAL" Location="http://10.0.0.9:1400/xml/device_description.xml" ZoneName="Ghost Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroup><ZoneGroup Coordinator="RINCON_VALID" ID="RINCON_VALID:2"><ZoneGroupMember UUID="RINCON_VALID" Location="http://10.0.0.10:1400/xml/device_description.xml" ZoneName="Valid Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroup></ZoneGroups></ZoneGroupState>"#;
 
     fn snap(xml: &str) -> DiscoverySnapshot {
         to_snapshot(parse_zone_group_state_xml(xml).expect("parse"))
