@@ -12,6 +12,8 @@
 use oto_app::{discover_with, next, pause, play, previous, set_mute, set_volume, speaker_state};
 use oto_core::{GroupId, PlaybackState, SpeakerId, Volume, WireError};
 use oto_mock::MockWire;
+use oto_native::api::PlaybackStateDto;
+use oto_native::map::to_speaker_state_dto;
 
 /// Comprehensive command→state round-trip — the PR B acceptance bar.
 ///
@@ -89,5 +91,44 @@ fn playback_command_state_round_trips() {
     assert!(
         matches!(err_f, WireError::NotFound(_)),
         "(f) error must be WireError::NotFound, got: {err_f:?}"
+    );
+}
+
+/// D2 end-to-end: a grouped non-coordinator's `speaker_state` returns the
+/// coordinator's transport, proven across the FRB DTO boundary.
+///
+/// Harness mirrors `playback_command_state_round_trips`: `discover_with`
+/// seeds the slot with `MockWire::default()`, then commands and
+/// `speaker_state` are routed through `oto_app`.  The raw `SpeakerState`
+/// is then passed through `to_speaker_state_dto` (the same map
+/// `api::speaker_state()` applies) and the resulting `PlaybackStateDto` is
+/// asserted — proving the full domain→DTO path LAN-free.
+///
+/// Under `cargo nextest` this runs in its own process so the slot starts
+/// fresh; under `cargo test` the earlier test already seeded it, but
+/// `discover_with` replaces the wire, so state is still deterministic.
+#[test]
+fn grouped_non_coordinator_state_is_group_transport() {
+    let dining = SpeakerId::new("RINCON_DINING");
+    let kitchen_group = GroupId::new("RINCON_KITCHEN:1");
+
+    // Seed the slot — mirrors the pattern in playback_command_state_round_trips.
+    discover_with(|| Box::new(MockWire::default())).expect("mock discovery must succeed");
+
+    // Play on the group whose coordinator is Kitchen (Dining is a non-coordinator member).
+    play(&kitchen_group).expect("play must succeed on mock");
+
+    // Read Dining's state (non-coordinator) and cross the DTO map.
+    let raw = speaker_state(&dining).expect("speaker_state must succeed for Dining");
+    let dto = to_speaker_state_dto(raw);
+
+    assert!(
+        matches!(
+            dto.transport
+                .expect("transport must be Some — coordinator was played")
+                .state,
+            PlaybackStateDto::Playing
+        ),
+        "D2: non-coordinator Dining must report the coordinator's Playing transport across the map"
     );
 }
