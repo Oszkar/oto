@@ -24,14 +24,14 @@
     {
       "id": 4,
       "subject": "Task 4: oto-mock — D2-aware stateful MockWire",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** MockWire::speaker_state mirrors D2 (own vol/mute + coordinator's transport) so the e2e proves D2 LAN-free; keep the 2-member+solo fixture.\n\n**Files:** Modify native/crates/mock/src/lib.rs (Model.member_to_coord; seeded populates it; speaker_state returns own vol/mute + coordinator transport; add test).\n\n**Acceptance Criteria:** Model.member_to_coord from snap.groups; speaker_state own vol/mute + coordinator transport, solo unchanged; play(Kitchen) then speaker_state(Dining)=Playing volume independent; existing mock tests pass.\n\n**Verify:** cargo nextest run -p oto-mock -> all PASS\n\n```json:metadata\n{\"files\": [\"native/crates/mock/src/lib.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-mock\", \"acceptanceCriteria\": [\"Model.member_to_coord from snap.groups\", \"speaker_state own vol/mute + coordinator transport; solo unchanged\", \"play Kitchen then speaker_state(Dining)=Playing volume independent\", \"existing mock tests pass\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: native/tests e2e — multi-member group through map + D2",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3, 4],
       "description": "**Goal:** Prove LAN-free via oto-app + MockWire + real oto_native::map that a multi-member DiscoveredGroup crosses the bridge and a grouped non-coordinator speaker_state returns coordinator transport.\n\n**Files:** Modify native/tests/discover_e2e.rs (2-member DiscoveredGroup survives to_topology); native/tests/playback_e2e.rs (grouped non-coordinator speaker_state -> Playing).\n\n**Acceptance Criteria:** e2e: Topology.groups has members.len()==2 and members[0]==coordinator post-map; e2e: play Kitchen then speaker_state(Dining) DTO transport==Playing; cargo nextest run --workspace fully green.\n\n**Verify:** cargo nextest run --workspace -> all PASS\n\n```json:metadata\n{\"files\": [\"native/tests/discover_e2e.rs\", \"native/tests/playback_e2e.rs\"], \"verifyCommand\": \"cargo nextest run --workspace\", \"acceptanceCriteria\": [\"e2e Topology.groups members.len()==2 members[0]==coordinator post-map\", \"e2e play Kitchen then speaker_state(Dining) DTO transport==Playing\", \"workspace nextest fully green\"]}\n```"
     },
@@ -57,5 +57,5 @@
       "description": "**Goal:** A hardware-gated #[ignore] test proving real discover() returns real groups, plus findings directive-7 manual acceptance: form a 2-room group in the Sonos app -> play at the resolved coordinator -> all member rooms respond.\n\n**USER-ORDERED GATE — NON-SKIPPABLE.** Requested by the user in the current conversation. MUST NOT be closed by walking around it, declaring it verified inline, or substituting a cheaper check. Close only after every acceptanceCriteria item is re-validated independently, with output captured.\n\n**Files:** Create native/crates/wire/tests/live_topology.rs (#[ignore], sibling of v0.1/v0.2 live test).\n\n**Acceptance Criteria:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN: real discover() >=1 GroupIdentity; 2-room group => members.len()>=2 members[0]==coordinator; manual: grouped+queued, play at coordinator -> Ok AND all member rooms audibly start (directive-7); captured stdout pasted into the PR.\n\n**Verify:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN -> PASS + manual observation captured\n\n```json:metadata\n{\"files\": [\"native/crates/wire/tests/live_topology.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-wire --run-ignored ignored-only live_topology\", \"acceptanceCriteria\": [\"real discover() >=1 GroupIdentity; 2-room => members.len()>=2 members[0]==coordinator\", \"manual: grouped+queued play at coordinator -> Ok AND all member rooms audibly start\", \"captured stdout of both pasted into the PR\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"requiresUserSpecification\": false, \"gateScope\": \"v0.3 hardware acceptance — spike findings directive-7; user-run on the real Sonos LAN\"}\n```"
     }
   ],
-  "lastUpdated": "2026-05-19T00:00:03Z"
+  "lastUpdated": "2026-05-19T00:00:05Z"
 }
