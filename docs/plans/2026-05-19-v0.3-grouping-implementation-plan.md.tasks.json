@@ -38,14 +38,14 @@
     {
       "id": 6,
       "subject": "Task 6: Open Q5 — drop sonos-sdk test-support feature (conditional) + cargo-deny",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** With DeviceDescription removed (Task 2), drop sonos-sdk's test-support feature from oto-wire iff no other sonos_discovery use-site remains; else document narrowing. §7 sign-off item (flag in PR; pin stays =0.5.2).\n\n**Files:** Modify native/crates/wire/Cargo.toml (sonos-sdk dep + comment); native/Cargo.toml (workspace comment).\n\n**Acceptance Criteria:** grep no sonos_discovery/sonos_sdk:: use-site; if clean sonos-sdk={workspace=true} comment=closed else keep+narrowed+PR note; cargo deny ok; just check + workspace nextest green.\n\n**Verify:** cd native && cargo deny check && cargo build --workspace -> clean\n\n```json:metadata\n{\"files\": [\"native/crates/wire/Cargo.toml\", \"native/Cargo.toml\"], \"verifyCommand\": \"cd native && cargo deny check && cargo build --workspace\", \"acceptanceCriteria\": [\"no sonos_discovery/sonos_sdk:: use-site\", \"feature dropped+comment=closed OR kept+narrowed+PR note\", \"cargo deny ok; just check + workspace nextest green\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: Doc-sync (v0.3) — ARCHITECTURE / README / CHANGELOG / TODO sweep",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3, 6],
       "description": "**Goal:** Sync living docs to shipped v0.3 (AGENTS.md §7). The version bump/tag/release cut is the user's separate step (RELEASING.md) — NOT done here.\n\n**Files:** Modify docs/ARCHITECTURE.md (Status, Crates, command flow + D2, Open Q1/Q4 resolved, Open Q5 closed/narrowed, v0.2 ADR resolved, group-of-one->real); README.md (ladder v0.3 ✓); CHANGELOG.md ([Unreleased] v0.3 bullets); native/crates/core/src/wire.rs (trait doc present-tense); sweep grep TODO(v0.3).\n\n**Acceptance Criteria:** ARCHITECTURE no v0.3-target prose, Q1/Q4 resolved, Q5 closed/narrowed (match Task 6), D2 documented; README ladder v0.3 ✓; CHANGELOG [Unreleased] v0.3 entry; TODO(v0.3) only ssdp.rs or none; md links resolve; just check clean.\n\n**Verify:** grep -rn 'TODO(v0.3)' native/ -> only ssdp.rs (or empty) AND just check clean\n\n```json:metadata\n{\"files\": [\"docs/ARCHITECTURE.md\", \"README.md\", \"CHANGELOG.md\", \"native/crates/core/src/wire.rs\"], \"verifyCommand\": \"grep -rn 'TODO(v0.3)' native/ ; just check\", \"acceptanceCriteria\": [\"ARCHITECTURE no v0.3-target prose; Q1/Q4 resolved; Q5 closed/narrowed; D2 documented\", \"README ladder v0.3 ✓\", \"CHANGELOG [Unreleased] v0.3 entry\", \"TODO(v0.3) only ssdp.rs or none\", \"md links resolve; just check clean\"]}\n```"
     },
@@ -57,5 +57,5 @@
       "description": "**Goal:** A hardware-gated #[ignore] test proving real discover() returns real groups, plus findings directive-7 manual acceptance: form a 2-room group in the Sonos app -> play at the resolved coordinator -> all member rooms respond.\n\n**USER-ORDERED GATE — NON-SKIPPABLE.** Requested by the user in the current conversation. MUST NOT be closed by walking around it, declaring it verified inline, or substituting a cheaper check. Close only after every acceptanceCriteria item is re-validated independently, with output captured.\n\n**Files:** Create native/crates/wire/tests/live_topology.rs (#[ignore], sibling of v0.1/v0.2 live test).\n\n**Acceptance Criteria:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN: real discover() >=1 GroupIdentity; 2-room group => members.len()>=2 members[0]==coordinator; manual: grouped+queued, play at coordinator -> Ok AND all member rooms audibly start (directive-7); captured stdout pasted into the PR.\n\n**Verify:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN -> PASS + manual observation captured\n\n```json:metadata\n{\"files\": [\"native/crates/wire/tests/live_topology.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-wire --run-ignored ignored-only live_topology\", \"acceptanceCriteria\": [\"real discover() >=1 GroupIdentity; 2-room => members.len()>=2 members[0]==coordinator\", \"manual: grouped+queued play at coordinator -> Ok AND all member rooms audibly start\", \"captured stdout of both pasted into the PR\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"requiresUserSpecification\": false, \"gateScope\": \"v0.3 hardware acceptance — spike findings directive-7; user-run on the real Sonos LAN\"}\n```"
     }
   ],
-  "lastUpdated": "2026-05-19T00:00:05Z"
+  "lastUpdated": "2026-05-19T00:00:09Z"
 }
