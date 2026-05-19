@@ -1265,7 +1265,6 @@ dependencies = [
  "quick-xml",
  "sonos-api",
  "sonos-sdk",
- "ureq",
 ]
 
 [[package]]
