@@ -52,10 +52,10 @@
     {
       "id": 8,
       "subject": "Task 8: Hardware-gated acceptance (user-run) — USER-ORDERED GATE",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** A hardware-gated #[ignore] test proving real discover() returns real groups, plus findings directive-7 manual acceptance: form a 2-room group in the Sonos app -> play at the resolved coordinator -> all member rooms respond.\n\n**USER-ORDERED GATE — NON-SKIPPABLE.** Requested by the user in the current conversation. MUST NOT be closed by walking around it, declaring it verified inline, or substituting a cheaper check. Close only after every acceptanceCriteria item is re-validated independently, with output captured.\n\n**Files:** Create native/crates/wire/tests/live_topology.rs (#[ignore], sibling of v0.1/v0.2 live test).\n\n**Acceptance Criteria:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN: real discover() >=1 GroupIdentity; 2-room group => members.len()>=2 members[0]==coordinator; manual: grouped+queued, play at coordinator -> Ok AND all member rooms audibly start (directive-7); captured stdout pasted into the PR.\n\n**Verify:** cargo nextest run -p oto-wire --run-ignored ignored-only live_topology on the LAN -> PASS + manual observation captured\n\n```json:metadata\n{\"files\": [\"native/crates/wire/tests/live_topology.rs\"], \"verifyCommand\": \"cargo nextest run -p oto-wire --run-ignored ignored-only live_topology\", \"acceptanceCriteria\": [\"real discover() >=1 GroupIdentity; 2-room => members.len()>=2 members[0]==coordinator\", \"manual: grouped+queued play at coordinator -> Ok AND all member rooms audibly start\", \"captured stdout of both pasted into the PR\"], \"userGate\": true, \"tags\": [\"user-gate\"], \"requiresUserSpecification\": false, \"gateScope\": \"v0.3 hardware acceptance — spike findings directive-7; user-run on the real Sonos LAN\"}\n```"
     }
   ],
-  "lastUpdated": "2026-05-19T00:00:09Z"
+  "lastUpdated": "2026-05-19T00:00:10Z"
 }
