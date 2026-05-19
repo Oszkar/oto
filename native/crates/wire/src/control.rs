@@ -7,10 +7,27 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use oto_core::{PlaybackState, SpeakerState, Track, TrackId, TransportState, Volume, WireError};
+use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::{
-    services::{av_transport, rendering_control},
+    services::{av_transport, rendering_control, zone_group_topology},
     ApiError, SonosClient,
 };
+
+// ---------------------------------------------------------------------------
+// ZoneGroupTopology fetch
+// ---------------------------------------------------------------------------
+
+/// Fetch + parse ZoneGroupTopology from one speaker IP. Household-global
+/// (`ServiceScope::PerNetwork`) — any working speaker answers for all.
+pub(crate) fn fetch_zone_group_state(ip: &str) -> Result<Vec<ZoneGroupInfo>, WireError> {
+    let client = SonosClient::new();
+    let op = zone_group_topology::get_zone_group_state()
+        .build()
+        .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
+    let resp = client.execute_enhanced(ip, op).map_err(map_sdk_err)?;
+    zone_group_topology::parse_zone_group_state_xml(&resp.zone_group_state)
+        .map_err(|e| WireError::Backend(format!("ZoneGroupState parse: {e}")))
+}
 
 // ---------------------------------------------------------------------------
 // Error mapping
@@ -286,12 +303,22 @@ pub(crate) fn soap_set_mute(addr: SocketAddr, muted: bool) -> Result<(), WireErr
         .map_err(map_sdk_err)
 }
 
-/// Read the full speaker state from `addr`.
+/// Read the full speaker state.
+///
+/// Volume and mute are read at `speaker_addr` (per-speaker, always correct).
+/// Transport (`GetTransportInfo`/`GetPositionInfo`) is read at
+/// `transport_addr`, which is the speaker's group coordinator (oto-core D2).
+/// For a solo speaker both addresses are identical, so behaviour is the
+/// same as v0.2.
 ///
 /// Per-read failure → that `SpeakerState` field is `None`; the others are
 /// still populated. Only an unresolvable id → `Err(NotFound)`.
-pub(crate) fn soap_speaker_state(addr: SocketAddr) -> Result<SpeakerState, WireError> {
-    let ip = addr.ip().to_string();
+pub(crate) fn soap_speaker_state(
+    speaker_addr: SocketAddr,
+    transport_addr: SocketAddr,
+) -> Result<SpeakerState, WireError> {
+    let ip = speaker_addr.ip().to_string();
+    let tip = transport_addr.ip().to_string();
     let client = SonosClient::new();
 
     // GetVolume
@@ -313,12 +340,13 @@ pub(crate) fn soap_speaker_state(addr: SocketAddr) -> Result<SpeakerState, WireE
     };
 
     // GetTransportInfo + GetPositionInfo (combined into Option<TransportState>)
+    // Both calls go to the coordinator (transport_addr / tip — oto-core D2).
     let transport: Option<TransportState> = {
         let ti_op = av_transport::get_transport_info().build().ok();
         let pi_op = av_transport::get_position_info().build().ok();
 
-        let ti = ti_op.and_then(|o| client.execute_enhanced(&ip, o).ok());
-        let pi = pi_op.and_then(|o| client.execute_enhanced(&ip, o).ok());
+        let ti = ti_op.and_then(|o| client.execute_enhanced(&tip, o).ok());
+        let pi = pi_op.and_then(|o| client.execute_enhanced(&tip, o).ok());
 
         match ti {
             None => None,
