@@ -9,6 +9,7 @@ use oto_core::{
     DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, SpeakerIdentity, SpeakerState, Volume,
     Wire, WireError,
 };
+use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_sdk::sonos_discovery::{device::DeviceDescription, Device};
 
 use crate::{control, http, ssdp};
@@ -168,6 +169,59 @@ fn to_snapshot(devices: Vec<Device>) -> DiscoverySnapshot {
     }
 
     DiscoverySnapshot { speakers, groups }
+}
+
+/// Build a real `DiscoverySnapshot` from parsed ZoneGroupTopology.
+///
+/// Speakers = top-level members (satellites are folded into their
+/// primary, never surfaced — oto-core D5). Each group's members are
+/// reordered coordinator-first (oto-core D3; the parser does not
+/// guarantee order). Vanished devices are already dropped by
+/// `parse_zone_group_state_xml`.
+// TODO(v0.3): wire this into discover() (PR B — next task) to replace
+// the group-of-one to_snapshot path. Additive in PR A; dead_code is
+// expected until PR B calls it.
+#[allow(dead_code)]
+fn topology_to_snapshot(groups: Vec<ZoneGroupInfo>) -> DiscoverySnapshot {
+    let mut speakers = Vec::new();
+    let mut out_groups = Vec::new();
+
+    for zg in groups {
+        let coord = SpeakerId::new(zg.coordinator.clone());
+
+        let mut members: Vec<SpeakerId> = Vec::with_capacity(zg.members.len());
+        for m in &zg.members {
+            let ip: IpAddr = match extract_ip(&m.location).and_then(|s| s.parse().ok()) {
+                Some(ip) => ip,
+                None => continue, // anomalous; skip (mirrors existing path)
+            };
+            let sid = SpeakerId::new(m.uuid.clone());
+            speakers.push(SpeakerIdentity {
+                id: sid.clone(),
+                room_name: m.zone_name.clone(),
+                model: None, // ZoneGroupTopology carries no model (D1)
+                ip,
+            });
+            members.push(sid);
+        }
+
+        // D3: coordinator first; skip a group whose coordinator is absent
+        // from its own member list (anomalous).
+        match members.iter().position(|s| *s == coord) {
+            Some(i) => members.swap(0, i),
+            None => continue,
+        }
+        out_groups.push(GroupIdentity {
+            id: GroupId::new(zg.id),
+            coordinator: coord,
+            members,
+        });
+    }
+
+    DiscoverySnapshot {
+        speakers,
+        groups: out_groups,
+    }
 }
 
 impl Wire for SonosWire {
@@ -461,5 +515,71 @@ mod tests {
 
         let group_addr = wire.resolve_group(&gid).expect("should resolve group");
         assert_eq!(group_addr, addr);
+    }
+}
+
+#[cfg(test)]
+mod topology_tests {
+    use super::*;
+    use sonos_api::services::zone_group_topology::parse_zone_group_state_xml;
+
+    // Captured from the real Sonos LAN (10.83.0.0/24) during the v0.3 grouping spike
+    // (docs/plans/2026-05-19-v0.3-grouping-spike-findings.md).
+    //
+    // Run B — queried from 10.83.0.103 (Living Room / Beam, coordinator):
+    //   Kitchen (RINCON_7828CAE858CA01400) + Living Room (RINCON_542A1B9463A801400)
+    //   in one group; Living Room has a nested RR-surround satellite
+    //   (RINCON_38420B9275BE01400, Invisible="1"); offline LR-surround
+    //   (RINCON_38420B92755401400) appears only in <VanishedDevices> and is
+    //   dropped by parse_zone_group_state_xml.
+    //   Coordinator is the first member in wire order (query-relative).
+    const GROUPED_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_542A1B9463A801400" ID="RINCON_542A1B9463A801400:3426502563"><ZoneGroupMember UUID="RINCON_542A1B9463A801400" Location="http://10.83.0.103:1400/xml/device_description.xml" ZoneName="Living Room" SoftwareVersion="78.1-50140" BootSeq="42" WirelessMode="0" WifiEnabled="0" EthLink="1" ChannelFreq="0" BehindWifiExtender="0" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B9275BE01400:RR"><Satellite UUID="RINCON_38420B9275BE01400" Location="http://10.83.0.187:1400/xml/device_description.xml" ZoneName="Living Room" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B9275BE01400:RR" Invisible="1"/></ZoneGroupMember><ZoneGroupMember UUID="RINCON_7828CAE858CA01400" Location="http://10.83.0.105:1400/xml/device_description.xml" ZoneName="Kitchen" SoftwareVersion="78.1-50140" BootSeq="17" WirelessMode="0" WifiEnabled="0" EthLink="1" ChannelFreq="0" BehindWifiExtender="0"/></ZoneGroup></ZoneGroups><VanishedDevices><Device UUID="RINCON_38420B92755401400" ZoneName="Living Room" Location="http://10.83.0.115:1400/xml/device_description.xml" Reason="UNKNOWN" LastSeenUTC="2026-05-19T03:12:00"/></VanishedDevices></ZoneGroupState>"#;
+
+    // Run B — same grouped topology queried from 10.83.0.105 (Kitchen):
+    //   Wire order is Kitchen first, then Living Room (coordinator) second —
+    //   i.e. coordinator is NOT first. topology_to_snapshot must reorder to
+    //   satisfy oto-core D3 (members[0] == coordinator).
+    const COORD_NOT_FIRST_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_542A1B9463A801400" ID="RINCON_542A1B9463A801400:3426502563"><ZoneGroupMember UUID="RINCON_7828CAE858CA01400" Location="http://10.83.0.105:1400/xml/device_description.xml" ZoneName="Kitchen" SoftwareVersion="78.1-50140" BootSeq="17" WirelessMode="0" WifiEnabled="0" EthLink="1" ChannelFreq="0" BehindWifiExtender="0"/><ZoneGroupMember UUID="RINCON_542A1B9463A801400" Location="http://10.83.0.103:1400/xml/device_description.xml" ZoneName="Living Room" SoftwareVersion="78.1-50140" BootSeq="42" WirelessMode="0" WifiEnabled="0" EthLink="1" ChannelFreq="0" BehindWifiExtender="0" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B9275BE01400:RR"><Satellite UUID="RINCON_38420B9275BE01400" Location="http://10.83.0.187:1400/xml/device_description.xml" ZoneName="Living Room" HTSatChanMapSet="RINCON_542A1B9463A801400:LF,RF;RINCON_38420B9275BE01400:RR" Invisible="1"/></ZoneGroupMember></ZoneGroup></ZoneGroups><VanishedDevices><Device UUID="RINCON_38420B92755401400" ZoneName="Living Room" Location="http://10.83.0.115:1400/xml/device_description.xml" Reason="UNKNOWN" LastSeenUTC="2026-05-19T03:12:00"/></VanishedDevices></ZoneGroupState>"#;
+
+    fn snap(xml: &str) -> DiscoverySnapshot {
+        topology_to_snapshot(parse_zone_group_state_xml(xml).expect("parse"))
+    }
+
+    #[test]
+    fn grouped_topology_maps_real_group() {
+        let s = snap(GROUPED_XML);
+        assert_eq!(s.groups.len(), 1, "one real group");
+        let g = &s.groups[0];
+        assert_eq!(g.coordinator.as_str(), "RINCON_542A1B9463A801400");
+        assert_eq!(g.members.len(), 2, "Living Room + Kitchen");
+        assert_eq!(g.members[0], g.coordinator, "coordinator first (D3)");
+        assert!(
+            !s.speakers
+                .iter()
+                .any(|sp| sp.id.as_str() == "RINCON_38420B9275BE01400"),
+            "Invisible satellite must not be a speaker"
+        );
+        assert_eq!(s.speakers.len(), 2, "two real speakers, satellite folded");
+        let lr = s
+            .speakers
+            .iter()
+            .find(|sp| sp.room_name == "Living Room")
+            .unwrap();
+        assert_eq!(lr.model, None, "D1: model is None");
+        assert_eq!(
+            lr.id.as_str(),
+            "RINCON_542A1B9463A801400",
+            "no uuid: prefix in ZGS"
+        );
+    }
+
+    #[test]
+    fn coordinator_reordered_first() {
+        let s = snap(COORD_NOT_FIRST_XML);
+        let g = &s.groups[0];
+        assert_eq!(
+            g.members[0], g.coordinator,
+            "must reorder coordinator to index 0"
+        );
     }
 }
