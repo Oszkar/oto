@@ -5,7 +5,7 @@
 //! User-run procedure:
 //!   1. In the Sonos app, group two rooms (e.g. Kitchen + Living Room)
 //!      and queue something on the group.
-//!   2. cargo nextest run -p oto-wire --run-ignored ignored-only live_topology
+//!   2. cargo nextest run -p oto-wire --test live_topology --run-ignored ignored-only
 //!   3. Observe: the resolved coordinator's rooms all respond.
 
 use oto_core::Wire;
