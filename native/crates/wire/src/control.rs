@@ -26,7 +26,7 @@ pub(crate) fn fetch_zone_group_state(ip: &str) -> Result<Vec<ZoneGroupInfo>, Wir
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
     let resp = client.execute_enhanced(ip, op).map_err(map_sdk_err)?;
     zone_group_topology::parse_zone_group_state_xml(&resp.zone_group_state)
-        .map_err(|e| WireError::Backend(format!("ZoneGroupState parse: {e:?}")))
+        .map_err(|e| WireError::Backend(format!("ZoneGroupState parse: {e}")))
 }
 
 // ---------------------------------------------------------------------------
