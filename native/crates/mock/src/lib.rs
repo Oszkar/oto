@@ -25,6 +25,10 @@ struct Model {
     speakers: HashMap<SpeakerId, SpeakerState>,
     /// group coordinator lookup: `GroupId` → coordinator `SpeakerId`.
     coords: HashMap<GroupId, SpeakerId>,
+    /// member → coordinator lookup: every speaker maps to its group coordinator
+    /// (solo speaker maps to itself). Used by `speaker_state` to implement D2
+    /// semantics: own volume/mute + coordinator's transport.
+    member_to_coord: HashMap<SpeakerId, SpeakerId>,
 }
 
 /// Volume every speaker is seeded at. Shared by `Model::seeded` and the
@@ -36,6 +40,7 @@ impl Model {
         Self {
             speakers: HashMap::new(),
             coords: HashMap::new(),
+            member_to_coord: HashMap::new(),
         }
     }
 
@@ -59,7 +64,17 @@ impl Model {
         for g in &snap.groups {
             coords.insert(g.id.clone(), g.coordinator.clone());
         }
-        Self { speakers, coords }
+        let mut member_to_coord = HashMap::new();
+        for g in &snap.groups {
+            for m in &g.members {
+                member_to_coord.insert(m.clone(), g.coordinator.clone());
+            }
+        }
+        Self {
+            speakers,
+            coords,
+            member_to_coord,
+        }
     }
 }
 
@@ -235,11 +250,23 @@ impl Wire for MockWire {
 
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
         let guard = lock!(self);
-        guard
+        let own = guard
             .speakers
             .get(speaker)
             .cloned()
-            .ok_or_else(|| WireError::NotFound(speaker.to_string()))
+            .ok_or_else(|| WireError::NotFound(speaker.to_string()))?;
+        // D2: transport comes from the speaker's group coordinator
+        // (solo speaker = its own coordinator → own transport).
+        let coord = guard.member_to_coord.get(speaker).cloned();
+        let transport = match coord {
+            Some(c) => guard.speakers.get(&c).and_then(|s| s.transport.clone()),
+            None => own.transport.clone(),
+        };
+        Ok(SpeakerState {
+            volume: own.volume,
+            muted: own.muted,
+            transport,
+        })
     }
 }
 
@@ -365,5 +392,24 @@ mod tests {
         assert_eq!(state.volume, Some(Volume::new(SEED_VOLUME).unwrap()));
         assert_eq!(state.muted, Some(false));
         assert_eq!(state.transport.unwrap().state, PlaybackState::Stopped);
+    }
+
+    #[test]
+    fn non_coordinator_speaker_state_reflects_coordinator_transport() {
+        let w = MockWire::default();
+        let dining = SpeakerId::new("RINCON_DINING"); // member of Kitchen group, NOT coordinator
+        w.set_volume(&dining, Volume::new(55).unwrap()).unwrap();
+        w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap();
+        let st = w.speaker_state(&dining).unwrap();
+        assert_eq!(
+            st.transport.unwrap().state,
+            PlaybackState::Playing,
+            "D2: non-coordinator transport must reflect the coordinator (Kitchen)"
+        );
+        assert_eq!(
+            st.volume,
+            Some(Volume::new(55).unwrap()),
+            "own volume, independent of the coordinator"
+        );
     }
 }

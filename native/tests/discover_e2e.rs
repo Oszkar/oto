@@ -59,6 +59,26 @@ fn discovery_end_to_end_against_mock() {
 }
 
 #[test]
+fn multi_member_group_crosses_the_map() {
+    // Reuses the same discover-through-map harness as
+    // `discovery_end_to_end_against_mock`: MockWire → discover_with →
+    // to_topology → assert on the FRB DTO.  Specifically proves that a
+    // 2-member group survives the map with coordinator-first ordering (D2).
+    let snap = discover_with(|| Box::new(MockWire::default())).expect("mock discovery succeeds");
+    let topo = to_topology(snap);
+
+    let g = topo
+        .groups
+        .iter()
+        .find(|g| g.members.len() == 2)
+        .expect("2-member group present");
+    assert_eq!(
+        g.members[0], g.coordinator,
+        "coordinator-first survives the map"
+    );
+}
+
+#[test]
 fn failure_crosses_the_dto_error_map() {
     // The Err arm of api::discover(): WireError → FRB DiscoveryError, LAN-free.
     let err = discover_with(|| Box::new(MockWire::failing(WireError::NoDevicesFound)))

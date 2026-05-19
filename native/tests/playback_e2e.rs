@@ -12,6 +12,8 @@
 use oto_app::{discover_with, next, pause, play, previous, set_mute, set_volume, speaker_state};
 use oto_core::{GroupId, PlaybackState, SpeakerId, Volume, WireError};
 use oto_mock::MockWire;
+use oto_native::api::PlaybackStateDto;
+use oto_native::map::to_speaker_state_dto;
 
 /// Comprehensive command→state round-trip — the PR B acceptance bar.
 ///
@@ -89,5 +91,22 @@ fn playback_command_state_round_trips() {
     assert!(
         matches!(err_f, WireError::NotFound(_)),
         "(f) error must be WireError::NotFound, got: {err_f:?}"
+    );
+
+    // ── (g) D2: grouped non-coordinator reports coordinator's transport ────────
+    // Play on the kitchen group (coordinator = Kitchen; Dining is a member).
+    play(&kitchen_group).expect("(g) play must succeed for D2 assertion");
+    let dining = SpeakerId::new("RINCON_DINING");
+    let raw_g = speaker_state(&dining).expect("(g) speaker_state must succeed for Dining");
+    let dto_g = to_speaker_state_dto(raw_g);
+    assert!(
+        matches!(
+            dto_g
+                .transport
+                .expect("(g) transport must be Some — coordinator was played")
+                .state,
+            PlaybackStateDto::Playing
+        ),
+        "(g) D2: non-coordinator Dining must report the coordinator's Playing transport across the DTO map"
     );
 }
