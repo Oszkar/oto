@@ -21,11 +21,11 @@ If requirements are ambiguous, incomplete, or conflicting:
 
 oto = a fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI over a Rust core, bridged with `flutter_rust_bridge` (FRB) v2; discovery / SOAP via the `sonos-api` crate (from the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) plus oto's own multi-NIC SSDP; events are v0.4.
 
-This is an explicit **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team. Bounded: once Stable (v1.0, externally tested), expect maintenance only.
+This is a **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team. Bounded: once Stable (v1.0, externally tested), expect maintenance only.
 
-Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household, bonded-speaker modeling (v0.1), non-Win/Android release targets.
+Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household.
 
-Authoritative docs: `docs/ARCHITECTURE.md` (system design — marks target vs. current), `README.md` (milestone ladder), `RELEASING.md` (versioning), `docs/plans/*` (point-in-time design + spike findings). Pre-1.0: most of the system is still planned.
+Authoritative docs: `docs/ARCHITECTURE.md` (system design — marks target vs. current), `README.md` (incl. milestone ladder), `RELEASING.md` (versioning).
 
 ## 2. Engineering Principles
 
@@ -56,7 +56,7 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 
 ## 3. Non-Negotiables
 
-**LAN politeness.** The only thing being rate-limited is *us* against the user's Sonos devices on a home network. `sonos-api` owns SOAP (GENA/events: v0.4); don't add aggressive polling on top. SSDP discovery is bounded and interface-scoped (§4 / [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
+**LAN politeness.** The only thing being rate-limited is *us* against the user's Sonos devices on a home network. `sonos-api` owns SOAP; don't add aggressive polling on top. SSDP discovery is bounded and interface-scoped (§4 / [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
 
 **Errors & logging.** `oto-core` stays deps-free: manual `Error` enum, no `thiserror`, no `unwrap()` outside tests. `oto-wire`/`oto-app` may use `anyhow` at boundaries and `tracing` for logs (never `log`; never one-line-per-event at info). Discovery / `sonos-api` SOAP failures are retryable, not fatal.
 
@@ -108,7 +108,7 @@ just build-win  # debug Windows desktop
 just build-apk  # debug Android APK
 ```
 
-Network-dependent code (discovery) cannot be validated from a sandboxed shell — SSDP multicast needs the real LAN. Say so and ask the user to run it.
+Network-dependent code can be validated from an agent shell which on a LAN with 4 Sonos devices. But state explicitly when running network-dependent experiments or checks.
 
 ## 6. Validation Matrix
 
@@ -131,14 +131,14 @@ Before claiming work is done:
 
 **Document:** assumptions, trade-offs, and load-bearing tech debt as `// TODO(vX.Y):` with the eventual fix in one line.
 
-**Branch & PR:** `main` is protected — never force-push to it. Branches `feat/… fix/… docs/… chore/…`, one PR per branch, squash-merge, conventional commit messages. `--force-with-lease` OK on feature branches; `--force` is not. Never `--no-verify` / skip signing — fix the hook. PRs go through review before merge.
+**Branch & PR:** `main` is protected. Branches `feat/… fix/… docs/… chore/…`, one PR per branch, squash-merge, conventional commit messages. `--force-with-lease` OK on feature branches; `--force` is not. Never `--no-verify` / skip signing — fix the hook. PRs go through review before merge.
 
-**Doc sync:** if you change architecture, update `docs/ARCHITECTURE.md` (source of truth for design) and `README.md` (milestone ladder) together — drift between them is the most likely doc bug.
+**Doc sync:** if you change architecture, update `docs/ARCHITECTURE.md` (source of truth for design) and `README.md` together — drift between them is the most likely doc bug.
 
 ## 8. Communication
 
 - Be concise; short bullets, concrete next steps.
 - Ask targeted questions early; present 1–3 options with trade-offs.
-- Push back on security risk, architectural violations, over-engineering, premature scope expansion (UI is v0.5 — not earlier, however easy it looks).
+- Push back on security risk, architectural violations, over-engineering.
 - Correct first, agreeable second. No busywork docs/status files unless asked.
 - Persist until done or genuinely blocked; if blocked, say what you tried and what you need.

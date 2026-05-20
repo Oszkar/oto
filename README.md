@@ -6,7 +6,7 @@ A fast, local-first Sonos controller for Windows and Android, without the bloat 
 
 ## Scope
 
-- **Platforms:** Android and Windows. macOS/iOS/Web scaffolding compiles, but isn't CI-tested and isn't a release target.
+- **Platforms:** Android and Windows at the moment. macOS/iOS/Web scaffolding compiles, kept as a future potential target.
 - **Android floor:** `minSdk = 35` (Android 15, released Q4 2024). Sonos buyers tend to be on recent hardware and the scope reduction simplifies testing. Practical implication: APKs ship arm64-v8a + x86_64 only — see [LOCAL_PATCHES.md](LOCAL_PATCHES.md) for the cargokit patch that enforces this.
 
 ## Layout
