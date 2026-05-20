@@ -9,7 +9,7 @@ The repo uses `just` (preferred) or `make`. Common loop:
 ```bash
 just gen        # regenerate FRB + Riverpod source after editing native/src/api.rs
                 # or any @riverpod-annotated Dart
-just check      # cargo fmt + clippy + flutter analyze
+just check      # gen-check + cargo fmt + clippy + flutter analyze + cargo deny
 just test       # cargo nextest + flutter test
 ```
 

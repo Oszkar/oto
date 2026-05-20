@@ -18,7 +18,7 @@ gen-dart:
 gen-check:
 	dart scripts/verify_generated.dart
 
-check: fmt clippy analyze
+check: gen-check fmt clippy analyze deny
 
 fmt:
 	cd native && cargo fmt --all --check
