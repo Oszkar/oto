@@ -25,8 +25,11 @@ gen-dart:
 gen-check:
     dart scripts/verify_generated.dart
 
-# Fast feedback loop: format + lint everything.
-check: fmt clippy analyze
+# Single canonical gate — mirrors CI's read-only jobs (generated,
+# rust fmt/clippy, flutter analyze, deny). Run this before pushing.
+# Tests are separate (`just test`) so unrelated test work doesn't
+# block the lint loop.
+check: gen-check fmt clippy analyze deny
 
 [working-directory: 'native']
 fmt:

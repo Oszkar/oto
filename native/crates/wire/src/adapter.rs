@@ -10,6 +10,7 @@ use oto_core::{
     Wire, WireError,
 };
 use sonos_api::services::zone_group_topology::ZoneGroupInfo;
+use sonos_api::SonosClient;
 
 use crate::{control, ssdp};
 
@@ -23,6 +24,9 @@ const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
 /// All methods return `Err(WireError::NotFound)` if called before a
 /// successful `discover()` has populated the relevant entry.
 pub struct SonosWire {
+    /// Shared `sonos_api` SOAP client. Held on the wire so each command
+    /// reuses it instead of paying `SonosClient::new()` per call.
+    client: SonosClient,
     /// Maps `SpeakerId` → `SocketAddr(ip, 1400)` for rendering-control calls.
     id_to_addr: Mutex<HashMap<SpeakerId, SocketAddr>>,
     /// Maps `GroupId` → coordinator `SpeakerId` for transport-control calls.
@@ -35,6 +39,7 @@ pub struct SonosWire {
 impl SonosWire {
     pub fn new() -> Self {
         Self {
+            client: SonosClient::new(),
             id_to_addr: Mutex::new(HashMap::new()),
             group_to_coordinator: Mutex::new(HashMap::new()),
             speaker_to_coordinator: Mutex::new(HashMap::new()),
@@ -212,7 +217,7 @@ impl Wire for SonosWire {
         for loc in &locations {
             let Some(ip) = extract_ip(loc) else { continue };
             attempted = true;
-            match control::fetch_zone_group_state(&ip) {
+            match control::fetch_zone_group_state(&self.client, &ip) {
                 Ok(g) => {
                     groups = Some(g);
                     break;
@@ -245,38 +250,38 @@ impl Wire for SonosWire {
 
     fn play(&self, group: &GroupId) -> Result<(), WireError> {
         let addr = self.resolve_group(group)?;
-        control::soap_play(addr)
+        control::soap_play(&self.client, addr)
     }
 
     fn pause(&self, group: &GroupId) -> Result<(), WireError> {
         let addr = self.resolve_group(group)?;
-        control::soap_pause(addr)
+        control::soap_pause(&self.client, addr)
     }
 
     fn next(&self, group: &GroupId) -> Result<(), WireError> {
         let addr = self.resolve_group(group)?;
-        control::soap_next(addr)
+        control::soap_next(&self.client, addr)
     }
 
     fn previous(&self, group: &GroupId) -> Result<(), WireError> {
         let addr = self.resolve_group(group)?;
-        control::soap_previous(addr)
+        control::soap_previous(&self.client, addr)
     }
 
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
         let addr = self.resolve_speaker(speaker)?;
-        control::soap_set_volume(addr, volume)
+        control::soap_set_volume(&self.client, addr, volume)
     }
 
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
         let addr = self.resolve_speaker(speaker)?;
-        control::soap_set_mute(addr, muted)
+        control::soap_set_mute(&self.client, addr, muted)
     }
 
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
         let speaker_addr = self.resolve_speaker(speaker)?;
         let transport_addr = self.resolve_transport_addr(speaker)?;
-        control::soap_speaker_state(speaker_addr, transport_addr)
+        control::soap_speaker_state(&self.client, speaker_addr, transport_addr)
     }
 }
 

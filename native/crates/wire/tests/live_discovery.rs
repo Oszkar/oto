@@ -1,6 +1,8 @@
-//! LAN-only. Ignored by default — needs real Sonos hardware and cannot
-//! run in CI / sandbox (AGENTS.md §5). Run:
-//!   cargo test -p oto-wire --test live_discovery -- --ignored --nocapture
+//! LAN-only. Feature-gated AND `#[ignore]`d so CI cannot accidentally
+//! run it (needs real Sonos hardware). Run:
+//!   cargo nextest run -p oto-wire --features live-tests --test live_discovery --run-ignored ignored-only --nocapture
+
+#![cfg(feature = "live-tests")]
 
 use oto_core::Wire;
 use oto_wire::SonosWire;

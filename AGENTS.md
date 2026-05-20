@@ -51,7 +51,7 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 | FRB surface | `native/src/api.rs` is a thin shim (currently minimal — `greet`/`init_app`); **target:** sync commands return `Result`, events as a `Stream` (v0.4; `sonos-api` event path per ARCHITECTURE Open Q7). Extending the surface needs an ARCHITECTURE.md update first |
 | Frontend | Flutter + Riverpod 3 (codegen); providers in `app/lib/src/state/` via `@riverpod`, consumed from `ConsumerWidget`. `app/pubspec.yaml` `version:` is the canonical project version |
 | Generated source | FRB bindings (`app/lib/src/rust/`, `native/src/frb_generated*`) and `*.g.dart` are committed; regenerate with `just gen` after editing `native/src/api.rs` or any `@riverpod` provider |
-| Lint floor | `just check` (fmt + clippy `-D warnings` + flutter analyze) and `just test` (cargo-nextest + flutter test) pass; `cargo deny check` clean |
+| Lint floor | `just check` (gen-check + fmt + clippy `-D warnings` + flutter analyze + cargo deny) and `just test` (cargo-nextest + flutter test) pass |
 | Android | minSdk 35, 64-bit only (cargokit locally patched — `LOCAL_PATCHES.md`), Java 21 |
 
 ## 3. Non-Negotiables
@@ -102,13 +102,13 @@ Local dev (agents that can run commands), from the repo root:
 
 ```
 just gen        # regen FRB + Riverpod codegen (after api.rs / @riverpod)
-just check      # fmt + clippy -D warnings + flutter analyze
+just check      # gen-check + fmt + clippy -D warnings + flutter analyze + cargo deny
 just test       # cargo-nextest + flutter test
 just build-win  # debug Windows desktop
 just build-apk  # debug Android APK
 ```
 
-Network-dependent code can be validated from an agent shell which on a LAN with 4 Sonos devices. But state explicitly when running network-dependent experiments or checks.
+Network-dependent code can be validated from an agent shell on a LAN with 4 Sonos devices. State explicitly when running network-dependent experiments or checks. Hardware-gated tests live under `native/crates/wire/tests/live_*.rs` behind the `live-tests` Cargo feature (and `#[ignore]` belt-and-braces); run via `cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only`.
 
 ## 6. Validation Matrix
 
@@ -116,10 +116,10 @@ Before claiming work is done:
 
 | Change touches | Required gates |
 |---|---|
-| any `native/**/*.rs` | `just check` + `just test` + `cargo deny check` |
-| `native/src/api.rs` or any `@riverpod` provider | `just gen`; `dart scripts/verify_generated.dart` clean (CI enforces) |
-| `app/lib/**` | `flutter analyze` + `flutter test`; UI verified manually in `flutter run` (from `app/`) |
-| workspace `Cargo.toml` | `cargo check --workspace`; re-run `cargo deny check` if a dep changed |
+| any `native/**/*.rs` | `just check` + `just test` (gen-check + cargo-deny are folded into `check`) |
+| `native/src/api.rs` or any `@riverpod` provider | `just gen` then `just check` (gen-check covers `verify_generated.dart`; CI enforces) |
+| `app/lib/**` | `just check` + `flutter test`; UI verified manually in `flutter run` (from `app/`) |
+| workspace `Cargo.toml` | `cargo check --workspace` then `just check` (deny is part of `check`) |
 | `.github/workflows/*` | YAML lints clean |
 | `*.md` | internal links resolve; facts still match the code/justfile |
 

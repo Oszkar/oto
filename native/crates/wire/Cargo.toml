@@ -11,6 +11,15 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+# Compile-gated hardware tests under `tests/live_*.rs`. CI does not
+# enable this — the live tests need a real Sonos LAN and would either
+# hang or fail spuriously. Hardware run:
+#   cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only
+# (The `#[ignore]` markers stay as belt-and-braces: even with the
+# feature on, plain `cargo test` won't run them without `--ignored`.)
+live-tests = []
+
 [dependencies]
 oto-core = { workspace = true }
 # UPnP SOAP client for control operations (play/pause/next/previous/

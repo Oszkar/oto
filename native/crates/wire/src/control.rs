@@ -19,8 +19,10 @@ use sonos_api::{
 
 /// Fetch + parse ZoneGroupTopology from one speaker IP. Household-global
 /// (`ServiceScope::PerNetwork`) — any working speaker answers for all.
-pub(crate) fn fetch_zone_group_state(ip: &str) -> Result<Vec<ZoneGroupInfo>, WireError> {
-    let client = SonosClient::new();
+pub(crate) fn fetch_zone_group_state(
+    client: &SonosClient,
+    ip: &str,
+) -> Result<Vec<ZoneGroupInfo>, WireError> {
     let op = zone_group_topology::get_zone_group_state()
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -243,8 +245,7 @@ pub(crate) fn map_transport_state(s: &str) -> Result<PlaybackState, WireError> {
 // SOAP command helpers — return () on success, WireError on failure
 // ---------------------------------------------------------------------------
 
-pub(crate) fn soap_play(addr: SocketAddr) -> Result<(), WireError> {
-    let client = SonosClient::new();
+pub(crate) fn soap_play(client: &SonosClient, addr: SocketAddr) -> Result<(), WireError> {
     let op = av_transport::play("1".to_string())
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -253,8 +254,7 @@ pub(crate) fn soap_play(addr: SocketAddr) -> Result<(), WireError> {
         .map_err(map_sdk_err)
 }
 
-pub(crate) fn soap_pause(addr: SocketAddr) -> Result<(), WireError> {
-    let client = SonosClient::new();
+pub(crate) fn soap_pause(client: &SonosClient, addr: SocketAddr) -> Result<(), WireError> {
     let op = av_transport::pause()
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -263,8 +263,7 @@ pub(crate) fn soap_pause(addr: SocketAddr) -> Result<(), WireError> {
         .map_err(map_sdk_err)
 }
 
-pub(crate) fn soap_next(addr: SocketAddr) -> Result<(), WireError> {
-    let client = SonosClient::new();
+pub(crate) fn soap_next(client: &SonosClient, addr: SocketAddr) -> Result<(), WireError> {
     let op = av_transport::next()
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -273,8 +272,7 @@ pub(crate) fn soap_next(addr: SocketAddr) -> Result<(), WireError> {
         .map_err(map_sdk_err)
 }
 
-pub(crate) fn soap_previous(addr: SocketAddr) -> Result<(), WireError> {
-    let client = SonosClient::new();
+pub(crate) fn soap_previous(client: &SonosClient, addr: SocketAddr) -> Result<(), WireError> {
     let op = av_transport::previous()
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -283,8 +281,11 @@ pub(crate) fn soap_previous(addr: SocketAddr) -> Result<(), WireError> {
         .map_err(map_sdk_err)
 }
 
-pub(crate) fn soap_set_volume(addr: SocketAddr, volume: Volume) -> Result<(), WireError> {
-    let client = SonosClient::new();
+pub(crate) fn soap_set_volume(
+    client: &SonosClient,
+    addr: SocketAddr,
+    volume: Volume,
+) -> Result<(), WireError> {
     let op = rendering_control::set_volume("Master".to_string(), volume.get())
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -293,8 +294,11 @@ pub(crate) fn soap_set_volume(addr: SocketAddr, volume: Volume) -> Result<(), Wi
         .map_err(map_sdk_err)
 }
 
-pub(crate) fn soap_set_mute(addr: SocketAddr, muted: bool) -> Result<(), WireError> {
-    let client = SonosClient::new();
+pub(crate) fn soap_set_mute(
+    client: &SonosClient,
+    addr: SocketAddr,
+    muted: bool,
+) -> Result<(), WireError> {
     let op = rendering_control::set_mute("Master".to_string(), muted)
         .build()
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
@@ -314,12 +318,12 @@ pub(crate) fn soap_set_mute(addr: SocketAddr, muted: bool) -> Result<(), WireErr
 /// Per-read failure → that `SpeakerState` field is `None`; the others are
 /// still populated. Only an unresolvable id → `Err(NotFound)`.
 pub(crate) fn soap_speaker_state(
+    client: &SonosClient,
     speaker_addr: SocketAddr,
     transport_addr: SocketAddr,
 ) -> Result<SpeakerState, WireError> {
     let ip = speaker_addr.ip().to_string();
     let tip = transport_addr.ip().to_string();
-    let client = SonosClient::new();
 
     // GetVolume
     let volume: Option<Volume> = {
