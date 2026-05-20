@@ -860,6 +860,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
 dependencies = [
  "libc",
+ "log",
  "wasi",
  "windows-sys 0.61.2",
 ]
@@ -995,6 +996,7 @@ name = "oto-wire"
 version = "0.3.0"
 dependencies = [
  "if-addrs",
+ "mio",
  "oto-core",
  "quick-xml",
  "sonos-api",

@@ -58,6 +58,15 @@ test-rust:
 test-dart:
     flutter test
 
+# Bridge smoke: boots the app on a connected device / desktop so the FRB
+# cdylib actually loads. Not part of `just test` (or CI) because Flutter's
+# `integration_test` needs a display target — neither ubuntu-latest nor
+# the build.yml matrix are wired up for that. Run manually against
+# Windows / Android when validating a release.
+[working-directory: 'app']
+test-integration:
+    flutter test integration_test/
+
 # Supply-chain check (runs cargo deny against the workspace).
 [working-directory: 'native']
 deny:

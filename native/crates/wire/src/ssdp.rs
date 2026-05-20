@@ -4,15 +4,22 @@
 //! bind each explicitly.
 //!
 //! Discovery is two-phase: first send an M-SEARCH on *every* usable
-//! interface, then receive across *all* of them (round-robin) until a
-//! single bounded deadline. Every NIC is searched within one O(timeout)
-//! window — no interface is starved by another, and no per-interface
-//! sequential blocking (which on a host that enumerates a WSL/Hyper-V/VPN
-//! vEthernet first would defeat multi-NIC discovery entirely).
+//! interface, then receive across *all* of them inside a single bounded
+//! deadline. Phase-2 multiplexing is done with `mio::Poll` so the wait is
+//! **collective** — a quiet socket cannot consume any of the deadline,
+//! no matter how many quiet sockets sit between us and a responder. The
+//! previous design used per-socket blocking reads with a 250 ms read
+//! timeout, so a host that enumerated 13+ quiet adapters before the
+//! responding one (multi-NIC Windows hosts with VPN/Hyper-V/WSL/Docker
+//! adapters) could burn the entire bounded window on timeouts and never
+//! reach the responder.
 
 use std::collections::BTreeSet;
-use std::net::{IpAddr, UdpSocket};
+use std::net::{IpAddr, SocketAddr};
 use std::time::{Duration, Instant};
+
+use mio::net::UdpSocket;
+use mio::{Events, Interest, Poll, Token};
 
 use oto_core::WireError;
 
@@ -58,53 +65,45 @@ fn usable_ipv4() -> Result<Vec<IpAddr>, WireError> {
 }
 
 /// Receive SSDP replies across ALL sockets until `deadline`, collecting
-/// unique LOCATION URLs. Round-robins so a quiet socket never starves the
-/// others and no single socket can consume the whole window (the v0.1
-/// multi-NIC discovery bug). Each socket must already have a short
-/// read timeout set.
-fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
+/// unique LOCATION URLs.
+///
+/// Uses `mio::Poll` so the wait is **collective**: one `poll()` call
+/// blocks until any socket is readable or the remaining-time budget
+/// elapses. There is no per-socket timeout to consume, so a host with
+/// many quiet adapters cannot starve a responder bound to a later
+/// socket. Each ready socket is drained to `WouldBlock` so a burst of
+/// replies on one interface doesn't require another `poll()` round-trip.
+fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
+    // Capacity tracks socket count so a single `poll` call can surface
+    // every ready socket without growing the buffer mid-loop. `.max(8)`
+    // keeps the allocation reasonable for single-NIC hosts.
+    let mut events = Events::with_capacity(sockets.len().max(8));
     let mut buf = [0u8; 2048];
-    // Round-robin across ALL sockets so a quiet socket never starves the
-    // others (the v0.1 [P1] multi-NIC bug). The deadline is re-checked
-    // *before each socket* (not once per full pass) and the hard-error
-    // sleep below is clamped to the remaining window, so total wall time is
-    // strictly O(timeout): bounded by at most one socket's read-timeout
-    // granularity (~250 ms) past `deadline`, independent of socket count.
-    // TODO(v0.3): per-socket consecutive-error budget instead of a blanket
-    // sleep (e.g. drop a socket after N hard errors) — lower priority now
-    // that both busy-spin and overshoot are bounded.
-    while Instant::now() < deadline {
-        for sock in socks {
-            // Stop mid-pass the instant the window closes so an in-progress
-            // pass can't overshoot by N_sockets × the hard-error sleep; the
-            // outer `while` then exits too.
-            if Instant::now() >= deadline {
-                break;
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        // Spurious wakeups / EINTR fall through to the next loop guard.
+        if poll.poll(&mut events, Some(remaining)).is_err() {
+            continue;
+        }
+        for event in events.iter() {
+            if !event.is_readable() {
+                continue;
             }
-            match sock.recv_from(&mut buf) {
-                Ok((n, _)) => {
-                    if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {
-                        found.insert(loc);
+            let idx = event.token().0;
+            // Drain everything available on this socket. Repeats are
+            // cheap and avoid relying on level-vs-edge triggering
+            // semantics. A hard error (e.g. Windows WSAECONNRESET from
+            // an ICMP port-unreachable to the M-SEARCH) ends the drain
+            // for this socket only; other sockets keep working.
+            loop {
+                match sockets[idx].recv_from(&mut buf) {
+                    Ok((n, _)) => {
+                        if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {
+                            found.insert(loc);
+                        }
                     }
-                }
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::TimedOut => {}
-                Err(_) => {
-                    // A hard error (e.g. Windows WSAECONNRESET from an ICMP
-                    // port-unreachable to the M-SEARCH) returns immediately. With a
-                    // single socket (common single-NIC host) that would tight-spin
-                    // until the deadline — pace it like a timed-out read. Never
-                    // abort: other sockets/passes must keep working. Clamp the
-                    // pacing sleep to the time left so it can never push wall
-                    // time past `deadline` (saturating: ZERO if already past).
-                    let remaining = deadline.saturating_duration_since(Instant::now());
-                    if !remaining.is_zero() {
-                        std::thread::sleep(remaining.min(Duration::from_millis(250)));
-                    }
-                    // If no time remains, don't sleep — the top-of-loop guard
-                    // exits the pass on the next iteration.
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(_) => break,
                 }
             }
         }
@@ -120,13 +119,16 @@ fn collect_until(socks: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
 /// deadline, so interfaces #2..N were never searched — defeating multi-NIC
 /// discovery on a host that enumerates a WSL/Hyper-V/VPN vEthernet first):
 ///
-/// - **Phase 1 (send-all, non-blocking):** bind one UDP socket per usable
-///   interface and send a ZonePlayer M-SEARCH on each. Interfaces that
-///   cannot be bound or cannot egress multicast are skipped; only the
-///   `set_read_timeout` system call is fatal (a local OS error, not a
-///   network condition).
-/// - **Phase 2 (recv-all, round-robin):** receive across *all* sent sockets
-///   until the deadline, so no single socket can consume the whole window.
+/// - **Phase 1 (send-all, non-blocking):** bind one non-blocking UDP
+///   socket per usable interface, register it with the shared `Poll`, and
+///   send a ZonePlayer M-SEARCH on each. Interfaces that cannot be bound
+///   or cannot egress multicast are skipped; only the case where *every*
+///   interface fails is fatal — surfaced as `WireError::Network` with the
+///   last underlying cause so a local stack/socket failure is not
+///   misreported as `NoDevicesFound`.
+/// - **Phase 2 (recv-all, collective):** wait on all sockets via
+///   `mio::Poll` until the deadline. Every readable socket is drained on
+///   each wakeup, so a quiet socket cannot consume the wait budget.
 ///
 /// `timeout` is the **total bounded window** across all interfaces: the
 /// deadline is computed once up front, so wall time stays O(timeout)
@@ -138,42 +140,66 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
         return Err(WireError::Network("no usable IPv4 interface".into()));
     }
     let msearch = msearch();
+    let ssdp_target: SocketAddr = SSDP_ADDR
+        .parse()
+        .expect("SSDP_ADDR is a valid literal SocketAddr");
     let deadline = Instant::now() + timeout;
 
-    // Phase 1 — send on ALL usable interfaces (fast, non-blocking).
-    let mut socks: Vec<UdpSocket> = Vec::new();
+    let mut poll = Poll::new().map_err(|e| WireError::Network(format!("mio::Poll::new: {e}")))?;
+    let mut sockets: Vec<UdpSocket> = Vec::new();
+    // Distinct from the "no usable IPv4 interface" branch: we DID find
+    // interfaces, but each individual bind/send/register may fail (e.g. a
+    // virtual adapter with no route to 239.x). Per-interface failure is
+    // non-fatal — we want to try the rest. We retain the last underlying
+    // error so the all-failed case surfaces it (rather than the caller
+    // mapping `Ok(vec![])` to `NoDevicesFound`, which falsely implies the
+    // LAN is empty).
+    let mut last_err: Option<String> = None;
+
+    // Phase 1 — bind + register + send on ALL usable interfaces.
     for ip in ifaces {
-        let sock = match UdpSocket::bind((ip, 0)) {
+        let bind_addr = SocketAddr::new(ip, 0);
+        let mut sock = match UdpSocket::bind(bind_addr) {
             Ok(s) => s,
-            Err(_) => continue, // adapter unbindable (e.g. some VPN/tunnel) — skip, like send_to failure
+            Err(e) => {
+                last_err = Some(format!("bind {ip}: {e}"));
+                continue;
+            }
         };
-        // Short read timeout so the Phase-2 round-robin doesn't let one
-        // quiet socket starve the pass; total time is still bounded by
-        // `deadline`. The set_read_timeout syscall failing is a local OS
-        // error, not a network condition — keep it fatal.
-        sock.set_read_timeout(Some(Duration::from_millis(250)))
-            .map_err(|e| WireError::Network(e.to_string()))?;
-        if sock.send_to(msearch.as_bytes(), SSDP_ADDR).is_err() {
+        if let Err(e) = sock.send_to(msearch.as_bytes(), ssdp_target) {
             // Interface can't egress multicast (e.g. a virtual adapter with no
-            // route to 239.x); skip it and try remaining interfaces.
+            // route to 239.x). Skip it and try the remaining interfaces.
+            last_err = Some(format!("send_to {ip}: {e}"));
             continue;
         }
-        socks.push(sock);
+        let token = Token(sockets.len());
+        if let Err(e) = poll
+            .registry()
+            .register(&mut sock, token, Interest::READABLE)
+        {
+            last_err = Some(format!("register {ip}: {e}"));
+            continue;
+        }
+        sockets.push(sock);
     }
-    if socks.is_empty() {
-        // All interfaces failed bind/send; caller sees location_count == 0
-        // and maps that to NoDevicesFound — no need to distinguish here.
-        return Ok(Vec::new());
+    if sockets.is_empty() {
+        // Every usable interface failed bind/send/register. Surface the
+        // precise cause so the caller does not report an empty LAN.
+        let detail = last_err.unwrap_or_else(|| "all interfaces failed bind/send".into());
+        return Err(WireError::Network(format!(
+            "SSDP failed on every usable interface: {detail}"
+        )));
     }
 
     // Phase 2 — receive across ALL sockets until the single deadline.
-    let found = collect_until(&socks, deadline);
+    let found = collect_until(&mut poll, &sockets, deadline);
     Ok(found.into_iter().collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::UdpSocket as StdUdpSocket;
 
     #[test]
     fn parses_location_case_insensitive() {
@@ -215,39 +241,39 @@ mod tests {
         );
     }
 
-    /// Regression guard for the v0.1 [P1] multi-NIC discovery bug: the old
-    /// design recv'd on the first socket until the global deadline, so a
-    /// second interface's reply was never read. `collect_until` must
-    /// round-robin and surface replies from *both* sockets.
+    /// Bind a non-blocking UDP socket on localhost and register it with
+    /// `poll` under the supplied token index. Returns the mio socket plus
+    /// its local address (so a sender can target it).
+    fn bind_and_register(poll: &mut Poll, idx: usize) -> (UdpSocket, SocketAddr) {
+        let mut sock = UdpSocket::bind("127.0.0.1:0".parse().expect("literal")).expect("mio bind");
+        let addr = sock.local_addr().expect("local_addr");
+        poll.registry()
+            .register(&mut sock, Token(idx), Interest::READABLE)
+            .expect("register");
+        (sock, addr)
+    }
+
+    /// Regression guard for the v0.1 [P1] multi-NIC discovery bug: with
+    /// the prior design the recv loop blocked on the first socket until
+    /// the global deadline, so a second interface's reply was never read.
+    /// `collect_until` must surface replies from *both* sockets.
     ///
     /// Localhost only (127.0.0.1) — NOT the Sonos LAN, so allowed in
-    /// sandbox/CI per AGENTS.md §5. Deterministic and fast: localhost
-    /// datagram delivery is sub-millisecond, so the only real latency is
-    /// the sender's 50ms inter-send delay. `collect_until` has no early
-    /// exit by design (it keeps listening for slow real devices until the
-    /// deadline), so the test's deadline IS its wall time — a 400ms upper
-    /// bound comfortably covers the 50ms delay + 100ms read-timeout
-    /// granularity with wide margin while staying well under the 1s gate.
-    /// The sender thread is joined and both sockets have read timeouts, so
-    /// the test never hangs.
+    /// sandbox/CI per AGENTS.md §5. The mio recv path returns the
+    /// moment either socket has data; the only real latency is the
+    /// sender's 50 ms inter-send delay. The test's deadline is its
+    /// effective wall-time cap — 400 ms comfortably covers 50 ms of
+    /// delay plus scheduler jitter while staying well under the 1 s gate.
     #[test]
     fn collect_until_round_robins_across_all_sockets() {
-        use std::net::SocketAddr;
         use std::thread;
 
-        let sock_a = UdpSocket::bind("127.0.0.1:0").expect("bind A");
-        let sock_b = UdpSocket::bind("127.0.0.1:0").expect("bind B");
-        sock_a
-            .set_read_timeout(Some(Duration::from_millis(100)))
-            .expect("set_read_timeout A");
-        sock_b
-            .set_read_timeout(Some(Duration::from_millis(100)))
-            .expect("set_read_timeout B");
-        let addr_a: SocketAddr = sock_a.local_addr().expect("local_addr A");
-        let addr_b: SocketAddr = sock_b.local_addr().expect("local_addr B");
+        let mut poll = Poll::new().expect("poll");
+        let (sock_a, addr_a) = bind_and_register(&mut poll, 0);
+        let (sock_b, addr_b) = bind_and_register(&mut poll, 1);
 
         let sender = thread::spawn(move || {
-            let tx = UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+            let tx = StdUdpSocket::bind("127.0.0.1:0").expect("bind sender");
             let reply_a = "HTTP/1.1 200 OK\r\nLOCATION: http://10.0.0.1:1400/a.xml\r\n\r\n";
             let reply_b = "HTTP/1.1 200 OK\r\nLOCATION: http://10.0.0.2:1400/b.xml\r\n\r\n";
             tx.send_to(reply_a.as_bytes(), addr_a).expect("send A");
@@ -259,6 +285,7 @@ mod tests {
         });
 
         let found = collect_until(
+            &mut poll,
             &[sock_a, sock_b],
             Instant::now() + Duration::from_millis(400),
         );
@@ -277,23 +304,17 @@ mod tests {
 
     /// Regression guard for the "wall time stays O(timeout)" contract: a
     /// socket that only ever times out (nothing is ever sent to it) must
-    /// not push `collect_until` meaningfully past its deadline. Bounds the
-    /// overshoot to ~one read-timeout granularity regardless of error
-    /// regime (the top-of-loop deadline guard + clamped pacing sleep).
-    ///
-    /// Localhost only, deterministic, no sender thread: relies purely on
-    /// the socket's own 100ms read timeout pacing the recv loop, so there
-    /// is no scheduling race. Deadline 300ms; the 600ms wall bound leaves
-    /// wide slack for one read-timeout granularity + scheduler jitter while
-    /// staying well under the 1s gate. Returns the empty set (nothing sent).
+    /// not push `collect_until` meaningfully past its deadline. With the
+    /// mio path the wait is collective — `poll()` returns the moment the
+    /// deadline elapses with no work to do, so the overshoot is bounded
+    /// by scheduler granularity rather than any per-socket timeout.
     #[test]
     fn collect_until_does_not_overshoot_deadline() {
-        let sock = UdpSocket::bind("127.0.0.1:0").expect("bind");
-        sock.set_read_timeout(Some(Duration::from_millis(100)))
-            .expect("set_read_timeout");
+        let mut poll = Poll::new().expect("poll");
+        let (sock, _addr) = bind_and_register(&mut poll, 0);
 
         let start = Instant::now();
-        let found = collect_until(&[sock], start + Duration::from_millis(300));
+        let found = collect_until(&mut poll, &[sock], start + Duration::from_millis(300));
         let elapsed = start.elapsed();
 
         assert!(
@@ -304,6 +325,59 @@ mod tests {
             elapsed < Duration::from_millis(600),
             "collect_until overshot its 300ms deadline: took {elapsed:?} \
              (must stay O(timeout), not N×sleep)"
+        );
+    }
+
+    /// Regression for the per-socket-timeout starvation bug: with the
+    /// prior stdlib design and 13 quiet sockets ahead of the responder,
+    /// Phase 1 of `collect_until` blocked 250 ms per quiet socket. After
+    /// 12 quiet timeouts the loop's per-iteration deadline guard tripped
+    /// and the responder was never read, even though it had sent its
+    /// reply well within the bounded window.
+    ///
+    /// With `mio::Poll` the wait is collective: one `poll()` call wakes
+    /// up the moment the responder is readable, regardless of how many
+    /// quiet sockets share the same `Poll`. 13 quiet sockets is past the
+    /// old bug's threshold for a 3 s outer window with a 250 ms inner
+    /// timeout. The test uses a 600 ms deadline so a regression to the
+    /// old design (which would block for at least 13 × 250 ms = 3.25 s
+    /// before reaching the responder) would actually time out the
+    /// assertion. Localhost only — allowed in sandbox/CI per AGENTS.md §5.
+    #[test]
+    fn collect_until_handles_many_quiet_sockets() {
+        use std::thread;
+
+        let mut poll = Poll::new().expect("poll");
+        let mut sockets: Vec<UdpSocket> = Vec::new();
+        for _ in 0..13 {
+            let (s, _addr) = bind_and_register(&mut poll, sockets.len());
+            sockets.push(s);
+        }
+        let (responder, responder_addr) = bind_and_register(&mut poll, sockets.len());
+        sockets.push(responder);
+
+        let sender = thread::spawn(move || {
+            let tx = StdUdpSocket::bind("127.0.0.1:0").expect("bind sender");
+            let reply = "HTTP/1.1 200 OK\r\nLOCATION: http://10.99.99.99:1400/desc.xml\r\n\r\n";
+            // Small delay so the recv loop is parked in `poll` when the
+            // reply arrives, exercising the wakeup path.
+            thread::sleep(Duration::from_millis(50));
+            tx.send_to(reply.as_bytes(), responder_addr)
+                .expect("send responder");
+        });
+
+        let found = collect_until(
+            &mut poll,
+            &sockets,
+            Instant::now() + Duration::from_millis(600),
+        );
+        sender.join().expect("join sender thread");
+
+        assert!(
+            found.contains("http://10.99.99.99:1400/desc.xml"),
+            "responder behind 13 quiet sockets was not received within the deadline; \
+             a regression to the per-socket-timeout design would block long enough \
+             to miss it. found={found:?}"
         );
     }
 }

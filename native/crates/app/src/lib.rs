@@ -6,23 +6,42 @@
 //!
 //! # Concurrency model
 //!
-//! The `Mutex<Option<HeldWire>>` in `SLOT` is held for the **entire
-//! duration of each command**, including the blocking SOAP round-trip that
-//! happens inside the `Wire` implementation.  This is a deliberate
-//! trade-off:
+//! Two process-global locks, with distinct scopes:
 //!
-//! - **LAN politeness.** Home networks and Sonos devices are not built for
-//!   concurrent SOAP traffic from the same controller.  Serialising all
-//!   outbound commands keeps the request rate proportional to the user's
-//!   actions.
-//! - **Command frequency.** Every entry point here is user-initiated
-//!   (play, pause, volume knob, …).  Humans cannot issue commands fast
-//!   enough for the serialisation to matter.
-//! - **Simplicity.** No fine-grained per-device locking, no queue, no
-//!   deadlock surface.
+//! - **`SLOT` (`Mutex<Option<HeldWire>>`)** is held for the **entire
+//!   duration of each command**, including the blocking SOAP round-trip
+//!   that happens inside the `Wire` implementation. This is a deliberate
+//!   trade-off:
 //!
-//! Revisit if v0.4 event-pump threads contend on the same lock; at that
-//! point a command channel or per-device granularity may be warranted.
+//!   - **LAN politeness.** Home networks and Sonos devices are not built
+//!     for concurrent SOAP traffic from the same controller. Serialising
+//!     all outbound commands keeps the request rate proportional to the
+//!     user's actions.
+//!   - **Command frequency.** Every entry point here is user-initiated
+//!     (play, pause, volume knob, …). Humans cannot issue commands fast
+//!     enough for the serialisation to matter.
+//!   - **Simplicity.** No fine-grained per-device locking, no queue, no
+//!     deadlock surface.
+//!
+//!   Revisit if v0.4 event-pump threads contend on the same lock; at that
+//!   point a command channel or per-device granularity may be warranted.
+//!
+//! - **`DISCOVER_LOCK` (`Mutex<()>`)** is held for the duration of one
+//!   `discover_with` call — across `make()`, `wire.discover()`, and the
+//!   slot replacement. It serialises *discoveries against each other*
+//!   without touching the slot lock, so playback commands and discovery
+//!   live on independent serialisation surfaces.
+//!
+//!   Why a second lock: `wire.discover()` is the longest blocking call
+//!   in the system (3 s SSDP + a SOAP `GetZoneGroupState` per responder),
+//!   and the old design released the slot lock before that call started
+//!   and re-took it after. Two overlapping `discover_with` calls (the
+//!   `discoveryProvider` is autoDispose-d, so a remount-during-discovery
+//!   re-fires it) could finish in any order, and last-writer-wins on the
+//!   slot let an *older* snapshot overwrite a *newer* wire. Serialising
+//!   the whole discover_with call gives deterministic ordering — the
+//!   `discover_with` that acquires the lock last is the one whose wire
+//!   ends up in the slot.
 
 use std::sync::{Mutex, OnceLock};
 
@@ -36,6 +55,15 @@ type HeldWire = Box<dyn Wire + Send>;
 fn slot() -> &'static Mutex<Option<HeldWire>> {
     static SLOT: OnceLock<Mutex<Option<HeldWire>>> = OnceLock::new();
     SLOT.get_or_init(|| Mutex::new(None))
+}
+
+/// Process-global serialisation for `discover_with`. Held across the
+/// whole call (make + wire.discover + slot replacement) so two
+/// overlapping discoveries cannot finish out of acquisition order and
+/// overwrite each other's wire in the slot. See the module doc-comment.
+fn discover_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 /// Lock the slot and call `f` with the held wire, returning
@@ -57,7 +85,15 @@ fn with_wire<R>(f: impl FnOnce(&dyn Wire) -> Result<R, WireError>) -> Result<R, 
 /// Construct a wire, run discovery, and on success replace the held
 /// wire (so v0.2 playback can act on it). On failure the previously
 /// held wire — if any — is left intact.
+///
+/// `DISCOVER_LOCK` is held for the full call so two overlapping
+/// discoveries serialise; the slot lock is only taken at the very end
+/// for the replacement, so playback commands are *not* blocked for the
+/// 3 s SSDP + SOAP window. See the module doc-comment.
 pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapshot, WireError> {
+    let _discover_guard = discover_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let wire = make();
     let snapshot = wire.discover()?;
     *slot()
@@ -214,5 +250,83 @@ mod tests {
         );
         // SEED_VOLUME is 30; confirm we got the fresh seed, not the old value.
         assert_eq!(vol_after_replace, Volume::new(30).unwrap());
+    }
+
+    /// Regression for the concurrent-`discover()` race: the old design
+    /// ran `wire.discover()` *outside* any lock and only locked the slot
+    /// for the final write, so two overlapping discoveries could finish
+    /// in any order and the slower one would last-writer-wins overwrite
+    /// the faster one's wire — losing whatever fresh topology the user
+    /// just observed.
+    ///
+    /// `DISCOVER_LOCK` now serialises the full call (make + discover +
+    /// slot replacement), so two discoveries are strictly sequential.
+    /// This test asserts mutual exclusion by counting concurrent
+    /// occupants of the critical section: a shared atomic counter is
+    /// incremented at the top of `make()` and decremented at the end;
+    /// with the lock in place the observed maximum is exactly 1. The
+    /// `make()` body sleeps long enough that, absent the lock, the
+    /// second thread would observe the first still inside.
+    #[test]
+    fn discover_with_serialises_concurrent_calls() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use std::thread;
+        use std::time::Duration;
+
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        clear_slot();
+
+        let in_make = Arc::new(AtomicUsize::new(0));
+        let max_concurrent = Arc::new(AtomicUsize::new(0));
+
+        let spawn_one = |in_make: Arc<AtomicUsize>, max_concurrent: Arc<AtomicUsize>| {
+            thread::spawn(move || {
+                discover_with(move || {
+                    let cur = in_make.fetch_add(1, Ordering::SeqCst) + 1;
+                    // `fetch_max` records the high-water mark of concurrent
+                    // make() occupants observed across both threads.
+                    max_concurrent.fetch_max(cur, Ordering::SeqCst);
+                    // Sleep long enough that, without the lock, the second
+                    // thread is guaranteed to enter make() while the first
+                    // is still inside (50 ms is well above any realistic
+                    // thread-spawn latency).
+                    thread::sleep(Duration::from_millis(50));
+                    // Build the wire into a local so the closure's tail
+                    // expression is `Box::new(local)`, not
+                    // `Box::new(T::default())` — the latter trips
+                    // clippy::box_default, which would otherwise suggest
+                    // `Box::default()`. That suggestion doesn't compile
+                    // here because the closure's inferred return type
+                    // is `Box<dyn Wire + Send>` (no Default impl); the
+                    // box-then-coerce path keeps the unsize coercion at
+                    // the return site.
+                    let wire = MockWire::default();
+                    in_make.fetch_sub(1, Ordering::SeqCst);
+                    Box::new(wire)
+                })
+                .expect("discover ok")
+            })
+        };
+
+        let t1 = spawn_one(Arc::clone(&in_make), Arc::clone(&max_concurrent));
+        let t2 = spawn_one(Arc::clone(&in_make), Arc::clone(&max_concurrent));
+        t1.join().expect("t1");
+        t2.join().expect("t2");
+
+        assert_eq!(
+            max_concurrent.load(Ordering::SeqCst),
+            1,
+            "DISCOVER_LOCK must serialise overlapping discover_with calls; \
+             a regression to the pre-fix design would observe 2 here"
+        );
+        assert_eq!(
+            in_make.load(Ordering::SeqCst),
+            0,
+            "both make() bodies must have run to completion"
+        );
     }
 }

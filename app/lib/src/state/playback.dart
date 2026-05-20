@@ -1,4 +1,4 @@
-/// Thin v0.2 playback bindings; UI is v0.4.
+/// Thin v0.2 playback bindings; UI is v0.5.
 library;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -17,7 +17,7 @@ Future<rust_api.SpeakerStateDto> speakerState(
 
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
-/// layer (error handling, optimistic UI) is deferred to v0.4.
+/// layer (error handling, optimistic UI) is deferred to v0.5.
 @riverpod
 PlaybackCommands playbackCommands(Ref ref) => const PlaybackCommands();
 
