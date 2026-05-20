@@ -43,11 +43,15 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
 
-  # Riverpod codegen + lints.
+  # Riverpod codegen. (riverpod_lint + custom_lint dropped: custom_lint
+  # 0.8.1's plugin-client generator ignores pubspec.lock and resolved
+  # `riverpod_lint: ^3.0.0` against pub.dev's latest 3.1.3 while pub get
+  # honored the lock at 3.0.3 — generated client referenced files that
+  # didn't exist, plugin failed to start, ~50% of main CI pushes failed.
+  # Base `flutter analyze` + `flutter_lints` covers everything else. Can
+  # re-add when upstream stabilizes lockfile handling.
   build_runner: ^2.6.0
   riverpod_generator: ^3.0.0
-  riverpod_lint: ^3.0.0
-  custom_lint: ^0.8.0
   freezed: ^3.2.3
 
 flutter:

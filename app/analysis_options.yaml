@@ -1,8 +1,6 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
-  plugins:
-    - custom_lint
   exclude:
     # FRB-generated bindings — regenerated on every build; do not lint.
     - lib/src/rust/**
