@@ -70,6 +70,8 @@ winget install evilmartians.lefthook  # Windows
 just install-hooks
 ```
 
+`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that, once installed, runs **only one** check automatically before every commit: `scripts/verify_generated.dart` (catches stale generated source). CI runs the same check server-side — Lefthook just shortens the local feedback loop.
+
 ## Common commands
 
 The same recipes are mirrored in both `Makefile` and `justfile`. Pick whichever runner you have. With `just`:
