@@ -8,6 +8,8 @@ and behavior may change between any releases.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-20
+
 ### Added
 
 v0.3 — Real ZoneGroupTopology grouping. Multi-room groups and coordinator
@@ -144,7 +146,8 @@ surrounds/stereo pairs appear as standalone players — real
 ZoneGroupTopology is v0.3); verified on Windows — Android **release**
 discovery needs a `WifiManager.MulticastLock` (`TODO(v0.4)`).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Oszkar/oto/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Oszkar/oto/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Oszkar/oto/releases/tag/v0.1.0
 [kac]: https://keepachangelog.com/en/1.1.0/
