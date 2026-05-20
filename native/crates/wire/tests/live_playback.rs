@@ -1,11 +1,13 @@
-//! LAN-only. Ignored by default — needs real Sonos hardware and cannot
-//! run in CI / sandbox (AGENTS.md §5). Run:
-//!   cargo test -p oto-wire --test live_playback -- --ignored --nocapture
+//! LAN-only. Feature-gated AND `#[ignore]`d so CI cannot accidentally
+//! run it (needs real Sonos hardware). Run:
+//!   cargo nextest run -p oto-wire --features live-tests --test live_playback --run-ignored ignored-only --nocapture
 //!
 //! Non-destructive: writes volume back to its read value; only toggles
 //! transport if already Playing (Pause-when-Stopped → device 500; see
 //! docs/plans/2026-05-18-playback-spike-findings.md). Does NOT call
 //! next/previous (queue-mutating).
+
+#![cfg(feature = "live-tests")]
 
 use oto_core::Wire;
 use oto_wire::SonosWire;

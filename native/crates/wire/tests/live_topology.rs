@@ -1,12 +1,14 @@
 //! Hardware-gated acceptance for v0.3 real ZoneGroupTopology grouping
-//! (plan Task 8 / spike findings directive-7). NOT run in CI or normal
-//! `cargo test` (it needs a real Sonos LAN).
+//! (plan Task 8 / spike findings directive-7). Feature-gated AND
+//! `#[ignore]`d so CI cannot accidentally run it (needs a real Sonos LAN).
 //!
 //! User-run procedure:
 //!   1. In the Sonos app, group two rooms (e.g. Kitchen + Living Room)
 //!      and queue something on the group.
-//!   2. cargo nextest run -p oto-wire --test live_topology --run-ignored ignored-only
+//!   2. cargo nextest run -p oto-wire --features live-tests --test live_topology --run-ignored ignored-only
 //!   3. Observe: the resolved coordinator's rooms all respond.
+
+#![cfg(feature = "live-tests")]
 
 use oto_core::Wire;
 use oto_wire::SonosWire;
