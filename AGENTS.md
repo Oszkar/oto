@@ -1,7 +1,6 @@
 # AGENTS.md — Operational Contract
 
-Repo: `Oszkar/oto` | Branch: `main`
-Agents: Claude Code, Copilot (PR review), and any other coding agent.
+Repo: `Oszkar/oto` | Branch: `main` Agents: Claude Code, Copilot (PR review), Codex, and any other coding agent.
 
 ## 0. Prime Rule: Clarify Before Acting
 
@@ -10,8 +9,7 @@ If requirements are ambiguous, incomplete, or conflicting:
 1. Stop.
 2. Ask targeted questions.
 3. Propose 1–3 concrete interpretations.
-4. Wait for confirmation, **OR** proceed with the assumption stated
-   explicitly — depending on impact.
+4. Wait for confirmation, **OR** proceed with the assumption stated explicitly — depending on impact.
 
 **Calibration:**
 
@@ -21,18 +19,13 @@ If requirements are ambiguous, incomplete, or conflicting:
 
 ## 1. System Context
 
-oto = a fast, local-first Sonos controller for Windows and Android,
-without the bloat of the official app. Flutter UI over a Rust core,
-bridged with `flutter_rust_bridge` (FRB) v2; discovery / SOAP via the
-`sonos-api` crate (from the
-[`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family)
-plus oto's own multi-NIC SSDP; events are v0.4.
+oto = a fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI over a Rust core, bridged with `flutter_rust_bridge` (FRB) v2; discovery / SOAP via the `sonos-api` crate (from the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) plus oto's own multi-NIC SSDP; events are v0.4.
 
-This is an explicit **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team. Bounded: once Stable (v1.0, externally tested), expect maintenance only.
+This is a **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team. Bounded: once Stable (v1.0, externally tested), expect maintenance only.
 
-Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household, bonded-speaker modeling (v0.1), non-Win/Android release targets.
+Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household.
 
-Authoritative docs: `docs/ARCHITECTURE.md` (system design — marks target vs. current), `README.md` (milestone ladder), `RELEASING.md` (versioning), `docs/plans/*` (point-in-time design + spike findings). Pre-1.0: most of the system is still planned.
+Authoritative docs: `docs/ARCHITECTURE.md` (system design — marks target vs. current), `README.md` (incl. milestone ladder), `RELEASING.md` (versioning).
 
 ## 2. Engineering Principles
 
@@ -63,25 +56,13 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 
 ## 3. Non-Negotiables
 
-**LAN politeness.** The only thing being rate-limited is *us* against
-the user's Sonos devices on a home network. `sonos-api` owns SOAP
-(GENA/events: v0.4); don't add aggressive polling on top. SSDP discovery is bounded and
-interface-scoped (§4 / [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
+**LAN politeness.** The only thing being rate-limited is *us* against the user's Sonos devices on a home network. `sonos-api` owns SOAP; don't add aggressive polling on top. SSDP discovery is bounded and interface-scoped (§4 / [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).
 
-**Errors & logging.** `oto-core` stays deps-free: manual `Error` enum,
-no `thiserror`, no `unwrap()` outside tests. `oto-wire`/`oto-app` may use
-`anyhow` at boundaries and `tracing` for logs (never `log`; never
-one-line-per-event at info). Discovery / `sonos-api` SOAP failures
-are retryable, not fatal.
+**Errors & logging.** `oto-core` stays deps-free: manual `Error` enum, no `thiserror`, no `unwrap()` outside tests. `oto-wire`/`oto-app` may use `anyhow` at boundaries and `tracing` for logs (never `log`; never one-line-per-event at info). Discovery / `sonos-api` SOAP failures are retryable, not fatal.
 
-**Legal.** oto controls the user's own Sonos devices on their LAN via
-UPnP. Not affiliated with Sonos. Local-only — no cloud, account, or
-scraping. If a device is unreachable, degrade gracefully; never
-circumvent device controls.
+**Legal.** oto controls the user's own Sonos devices on their LAN via UPnP. Not affiliated with Sonos. Local-only — no cloud, account, or scraping. If a device is unreachable, degrade gracefully; never circumvent device controls.
 
-**Secrets.** None in scope — no API keys, tokens, or credentials (local
-LAN control only). Don't introduce a secret surface without raising it
-first.
+**Secrets.** None in scope — no API keys, tokens, or credentials (local LAN control only). Don't introduce a secret surface without raising it first.
 
 ## 4. Repo Map
 
@@ -102,44 +83,20 @@ oto/
 └── .github/workflows/           ci.yml + build.yml
 ```
 
-`oto-app` owns runtime state. v0.1: the active `Wire` + `discover`
-routing; v0.2 added playback/state command routing; v0.3 routes
-group-addressed commands over real ZoneGroupTopology (the
-`sonos-api`↔`oto_core` mapping lives in `oto-wire`, never via
-`SonosSystem` — Open Q1/Q5); v0.4 adds the event-pump threads.
+`oto-app` owns runtime state. v0.1: the active `Wire` + `discover` routing; v0.2 added playback/state command routing; v0.3 routes group-addressed commands over real ZoneGroupTopology (the `sonos-api`↔`oto_core` mapping lives in `oto-wire`, never via `SonosSystem` — Open Q1/Q5); v0.4 adds the event-pump threads.
 
 ### Architectural boundaries — agents must respect
 
-1. **`oto-core` is pure.** Domain types only; no networking/async/deps.
-   Other crates depend inward on it; it depends on nothing.
-2. **`oto-wire` is the only crate that touches `sonos-api`.** Sole
-   `sonos-api` integration point: runs its own multi-interface SSDP and
-   reads topology / playback / state via direct `sonos-api` SOAP
-   (ZoneGroupTopology / AVTransport / RenderingControl) — **never**
-   `SonosSystem` (the `sonos-sdk` umbrella was dropped at v0.3, Open Q5;
-   its topology layer was hardware-proven lazy / non-deterministic,
-   Open Q1). `sonos-sdk-discovery`'s `0.0.0.0` SSDP is broken on
-   multi-NIC hosts
-   ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76))
-   — which is why `oto-wire` owns SSDP.
-3. **`oto-mock` is the test `Wire` impl** — deterministic fixtures, no
-   network; integration tests run without real Sonos.
-4. **`oto-app` is the sole owner of runtime state** and the only place
-   `sonos-api` types are translated to `oto_core` types.
-5. **`oto_native` is glue only.** No business logic in
-   `native/src/api.rs`; it delegates inward. Commands sync, events
-   `Stream`.
-6. **Frontend talks to the backend only via the FRB command/event
-   surface.** Adding a command/event needs an ARCHITECTURE.md update
-   first.
+1. **`oto-core` is pure.** Domain types only; no networking/async/deps. Other crates depend inward on it; it depends on nothing.
+2. **`oto-wire` is the only crate that touches `sonos-api`.** Sole `sonos-api` integration point: runs its own multi-interface SSDP and reads topology / playback / state via direct `sonos-api` SOAP (ZoneGroupTopology / AVTransport / RenderingControl) — **never** `SonosSystem` (the `sonos-sdk` umbrella was dropped at v0.3, Open Q5; its topology layer was hardware-proven lazy / non-deterministic, Open Q1). `sonos-sdk-discovery`'s `0.0.0.0` SSDP is broken on multi-NIC hosts ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)) — which is why `oto-wire` owns SSDP.
+3. **`oto-mock` is the test `Wire` impl** — deterministic fixtures, no network; integration tests run without real Sonos.
+4. **`oto-app` is the sole owner of runtime state** and the only place `sonos-api` types are translated to `oto_core` types.
+5. **`oto_native` is glue only.** No business logic in `native/src/api.rs`; it delegates inward. Commands sync, events `Stream`.
+6. **Frontend talks to the backend only via the FRB command/event surface.** Adding a command/event needs an ARCHITECTURE.md update first.
 
 ## 5. Quick Start for Agents
 
-Every task: (1) identify the crate/layer; (2) list invariants affected
-(§4 boundary, §2.1 convention); (3) smallest safe diff at the root
-cause; (4) validate (§6); (5) ambiguous → ask early. Avoid drive-by
-refactors. Use the context7 MCP to verify FRB / sonos-api / Riverpod
-APIs rather than guessing.
+Every task: (1) identify the crate/layer; (2) list invariants affected (§4 boundary, §2.1 convention); (3) smallest safe diff at the root cause; (4) validate (§6); (5) ambiguous → ask early. Avoid drive-by refactors. Use the context7 MCP to verify FRB / sonos-api / Riverpod APIs rather than guessing.
 
 Local dev (agents that can run commands), from the repo root:
 
@@ -151,9 +108,7 @@ just build-win  # debug Windows desktop
 just build-apk  # debug Android APK
 ```
 
-Network-dependent code (discovery) cannot be validated from a sandboxed
-shell — SSDP multicast needs the real LAN. Say so and ask the user to
-run it.
+Network-dependent code can be validated from an agent shell which on a LAN with 4 Sonos devices. But state explicitly when running network-dependent experiments or checks.
 
 ## 6. Validation Matrix
 
@@ -168,33 +123,22 @@ Before claiming work is done:
 | `.github/workflows/*` | YAML lints clean |
 | `*.md` | internal links resolve; facts still match the code/justfile |
 
-`clippy -D warnings` is strict; no `#[allow]` without a documented
-reason in a comment above it. If you cannot run a gate, state the exact
-command and ask for output — do not claim done.
+`clippy -D warnings` is strict; no `#[allow]` without a documented reason in a comment above it. If you cannot run a gate, state the exact command and ask for output — do not claim done.
 
 ## 7. Change Control
 
-**Ask before:** changing `oto-core` types, the `Wire` trait, the FRB
-surface, the `sonos-api` pin, adding a crate dependency, cross-crate
-refactors, milestone-boundary changes, introducing any secret surface.
+**Ask before:** changing `oto-core` types, the `Wire` trait, the FRB surface, the `sonos-api` pin, adding a crate dependency, cross-crate refactors, milestone-boundary changes, introducing any secret surface.
 
-**Document:** assumptions, trade-offs, and load-bearing tech debt as
-`// TODO(vX.Y):` with the eventual fix in one line.
+**Document:** assumptions, trade-offs, and load-bearing tech debt as `// TODO(vX.Y):` with the eventual fix in one line.
 
-**Branch & PR:** `main` is protected — never force-push to it. Branches
-`feat/… fix/… docs/… chore/…`, one PR per branch, squash-merge,
-conventional commit messages. `--force-with-lease` OK on feature
-branches; `--force` is not. Never `--no-verify` / skip signing — fix the
-hook. PRs go through review before merge.
+**Branch & PR:** `main` is protected. Branches `feat/… fix/… docs/… chore/…`, one PR per branch, squash-merge, conventional commit messages. `--force-with-lease` OK on feature branches; `--force` is not. Never `--no-verify` / skip signing — fix the hook. PRs go through review before merge.
 
-**Doc sync:** if you change architecture, update `docs/ARCHITECTURE.md`
-(source of truth for design) and `README.md` (milestone ladder)
-together — drift between them is the most likely doc bug.
+**Doc sync:** if you change architecture, update `docs/ARCHITECTURE.md` (source of truth for design) and `README.md` together — drift between them is the most likely doc bug.
 
 ## 8. Communication
 
 - Be concise; short bullets, concrete next steps.
 - Ask targeted questions early; present 1–3 options with trade-offs.
-- Push back on security risk, architectural violations, over-engineering, premature scope expansion (UI is v0.5 — not earlier, however easy it looks).
+- Push back on security risk, architectural violations, over-engineering.
 - Correct first, agreeable second. No busywork docs/status files unless asked.
 - Persist until done or genuinely blocked; if blocked, say what you tried and what you need.
