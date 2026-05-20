@@ -37,6 +37,9 @@ fn location_of(payload: &str) -> Option<String> {
 
 /// Usable IPv4 interface addresses (no loopback, no link-local).
 ///
+/// IPv4-only by design; IPv6 SSDP (`FF02::C`) is out of scope today.
+/// See `docs/ARCHITECTURE.md` Open Q9.
+///
 /// `if_addrs::get_if_addrs()` returns `io::Result<Vec<Interface>>`; each
 /// `Interface` exposes `.ip() -> IpAddr`, `.is_loopback()`, and
 /// `.is_link_local()` directly (verified against `if-addrs` 0.15 source).
