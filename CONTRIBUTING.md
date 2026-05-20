@@ -1,7 +1,6 @@
 # Contributing to oto
 
-Short doc focused on the non-obvious bits. For setup/commands, see
-[README.md](README.md).
+Short doc focused on the non-obvious bits. For setup/commands, see [README.md](README.md).
 
 ## Development workflow
 
@@ -14,28 +13,21 @@ just check      # cargo fmt + clippy + flutter analyze
 just test       # cargo nextest + flutter test
 ```
 
-Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`)
-is committed. Always run `just gen` before committing changes to inputs.
-The Lefthook pre-commit hook (`just install-hooks`) catches stale generated
-source locally; CI's `Generated source freshness` job catches it server-side.
+Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook pre-commit hook (`just install-hooks`) catches stale generated source locally; CI's `Generated source freshness` job catches it server-side.
 
 ## Version pin policy
 
-Toolchain and tooling versions are pinned in multiple files. Dependabot
-covers most of them; a few require coordinated manual updates.
+Toolchain and tooling versions are pinned in multiple files. Dependabot covers most of them; a few require coordinated manual updates.
 
 ### Pinned in workflows (Dependabot updates these)
 
-- `dtolnay/rust-toolchain@<version>` — bumping this **must** be paired with
-  the manual updates below (the action ref is what CI uses; the toolchain
-  file is the source of truth for local development).
+- `dtolnay/rust-toolchain@<version>` — bumping this **must** be paired with the manual updates below (the action ref is what CI uses; the toolchain file is the source of truth for local development).
 - `subosito/flutter-action@vN` — major action version, automatic.
 - All other `uses:` action refs.
 
 ### Manual bump required (Dependabot doesn't see these)
 
-When the `dtolnay/rust-toolchain` Dependabot PR lands, update **in the
-same PR**:
+When the `dtolnay/rust-toolchain` Dependabot PR lands, update **in the same PR**:
 
 - `rust-toolchain.toml` — `channel = "X.Y.Z"`
 - `native/Cargo.toml` — `rust-version = "X.Y"` under `[workspace.package]`
@@ -51,29 +43,20 @@ Other inline pins to grep for when a coordinated bump is needed:
 - `cargo install flutter_rust_bridge_codegen --version X.Y.Z` (both workflows)
 - `flutter_rust_bridge = "=X.Y.Z"` in `native/Cargo.toml`
 
-The FRB codegen version and FRB crate version **must** stay aligned, or
-generated source will drift.
+The FRB codegen version and FRB crate version **must** stay aligned, or generated source will drift.
 
 ### Cargo/pub dependencies
 
-Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub`
-(in `app/` and `app/rust_builder/`). Review minor/major bumps; patch
-updates auto-merge once CI passes (see below).
+Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). Review minor/major bumps; patch updates auto-merge once CI passes (see below).
 
 ## Auto-merge
 
-`.github/workflows/dependabot-auto-merge.yml` enables auto-merge for
-**patch-level** Dependabot PRs after CI passes. Minor and major bumps stay
-manual so a human can scan changelogs (pre-1.0 crates treat minor as
-breaking by SemVer convention).
+`.github/workflows/dependabot-auto-merge.yml` enables auto-merge for **patch-level** Dependabot PRs after CI passes. Minor and major bumps stay manual so a human can scan changelogs (pre-1.0 crates treat minor as breaking by SemVer convention).
 
-Prerequisites — these are repo settings, not files, so set them once in
-the GitHub UI:
+Prerequisites — these are repo settings, not files, so set them once in the GitHub UI:
 
 - **Settings → General → Pull Requests** → enable **Allow auto-merge**.
-- **Settings → Branches** → branch protection for `main` requiring the
-  `ci` workflow checks to pass. Without this, auto-merge fires immediately
-  with no gating.
+- **Settings → Branches** → branch protection for `main` requiring the `ci` workflow checks to pass. Without this, auto-merge fires immediately with no gating.
 
 ## Commit messages
 
@@ -91,5 +74,4 @@ Keep the subject under ~72 chars and let the body explain *why*.
 
 - Run `just check` and `just test` locally before opening.
 - Generated source must be regenerated and committed if any input changed.
-- CI runs four jobs in parallel (`generated`, `rust`, `deny`, `flutter`);
-  all must pass before merge.
+- CI runs four jobs in parallel (`generated`, `rust`, `deny`, `flutter`); all must pass before merge.
