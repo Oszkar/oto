@@ -1,13 +1,16 @@
-/// Tests for `discoveryProvider`: drives the AsyncValue loading → data
-/// and loading → error transitions via a `ProviderContainer` override,
-/// without touching FRB or a real LAN. The compile-level smoke that the
-/// generated provider name resolves is implicit (test won't compile
-/// otherwise).
+/// Tests for `discoveryProvider`: asserts the terminal `AsyncValue.data`
+/// and `AsyncValue.error` states the provider exposes when its result is
+/// injected via `overrideWithValue`. These do *not* observe an actual
+/// loading→data/error transition — the async-throwing override form that
+/// would yield one races autoDispose on Riverpod 3.0.3 (provider gets
+/// disposed during the loading state before the throw can propagate,
+/// surfacing as `StateError: provider disposed during loading`).
+/// `overrideWithValue(AsyncValue.…)` (restored in Riverpod 3.0.2) is the
+/// canonical async-test seam for this scenario.
 ///
-/// Uses `overrideWithValue(AsyncValue.…)` — restored in Riverpod 3.0.2
-/// as the canonical async-test seam — instead of async-throwing
-/// overrides (which race autoDispose and produce `StateError: provider
-/// disposed during loading` here).
+/// FRB and a real LAN are bypassed entirely. The compile-level smoke
+/// that the generated provider name resolves is implicit (test won't
+/// compile otherwise).
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

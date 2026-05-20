@@ -81,7 +81,7 @@ The same recipes are mirrored in both `Makefile` and `justfile`. Pick whichever 
 ```bash
 just gen          # FRB bindings + riverpod_generator (re-run after editing native/src/api.rs or any @riverpod-annotated Dart)
 just gen-check    # regenerate generated source and fail if it differs from git
-just check        # cargo fmt + clippy + flutter analyze
+just check        # gen-check + cargo fmt + clippy + flutter analyze + cargo deny
 just test         # cargo nextest + flutter test
 just build-apk    # debug Android APK
 just build-win    # debug Windows desktop

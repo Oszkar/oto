@@ -1,10 +1,14 @@
 /// Tests for `speakerStateProvider` (family) and `playbackCommandsProvider`:
-/// drives AsyncValue transitions for the read path; demonstrates the
-/// `overrideWithValue` test seam for the command facade (no logic of its
-/// own to assert today — real command-layer behaviour is v0.4).
+/// asserts the terminal `AsyncValue.data` / `AsyncValue.error` states the
+/// `speakerStateProvider` exposes when its result is injected via
+/// `overrideWithValue`, and exercises the `overrideWithValue` seam for
+/// the command facade (no logic of its own to assert today — real
+/// command-layer behaviour is v0.4). These do *not* observe a real
+/// loading→data/error transition; the async-throwing override that would
+/// yield one races autoDispose on Riverpod 3.0.3.
 ///
-/// Async providers use `overrideWithValue(AsyncValue.…)` (restored in
-/// Riverpod 3.0.2) so the test seam doesn't race autoDispose.
+/// `overrideWithValue(AsyncValue.…)` (restored in Riverpod 3.0.2) is the
+/// canonical async-test seam for this scenario.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

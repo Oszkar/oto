@@ -102,13 +102,13 @@ Local dev (agents that can run commands), from the repo root:
 
 ```
 just gen        # regen FRB + Riverpod codegen (after api.rs / @riverpod)
-just check      # fmt + clippy -D warnings + flutter analyze
+just check      # gen-check + fmt + clippy -D warnings + flutter analyze + cargo deny
 just test       # cargo-nextest + flutter test
 just build-win  # debug Windows desktop
 just build-apk  # debug Android APK
 ```
 
-Network-dependent code can be validated from an agent shell which on a LAN with 4 Sonos devices. But state explicitly when running network-dependent experiments or checks. Hardware-gated tests live under `native/crates/wire/tests/live_*.rs` behind the `live-tests` Cargo feature (and `#[ignore]` belt-and-braces); run via `cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only`.
+Network-dependent code can be validated from an agent shell on a LAN with 4 Sonos devices. State explicitly when running network-dependent experiments or checks. Hardware-gated tests live under `native/crates/wire/tests/live_*.rs` behind the `live-tests` Cargo feature (and `#[ignore]` belt-and-braces); run via `cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only`.
 
 ## 6. Validation Matrix
 
