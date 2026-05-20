@@ -11,10 +11,10 @@ part 'api.freezed.dart';
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
 /// topology — speaker identities (id / room / model / ip) plus the
-/// group identities they belong to, with coordinators in member[0] (D3)
-/// — but no live state: volume, mute, and transport are read separately
-/// via `speaker_state`. Live state will move to an event-fed cache in
-/// v0.4 (ARCHITECTURE.md Open Q7).
+/// group identities they belong to, with the coordinator at
+/// `members[0]` (D3) — but no live state: volume, mute, and transport
+/// are read separately via `speaker_state`. Live state will move to an
+/// event-fed cache in v0.4 (ARCHITECTURE.md Open Q7).
 Future<Topology> discover() => RustLib.instance.api.crateApiDiscover();
 
 /// Start playback on `group_id` (routed to its coordinator). Blocking SOAP

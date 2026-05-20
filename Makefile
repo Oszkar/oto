@@ -5,7 +5,7 @@
         test-rust test-dart test-integration deny install-hooks build-apk build-win bootstrap clean
 
 default:
-	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart deny install-hooks build-apk build-win bootstrap clean"
+	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart test-integration deny install-hooks build-apk build-win bootstrap clean"
 
 gen: gen-rust gen-dart
 

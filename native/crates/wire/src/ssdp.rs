@@ -81,9 +81,18 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
     let mut events = Events::with_capacity(sockets.len().max(8));
     let mut buf = [0u8; 2048];
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
-        // Spurious wakeups / EINTR fall through to the next loop guard.
-        if poll.poll(&mut events, Some(remaining)).is_err() {
-            continue;
+        // EINTR is benign on platforms where mio doesn't already swallow it
+        // (some BSDs / older platforms) — retry within the bounded window.
+        // Any other error means the poller itself is wedged (e.g. EBADF
+        // after a registration we no longer own); retrying would
+        // tight-spin until the deadline and silently mask the failure.
+        // Stop the wait loop and return what we have already collected;
+        // discover() will surface NoDevicesFound if `found` is empty,
+        // and the next discover_with() call constructs a fresh Poll.
+        match poll.poll(&mut events, Some(remaining)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
         }
         for event in events.iter() {
             if !event.is_readable() {
