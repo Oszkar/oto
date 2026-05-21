@@ -64,7 +64,7 @@ Consequences:
 
 **`speaker_state` addressing (D2).** Reads volume/mute at the speaker's own address; reads transport (`GetTransportInfo` / `GetPositionInfo`) at the group coordinator's address, resolved via the `speaker_to_coordinator` cache. A solo speaker is its own coordinator, so the behavior degrades cleanly.
 
-**Topology refresh is one-shot.** Caches are populated only by `discover()`. App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`; a stale `GroupId` returns `WireError::NotFound`. Live topology-change events are v0.4.
+**Topology refresh is one-shot.** Caches are populated only by `discover()`. App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`; a stale `GroupId` returns `WireError::NotFound`. Live topology-change events are v0.5 (v0.4 covers property events only — volume / mute / transport / track).
 
 **State-read shape (`speaker_state`).** `SpeakerState { volume: Option<Volume>, muted: Option<bool>, transport: Option<TransportState> }`. `Option<T>` fields are honest partial failure — a snapshot does ~4 SOAP calls and any may fail independently. The shape was chosen because (a) it mirrors the proven `discover → snapshot → FutureProvider` pattern, (b) it's the smallest `Wire` seam, and (c) the signature survives the v0.4 fetch→event-cache swap unchanged.
 
