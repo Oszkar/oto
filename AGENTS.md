@@ -25,7 +25,7 @@ This is a **side project**. Optimize for usefulness, low maintenance, tight scop
 
 Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household.
 
-Authoritative docs: `docs/ARCHITECTURE.md` (system design — marks target vs. current), `README.md` (incl. milestone ladder), `RELEASING.md` (versioning).
+Authoritative docs: `docs/ARCHITECTURE.md` (system design — today's structure), `docs/ROADMAP.md` (milestone status + forward plan + project-bound open items), `docs/sonos-notes.md` (Sonos protocol / SDK durable reference), `README.md` (incl. milestone ladder), `RELEASING.md` (versioning).
 
 ## 2. Engineering Principles
 
@@ -70,8 +70,9 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 oto/
 ├── README.md  CONTRIBUTING.md  RELEASING.md  CHANGELOG.md  LICENSE(MIT)
 ├── justfile / Makefile          mirrored dev recipes
-├── docs/ARCHITECTURE.md         system design (target vs current marked)
-├── docs/plans/                  point-in-time design + spike findings
+├── docs/ARCHITECTURE.md         system design (today)
+├── docs/ROADMAP.md              milestone status + forward plan
+├── docs/sonos-notes.md          Sonos protocol / SDK durable reference
 ├── app/                         Flutter app (Android + Windows)
 │   ├── lib/  lib/src/state/  lib/src/rust/(generated)
 │   ├── rust_builder/            Cargokit shim (patched; LOCAL_PATCHES.md)

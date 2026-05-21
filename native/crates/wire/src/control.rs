@@ -584,8 +584,8 @@ mod tests {
     // parse_track_didl — EXACT verbatim sample from the findings doc
     // -----------------------------------------------------------------------
 
-    /// The verbatim DIDL-Lite sample from
-    /// `docs/plans/2026-05-18-playback-spike-findings.md` § Q2.
+    /// Verbatim DIDL-Lite sample captured from the playback spike;
+    /// cited in `docs/sonos-notes.md` § DIDL-Lite track metadata.
     const FINDINGS_DIDL: &str = r#"<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
   xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
   xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/"

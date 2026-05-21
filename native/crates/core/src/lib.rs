@@ -7,8 +7,10 @@
 //! layer in `oto_native`, the discovery / SOAP / event layers (added later),
 //! and (transitively, via FRB-generated bindings) the Dart UI.
 //!
-//! See `docs/plans/2026-05-15-oto-core-domain-types-design.md` for the
-//! shape of these types and the alternatives considered.
+//! See `docs/ARCHITECTURE.md` § "The `Wire` seam" for the type surface
+//! these support and `docs/sonos-notes.md` for the Sonos protocol details
+//! they mirror (`SpeakerId`/`GroupId` identifier shapes, `Volume` range,
+//! DIDL-Lite → `Track`, transport state strings → `PlaybackState`).
 
 pub mod error;
 pub mod group;
