@@ -1,8 +1,8 @@
 #![deny(unsafe_code)]
 
 //! `oto-app` — owns runtime state (the active `Wire`) and routes the
-//! discover command and v0.2 playback/volume/state commands.
-//! See docs/plans/2026-05-15-frb-discover-command-design.md.
+//! discover command and the playback/volume/state commands.
+//! See `docs/ARCHITECTURE.md` for the command flow and the `Wire` seam.
 //!
 //! # Concurrency model
 //!

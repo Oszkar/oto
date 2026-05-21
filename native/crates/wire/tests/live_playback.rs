@@ -4,8 +4,8 @@
 //!
 //! Non-destructive: writes volume back to its read value; only toggles
 //! transport if already Playing (Pause-when-Stopped → device 500; see
-//! docs/plans/2026-05-18-playback-spike-findings.md). Does NOT call
-//! next/previous (queue-mutating).
+//! `docs/sonos-notes.md` § Error mapping). Does NOT call next/previous
+//! (queue-mutating).
 
 #![cfg(feature = "live-tests")]
 

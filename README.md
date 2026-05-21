@@ -122,7 +122,7 @@ Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust�
 | v0.5 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
-Released: `v0.1.0` (identity-only discovery) and `v0.2.0` (playback + one-shot state read, group-of-one addressing). v0.3 (real ZoneGroupTopology: multi-room groups, coordinator election, bonded satellites folded) is implemented on `main`; release cut pending. Commands are non-sync Dart `Future`s (every command is a blocking SOAP round-trip). v0.1/v0.2 verified on **Windows**; v0.3 grouping verified LAN-free with its read path hardware-proven by the v0.3 spike — full real-hardware acceptance pending. Android **release** discovery still needs a held `WifiManager.MulticastLock` (deferred — see `native/src/api.rs`). Design rationale, ADRs, and open questions live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); per-release detail in [CHANGELOG.md](CHANGELOG.md).
+Released: `v0.1.0` and `v0.2.0`. v0.3 is implemented on `main`; release cut pending. Commands are non-sync Dart `Future`s (every command is a blocking SOAP round-trip). Milestone status, forward plan, and known caveats: [docs/ROADMAP.md](docs/ROADMAP.md). System design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Per-release detail: [CHANGELOG.md](CHANGELOG.md).
 
 ## Development notes
 
