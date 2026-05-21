@@ -8,26 +8,37 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 |---|---|---|
 | v0.1.0 | released | Foundation + LAN identity-only discovery |
 | v0.2.0 | released | Playback control + one-shot state read (group-of-one) |
-| v0.3   | on `main`, release pending | Real ZoneGroupTopology grouping — multi-room, coordinator election, bonded satellites folded |
-| v0.4   | next | Live events (GENA) — Rust → Dart event stream |
-| v0.5   | future | The designed Flutter UI |
+| v0.3.0 | released | Real ZoneGroupTopology grouping — multi-room, coordinator election, bonded satellites folded |
+| v0.4   | next | Live **property** events (GENA) — Rust → Dart event stream for volume / mute / transport / track |
+| v0.5   | future | **Hardening before UI** — topology events, group form/break, Android `MulticastLock`, model repopulate |
+| v0.6   | future | The designed Flutter UI |
 | v1.0   | future | Stable — externally tested, packaged |
 
-**v0.3 hardware acceptance is partial.** ZoneGroupTopology read path is hardware-proven (the v0.3 spike against the 4-speaker LAN). Full multi-room real-hardware acceptance (the directive-7 check: form a group in the Sonos app → command at the resolved coordinator → all member rooms respond) is pending — a user-run step before the v0.3 release cut.
+v0.1, v0.2, and v0.3 are verified on Windows. Android **release** discovery is non-functional pending a held `WifiManager.MulticastLock` — see [v0.5](#v05--hardening-before-ui).
 
-v0.1 and v0.2 are verified on Windows. Android **release** discovery is non-functional pending a held `WifiManager.MulticastLock` — see [v0.5](#v05--ui).
+## v0.4 — Live property events
 
-## v0.4 — Live events
-
-Reactive state via GENA: Rust → Dart event stream, no polling.
+Reactive state via GENA: Rust → Dart event stream, no polling. **Property events only** — volume, mute, transport state, current track. Topology change events and group form/break are v0.5 (see below); pulling them in inflates one milestone with two cache shapes, two cold-start stories, and the less-exercised side of the upstream reactive layer.
 
 ### Adds
 
-- `StateManager` in `oto-app` caching per-speaker and per-group properties, emitting `ChangeEvent`s on change.
-- Event pump threads — one per multiplexed event stream (one thread total, not per-speaker, per the [event-model design note](sonos-notes.md#opt-in-via-watch)).
+- `StateManager` in `oto-app` caching per-speaker properties, emitting `ChangeEvent`s on change.
+- One multiplexed event-pump thread (not per-speaker, per the [event-model design note](sonos-notes.md#opt-in-via-watch)).
 - Riverpod providers shift from `FutureProvider` (one-shot reads) to `StreamProvider` (subscribed projections); they hold projections for rendering, not source data. State mutations stay in Rust, avoiding cross-FFI consistency bugs.
 - `Wire::speaker_state` impl swaps fetch → event-cache read. The `Wire` signature is unchanged across the swap (designed in v0.2 for this).
 - Resolves the v0.2 ADR's deeper "revisit at v0.3 → revisit at v0.4" item: transport may move off `SpeakerState` onto a group-addressed read when state is event-fed.
+- `native/examples/event-tail.rs` — small dogfooding binary that subscribes to the event stream and prints changes. Produces the kind of production-data evidence that drives the v0.5 reactive-vs-NOTIFY review; not a user-facing CLI.
+
+### Out of scope (deferred to v0.5)
+
+- **Topology change events.** Live `ZoneGroupTopology` subscription. `discover()` remains the only topology source through v0.4; a stale `GroupId` still returns `WireError::NotFound`.
+- **Group form/break** commands. Same surface as topology events (`GroupManagement` / `ZoneGroupTopology`); land together in v0.5.
+
+### Pre-milestone spike
+
+The "upstream reactive layer vs. raw `callback-server` + own change-detection" decision is made **before** v0.4 implementation begins, by a small hardware spike against the 4-speaker LAN. v0.4 implements only the chosen path — don't carry both adapters.
+
+This collapses the previous "decide with real-hardware data once events are wired end-to-end" framing: that ambiguity is too expensive inside the milestone. The non-chosen path stays a v0.5 reconsideration point — if topology events expose new reliability evidence in v0.5, the question reopens then.
 
 ### Known constraints
 
@@ -36,22 +47,26 @@ Detail in [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-be
 - **Watch-after-fetch initial-event suppression** — upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` cached the same value. Documented upstream as by-design. Implication: treat `.watch()` itself as the seed probe; cold-start handling is the main thing to settle this milestone.
 - **Upstream reactive layer is the weak spot.** `sonos-state` / `sonos-stream` / `sonos-event-manager` carry the only known live correctness concern (intermittent `position` updates, open upstream) and have no hardware CI coverage. The lower layers (`soap-client`, `sonos-api`, `callback-server`) are solid.
 
-### Risk + fallback
+## v0.5 — Hardening before UI
 
-If event delivery via the upstream reactive layer proves unreliable on real hardware, **the fallback is not a fork.** Narrow the dependency: `oto-wire` uses `sonos-api` `fetch` + `callback-server` (GENA raw NOTIFYs); `oto-app` does change-detection itself. `oto-app` is already the sole runtime-state owner, so this is a localized swap — not an architectural shift.
+Capability-layer items that land before the v0.6 UI milestone designs against the surface. The milestone goal is "finish the capability work so the UI is a pure design+build problem," not "every nice-to-have."
 
-Decide which path with real-hardware data once events are wired end-to-end. Don't pre-commit.
+### Adds
 
-## v0.5 — UI
-
-The designed Flutter interface on the proven capability layers.
-
-Accumulated TODOs that land in this milestone:
-
+- **Topology change events** — live `ZoneGroupTopology` subscription. Resolves the freshness contract: regrouping in the Sonos app updates oto's view automatically, no re-`discover()` required. Subsumes the previous "cache-miss → re-fetch-once → retry self-heal" item; reconsider that only if topology events leave windows where misses still occur in practice.
+- **Group form/break** commands — was deferred at the v0.3 boundary. Mutating SOAP (`GroupManagement` / `x-rincon:` `SetAVTransportURI`) was not de-risked by the v0.3 spike and gets its own spike + design when scheduled. The `Wire` trait grows additively; form/break mutates topology, then topology events surface the change.
+- **Reactive-vs-NOTIFY revisit** — review the v0.4 pre-milestone spike decision with production data from v0.4 dogfooding (`event-tail.rs` traces). Re-pick if topology events expose new reliability evidence; otherwise leave as-is.
 - **Android `MulticastLock`** (`native/src/api.rs`, `TODO(v0.5)`). Android silently drops SSDP multicast without a held `WifiManager.MulticastLock`. The Android main manifest declares `INTERNET` + `CHANGE_WIFI_MULTICAST_STATE`, but the lock acquisition is platform code that's currently deferred. **Android release** discovery is non-functional until this lands; the debug APK works because Flutter tooling supplies `INTERNET`.
 - **Speaker `model` string repopulate** (`oto_core::SpeakerIdentity::model`, `TODO(v0.5)`). ZoneGroupTopology carries no model attribute (only `<VanishedDevices>` entries do), so `model` is `None` since v0.3. Repopulate via a bounded per-member `device_description.xml` fetch over the authoritative topology member set — zero type/FRB change required.
-- **Cache-miss → re-fetch-once → retry self-heal** in `oto-wire` (optional, conditional on real-use feedback). Today a stale `GroupId` returns `WireError::NotFound`; the v0.5 UI may want a quiet self-heal on a single miss instead of bubbling the error.
-- **Group form/break** commands — was deferred at the v0.3 boundary. Mutating SOAP (`GroupManagement` / `x-rincon:` `SetAVTransportURI`) was not de-risked by the v0.3 spike and gets its own spike + design when scheduled. The `Wire` trait grows additively; form/break mutates topology, then the caller re-`discover()`s.
+
+### Explicit non-goals
+
+- **No UI design or implementation.** The UI is v0.6.
+- **No new feature surface beyond the listed items.** Hardening means "what was deferred to make the v0.4 milestone smaller," not a grab-bag.
+
+## v0.6 — UI
+
+The designed Flutter interface on the proven capability layers. Pure design + implementation work against a feature-complete `Wire` + event stream + FRB surface. No further capability-layer additions in this milestone.
 
 ## v1.0 — Stable
 

@@ -83,7 +83,7 @@ In all hardware runs the coordinator UUID appeared in the member list. Defensive
 
 ### No `model` attribute on live members
 
-`ZoneGroupMemberInfo` and `<Satellite>` carry `uuid`, `zone_name` (the Sonos room label), `location` (→ IP), but **no `Model`/`ModelInfo` attribute**. Only `<VanishedDevices>` entries carry `ModelInfo`. `SpeakerIdentity.model: Option<String>` therefore stays `None` since v0.3. To repopulate (e.g. for a v0.5 UI), do a bounded per-member `device_description.xml` fetch over the authoritative topology member set (`docs/ROADMAP.md`).
+`ZoneGroupMemberInfo` and `<Satellite>` carry `uuid`, `zone_name` (the Sonos room label), `location` (→ IP), but **no `Model`/`ModelInfo` attribute**. Only `<VanishedDevices>` entries carry `ModelInfo`. `SpeakerIdentity.model: Option<String>` therefore stays `None` since v0.3. The v0.5 hardening milestone repopulates this via a bounded per-member `device_description.xml` fetch over the authoritative topology member set (so the v0.6 UI has model strings to render); see [`docs/ROADMAP.md`](ROADMAP.md).
 
 ## Playback control — AVTransport / RenderingControl SOAP
 
@@ -235,9 +235,9 @@ The lower layers under it (`soap-client`, `sonos-api`, `callback-server`) are fi
 
 ### Fallback if reactive proves unreliable
 
-**Not a fork.** If v0.4 event delivery via the upstream reactive layer is unreliable on real hardware, narrow the dependency: `oto-wire` uses `sonos-api` `fetch` + `callback-server` (GENA raw NOTIFYs) and `oto-app` does change-detection itself. `oto-app` is already the sole runtime-state owner, so this is a localized swap, not an architectural shift.
+**Not a fork.** If event delivery via the upstream reactive layer is unreliable on real hardware, narrow the dependency: `oto-wire` uses `sonos-api` `fetch` + `callback-server` (GENA raw NOTIFYs) and `oto-app` does change-detection itself. `oto-app` is already the sole runtime-state owner, so this is a localized swap, not an architectural shift.
 
-Decision deferred to **v0.4 with real-hardware data**. Don't pre-commit to either path.
+Decision made by a **pre-v0.4 hardware spike** against the 4-speaker LAN — v0.4 implements only the chosen path, doesn't carry both adapters. The non-chosen path is a v0.5 reconsideration point: when topology events land they exercise the reactive layer differently (less hardware coverage upstream, lower event frequency), so re-pick then if v0.5 evidence diverges from the v0.4 spike result.
 
 ### SDK `.get()` is `Option`
 

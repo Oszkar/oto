@@ -4,7 +4,7 @@
          get it from Flutter tooling only). CHANGE_WIFI_MULTICAST_STATE is
          required to acquire a WifiManager.MulticastLock; without the lock
          Android silently drops SSDP multicast replies.
-         TODO(v0.4): acquire/release a MulticastLock around discover()
+         TODO(v0.5): acquire/release a MulticastLock around discover()
          (Kotlin in MainActivity or a MethodChannel) — until then Android
          release discovery still won't receive SSDP replies. v0.1
          discovery is proven on Windows via the Rust bridge. -->

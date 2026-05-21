@@ -118,7 +118,7 @@ pub fn previous(group_id: String) -> Result<(), CommandError> {
 /// The param is **signed** so a negative Dart `int` reaches Rust and
 /// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
 /// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
-/// unreachable for a volume; the v0.5 UI bounds the slider regardless.
+/// unreachable for a volume; the v0.6 UI bounds the slider regardless.
 /// Blocking SOAP round-trip; Dart `Future`.
 pub fn set_volume(speaker_id: String, volume: i32) -> Result<(), CommandError> {
     let id = oto_core::SpeakerId::new(speaker_id);
