@@ -213,37 +213,117 @@ Top-level response fields carry sentinels that must map to `None`, not values:
 
 ## Event model (v0.4 load-bearing)
 
-This section is what v0.4 needs. The lower layers (`soap-client`, `sonos-api`, `callback-server`) are solid — v0.2/v0.3 confirm `sonos-api` SOAP is reliable for direct control and reads. The reactive layer above them carries the live correctness concerns.
+This section is what v0.4 needs. Authoritative findings live here; the experiment they came from is `docs/superpowers/specs/2026-05-22-v0.4-spike-findings.md` with raw logs in the sibling `2026-05-22-v0.4-spike-evidence/`.
 
-### Opt-in via `.watch()`
+**Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`). The raw `sonos-sdk-callback-server` + own change-detection alternative ("Path B") stays a v0.5 reconsideration point.
 
-Sonos uses UPnP GENA NOTIFY for property change events. **Nothing fires without an explicit `.watch()` registration.** A 12 s observation window with no `.watch()` registered → 0 events. This makes event-stream granularity a design choice, not a forced shape: prefer **one multiplexed event stream → one pump thread**, not one thread per speaker.
+### Opt-in via `.watch()` — one multiplexed pump thread
 
-### Watch-after-fetch initial-event suppression
+Sonos uses UPnP GENA NOTIFY for property change events. **Nothing fires without an explicit `.watch()` registration.** This makes event-stream granularity a design choice, not a forced shape: prefer **one multiplexed event stream → one pump thread**, not one thread per speaker.
 
-**Key constraint.** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value. Documented upstream as by-design; unlikely to change.
+### Cold-start: the initial SUBSCRIBE NOTIFY *is* the seed probe
 
-Implication: the natural pattern "fetch initial state, then subscribe" will **silently miss the first event**. Do not rely on a post-`fetch()` `.watch()` firing an initial event.
+Empirically resolved by the v0.4 spike on real hardware: when an SDK `.watch()` registration triggers an underlying UPnP `SUBSCRIBE`, the device's **first NOTIFY contains current state for every evented variable** — Volume, Mute, Bass, Treble, TransportState, CurrentTrack, etc. The cache transitions `None → populated` automatically within tens of ms of SUBSCRIBE completion.
 
-**Treat `.watch()` itself as the reachability/seed probe.** If you need an initial value, get it from the first `.watch()` emission (or, accept that the cache populates only when the property next changes). Cold-start handling is the main open design item for v0.4.
+No separate `.fetch()` step is needed for cold-start. The v0.3-era concern about *"watch-after-fetch suppression silently dropping the first event"* applies only to the pattern `.fetch()` then `.watch()` (which we do not use); a bare `.watch()` is its own seed probe.
 
-### Upstream reactive layer is the weak spot
+### `sonos-stream` polls on top of GENA
 
-`sonos-state` / `sonos-stream` / `sonos-event-manager` carry the only known live correctness concern: **intermittent `position` updates** (open upstream). The reactive layer has **no hardware CI** in the upstream repo — every behavior here is hardware-gated and unverified by upstream's automated tests.
+Real architectural fact, not documented in the upstream READMEs. The `sonos-stream` broker maintains GENA subscriptions **and** runs a polling scheduler that re-queries AVTransport + RenderingControl on each speaker. Observed `BrokerConfig` defaults:
 
-The lower layers under it (`soap-client`, `sonos-api`, `callback-server`) are fine. v0.2/v0.3 confirm `sonos-api` SOAP is reliable on real hardware.
+```text
+callback_port_range:    (3400, 3500)
+polling_activation_delay: 5 s   (poll starts 5s after broker init)
+base_polling_interval:    5 s   (per-service poll cadence)
+max_polling_interval:    30 s   (back-off ceiling)
+subscription_timeout: 1800 s   (UPnP SUBSCRIBE TIMEOUT)
+renewal_threshold:    300 s    (renew 5 min before expiry)
+```
 
-### Fallback if reactive proves unreliable
+Implication: Path A surfaces ~2 s `position` cadence on a playing speaker — that's polling, not real GENA. Raw GENA AVTransport NOTIFYs on a playing speaker arrive **~every 3 minutes in bursts of 2–3 messages within ~250 ms** (4-speaker LAN, 27 min idle session, music playing on the Beam). If real-time position matters in a future implementation that doesn't use `sonos-stream`, polling has to come from somewhere.
 
-**Not a fork.** If event delivery via the upstream reactive layer is unreliable on real hardware, narrow the dependency: `oto-wire` uses `sonos-api` `fetch` + `callback-server` (GENA raw NOTIFYs) and `oto-app` does change-detection itself. `oto-app` is already the sole runtime-state owner, so this is a localized swap, not an architectural shift.
+LAN-politeness cost of polling: ~0.5 events/sec/playing-speaker. Trivial in absolute terms but real network traffic. Recorded.
 
-Decision made by a **pre-v0.4 hardware spike** against the 4-speaker LAN — v0.4 implements only the chosen path, doesn't carry both adapters. The non-chosen path is a v0.5 reconsideration point: when topology events land they exercise the reactive layer differently (less hardware coverage upstream, lower event frequency), so re-pick then if v0.5 evidence diverges from the v0.4 spike result.
+### One NOTIFY = many property events (when decomposed)
 
-### SDK `.get()` is `Option`
+UPnP `LastChange` semantics: each service bundles all changed properties into one NOTIFY's `<LastChange>` element. Observed bundles:
 
-`sonos-sdk-state` property accessors (`volume.get()`, `mute.get()`, `playback_state.get()`) are `Option<T>` over an initially empty cache. **Immediately after discovery, they all return `None`** — verified in the 4-speaker spike. The cache populates only via `.fetch()` (one-shot SOAP) or `.watch()` (subscribe). Anything that expects `.get()` to be populated post-discovery is wrong.
+- **RenderingControl** NOTIFY: Volume (Master / LF / RF), Mute (Master / LF / RF), Bass, Treble, Loudness, OutputFixed, SpeakerSize, SubGain, SubCrossover.
+- **AVTransport** NOTIFY: TransportState, CurrentTrack, CurrentTrackURI, CurrentTrackDuration, CurrentTrackMetaData (DIDL-Lite), CurrentPlayMode, NumberOfTracks, CurrentSection, …
 
-For v0.2/v0.3 oto bypasses this layer entirely (`SonosClient::execute_enhanced` direct SOAP). For v0.4 this is the layer we either use or replace per the fallback above.
+If a Path-B-style implementation is ever written, decompose one NOTIFY into N typed property events before emitting to the rest of the stack.
+
+### Doubly-escaped `LastChange` XML
+
+GENA payloads come over HTTP as:
+
+```text
+POST /notify
+NT: upnp:event
+NTS: upnp:propchange
+SID: uuid:RINCON_<uuid>_sub<NNN>
+SEQ: <n>
+
+<e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
+  <e:property>
+    <LastChange>&lt;Event …&gt;&lt;InstanceID val="0"&gt;…&lt;/Event&gt;</LastChange>
+  </e:property>
+</e:propertyset>
+```
+
+The `LastChange` *text* is the URI-encoded inner `<Event>` XML. Inside that Event, `<CurrentTrackMetaData>` is URI-encoded **again** (DIDL-Lite inside Event inside propertyset → three levels of nesting, two of them URI-encoded). A correct parser unescapes twice, then DIDL-parses the inner `<r:streamInfo>` / `<dc:title>` / etc. per the existing `oto-wire::control::parse_track_didl`. Don't roll your own with regex.
+
+### Group volume propagation
+
+When a Sonos client (the official app or oto) issues a group-volume change, the device fires **per-member `Volume` events** on each group member within ~6 ms of each other (observed: two pairs of LR/KT volume NOTIFYs at 6 ms and 6 ms intervals). v0.4's UI / StateManager has to either (a) collapse simultaneous volume events from group-mates inside a small time window, or (b) render group volume from a `GroupVolume` property (separate evented variable) rather than from per-speaker `Volume`. Implementation choice for v0.4; documented as a behavioral fact here.
+
+### Subscription renewal
+
+Path A (`sonos-event-manager` + `sonos-stream`) handles GENA renewal automatically per the `renewal_threshold` setting above — observed firing 4 renewals (one per speaker × service) at ~25 min into a 27 min run. No intervention required.
+
+If a future Path-B-style implementation is built, renewal is the implementer's responsibility — UPnP `SUBSCRIBE` returns a `TIMEOUT` (default 1800 s in our spike) and a follow-up `SUBSCRIBE` with the same `SID` header before expiry. Without renewal, all subscriptions silently expire after the timeout.
+
+### Ergonomic footgun: bare `StateManager::new()`
+
+`sonos_state::StateManager::new()` constructs a manager **without an event manager attached**. `register_watch(speaker, key)` on such a manager registers the watch *intent* but **never sends a UPnP SUBSCRIBE** — no error, no warning, just 0 events forever. The v0.4 spike rev 1 hit this and produced 25 min of empty stdout before the cause was identified.
+
+**Use one of these two patterns instead:**
+
+```rust
+// Recommended — combines watch intent + subscription in one call.
+let em = Arc::new(SonosEventManager::new()?);
+let manager = StateManager::builder().with_event_manager(em.clone()).build()?;
+manager.add_devices(devices)?;
+manager.initialize(topology);
+let cached_volume: Option<Volume> =
+    manager.watch_property_with_subscription::<Volume>(&speaker_id)?;
+
+// Equivalent long form.
+manager.register_watch(&speaker_id, Volume::KEY);
+em.ensure_service_subscribed(speaker_ip, Volume::SERVICE)?;
+```
+
+### SDK `.get()` and `get_property` are cache reads, not fetches
+
+`manager.get_property::<P>(&speaker_id) -> Option<P>` reads the in-memory cache only. Returns `None` until a NOTIFY populates the property. There is **no public `.fetch()` method** for one-shot SOAP-driven cache priming on `sonos-sdk-state` — the only ways to populate the cache are `.watch()` (subscribe and wait for the first NOTIFY) or a direct `sonos-api` SOAP call (`oto-wire`'s existing v0.3 path for one-shot reads).
+
+### Status of the v0.3-era "weak spot" concern
+
+The v0.3-era sonos-notes flagged `sonos-state` / `sonos-stream` / `sonos-event-manager` as the only known live correctness concern, citing **intermittent `position` updates** and the absence of hardware CI upstream.
+
+The v0.4 spike (35 min combined idle + active on a 4-speaker LAN) did **not reproduce** the intermittent-position behavior — position events arrived at consistent ~2 s cadence throughout. Downgrade the concern from "load-bearing risk" to "watch for it; not observed in v0.4 spike." Caveat: single session, single LAN, single playing speaker — not a "solved" claim.
+
+The lower layers under the reactive stack (`soap-client`, `sonos-api`, `callback-server`) remain solid; v0.2/v0.3 confirm `sonos-api` SOAP is reliable on real hardware, and the v0.4 spike confirms `callback-server` HTTP NOTIFY reception works correctly.
+
+### Reconsideration point — v0.5
+
+Path B (raw `sonos-sdk-callback-server` + own SUBSCRIBE + own XML parsing + own change-detection) was prototyped in the v0.4 spike, ran correctly with zero warnings, and remains a viable alternative. Switch trigger: if v0.5 topology events (which exercise the reactive layer differently — less upstream hardware coverage, lower event frequency) surface reliability issues.
+
+Migration cost A → B is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB stream surface, `oto-app::StateManager` — is designed for this swap). The spike-callback-server.rs commits in git history are a working starting point.
+
+### Forward-reference: an alternative Path-B Rust crate
+
+**Out of scope for oto** (a side project bounded at v1.0). Recorded here so the work isn't lost: anyone who wants to build a Path-B Rust library (raw GENA + own change-detection, transparent debugging, smaller dep tree) can start from the v0.4 spike binary at the merged spike-findings commit. Add renewal logic, write the doubly-escaped `LastChange` XML parser, add a public API. The case for such a crate gets stronger if upstream `sonos-sdk-*` stops being maintained or if the documented weak spots actually bite users in production.
 
 ## Concurrency
 
@@ -252,7 +332,7 @@ For v0.2/v0.3 oto bypasses this layer entirely (`SonosClient::execute_enhanced` 
 - **Commands:** non-sync FRB fns (Dart `Future`) into blocking `sonos-api` SOAP. `oto-app` holds a `Mutex<Option<HeldWire>>` **locked across the SOAP call**. Deliberate: commands are user-initiated and low-frequency; serializing them is the LAN-politeness story (no command storms against the user's speakers).
 - **Events (v0.4):** a `ChangeIterator`-equivalent `recv()` blocks. Each event stream exposed to Dart is pumped by a dedicated OS thread that reads the iterator and pushes onto an FRB `Stream`. Revisit lock granularity only if v0.4 event threads contend with command threads on the slot lock.
 
-No `tokio` in oto's own code. `sonos-api` uses async internally via `reqwest`; that is encapsulated and does not surface at the `Wire` boundary.
+No async/await in oto's own surface code. `sonos-api` uses async internally via `reqwest`; v0.4 also pulls a tokio runtime transitively via `sonos-event-manager` (Path A's worker thread). Tokio in the lockfile is the cost of any event-stream architecture for Sonos — both Path A and Path B require it. The principle is "no async syntax in oto's own surface code" (commands stay sync; the event-pump thread blocks on `manager.iter()`), not "no tokio in the lockfile."
 
 ## ZoneGroupState fixture XML
 
