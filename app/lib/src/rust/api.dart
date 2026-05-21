@@ -55,6 +55,29 @@ Future<void> setMute({required String speakerId, required bool muted}) =>
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
 
+/// DEV-ONLY: emits `count` monotonically increasing u64 ticks, `interval_ms`
+/// apart, then terminates. Returns early — incrementing
+/// `DEV_CANCEL_OBSERVATIONS` — if `sink.add` returns `Err`, which happens
+/// when the Dart subscriber cancels.
+Stream<BigInt> devTickStream({required int intervalMs, required int count}) =>
+    RustLib.instance.api.crateApiDevTickStream(
+      intervalMs: intervalMs,
+      count: count,
+    );
+
+/// DEV-ONLY: emits 3 ticks at 50 ms apart, then `sink.add_error(...)` —
+/// the correct in-band channel for stream errors. (Returning `Err` from
+/// a StreamSink fn does NOT propagate to the Dart Stream's `onError`;
+/// the generated binding wraps the function call in `unawaited(...)`
+/// and the error becomes an unhandled async exception. Verified
+/// empirically during the precheck — see the findings note.)
+Stream<BigInt> devErrorStream() =>
+    RustLib.instance.api.crateApiDevErrorStream();
+
+/// DEV-ONLY: read the cancel-observation counter (see `DEV_CANCEL_OBSERVATIONS`).
+Future<int> devCancelObservationsCount() =>
+    RustLib.instance.api.crateApiDevCancelObservationsCount();
+
 @freezed
 sealed class CommandError with _$CommandError implements FrbException {
   const CommandError._();

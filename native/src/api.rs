@@ -140,3 +140,57 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
     let state = oto_app::speaker_state(&id).map_err(crate::map::to_command_error)?;
     Ok(crate::map::to_speaker_state_dto(state))
 }
+
+// ── DEV-ONLY: v0.4 FRB Stream pre-check ─────────────────────────────────────
+//
+// TODO(v0.4): remove this entire section when `subscribe_change_events`
+// lands. These functions exist only to empirically verify FRB v2's
+// Stream<T> semantics (threading, drop/cancel detection, error
+// propagation) before designing the real event-stream surface. Findings
+// note: docs/superpowers/specs/2026-05-22-v0.4-frb-precheck-findings.md.
+
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use crate::frb_generated::StreamSink;
+
+/// Counts how many times a `dev_tick_stream` invocation observed Dart-side
+/// subscription drop (the sink returning `Err` on `add`). The precheck test
+/// snapshots this before + after a cancellation to prove the Rust side can
+/// detect cancel without polling. `AtomicU32` matches the FRB-exposed
+/// return type of `dev_cancel_observations_count` exactly — no truncation
+/// cast at the boundary.
+static DEV_CANCEL_OBSERVATIONS: AtomicU32 = AtomicU32::new(0);
+
+/// DEV-ONLY: emits `count` monotonically increasing u64 ticks, `interval_ms`
+/// apart, then terminates. Returns early — incrementing
+/// `DEV_CANCEL_OBSERVATIONS` — if `sink.add` returns `Err`, which happens
+/// when the Dart subscriber cancels.
+pub fn dev_tick_stream(sink: StreamSink<u64>, interval_ms: u32, count: u32) {
+    for i in 0..count {
+        if sink.add(u64::from(i)).is_err() {
+            DEV_CANCEL_OBSERVATIONS.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(u64::from(interval_ms)));
+    }
+}
+
+/// DEV-ONLY: emits 3 ticks at 50 ms apart, then `sink.add_error(...)` —
+/// the correct in-band channel for stream errors. (Returning `Err` from
+/// a StreamSink fn does NOT propagate to the Dart Stream's `onError`;
+/// the generated binding wraps the function call in `unawaited(...)`
+/// and the error becomes an unhandled async exception. Verified
+/// empirically during the precheck — see the findings note.)
+pub fn dev_error_stream(sink: StreamSink<u64>) {
+    for i in 0..3 {
+        sink.add(i).ok();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    sink.add_error("intentional error from dev_error_stream".to_string())
+        .ok();
+}
+
+/// DEV-ONLY: read the cancel-observation counter (see `DEV_CANCEL_OBSERVATIONS`).
+pub fn dev_cancel_observations_count() -> u32 {
+    DEV_CANCEL_OBSERVATIONS.load(Ordering::Relaxed)
+}
