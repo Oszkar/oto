@@ -85,8 +85,8 @@ void main() {
     expect(
       caughtError,
       isNotNull,
-      reason: 'Returning Err from a StreamSink Rust fn did not surface as '
-          'a Dart Stream error',
+      reason: 'sink.add_error(...) on the Rust side did not surface as a '
+          'Dart Stream error in Stream.forEach',
     );
     expect(
       caughtError.toString(),

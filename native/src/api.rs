@@ -149,15 +149,17 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
 // propagation) before designing the real event-stream surface. Findings
 // note: docs/superpowers/specs/2026-05-22-v0.4-frb-precheck-findings.md.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::frb_generated::StreamSink;
 
 /// Counts how many times a `dev_tick_stream` invocation observed Dart-side
 /// subscription drop (the sink returning `Err` on `add`). The precheck test
 /// snapshots this before + after a cancellation to prove the Rust side can
-/// detect cancel without polling.
-static DEV_CANCEL_OBSERVATIONS: AtomicUsize = AtomicUsize::new(0);
+/// detect cancel without polling. `AtomicU32` matches the FRB-exposed
+/// return type of `dev_cancel_observations_count` exactly — no truncation
+/// cast at the boundary.
+static DEV_CANCEL_OBSERVATIONS: AtomicU32 = AtomicU32::new(0);
 
 /// DEV-ONLY: emits `count` monotonically increasing u64 ticks, `interval_ms`
 /// apart, then terminates. Returns early — incrementing
@@ -190,5 +192,5 @@ pub fn dev_error_stream(sink: StreamSink<u64>) {
 
 /// DEV-ONLY: read the cancel-observation counter (see `DEV_CANCEL_OBSERVATIONS`).
 pub fn dev_cancel_observations_count() -> u32 {
-    DEV_CANCEL_OBSERVATIONS.load(Ordering::Relaxed) as u32
+    DEV_CANCEL_OBSERVATIONS.load(Ordering::Relaxed)
 }
