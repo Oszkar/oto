@@ -60,7 +60,7 @@ We carry one **local patch** against vendored Cargokit to drop 32-bit Android AB
 Install once:
 
 ```bash
-cargo install flutter_rust_bridge_codegen --version "^2" --locked
+cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
 cargo install cargo-ndk cargo-nextest cargo-deny --locked
 ```
 

@@ -101,14 +101,14 @@ final class SpeakerStateFamily extends $Family
 
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
-/// layer (error handling, optimistic UI) is deferred to v0.4.
+/// layer (error handling, optimistic UI) is deferred to v0.5.
 
 @ProviderFor(playbackCommands)
 const playbackCommandsProvider = PlaybackCommandsProvider._();
 
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
-/// layer (error handling, optimistic UI) is deferred to v0.4.
+/// layer (error handling, optimistic UI) is deferred to v0.5.
 
 final class PlaybackCommandsProvider
     extends
@@ -120,7 +120,7 @@ final class PlaybackCommandsProvider
     with $Provider<PlaybackCommands> {
   /// Facade for the six transport/volume commands. Methods are thin pass-throughs
   /// to the FRB-generated Dart bindings; no state is held here. A real command
-  /// layer (error handling, optimistic UI) is deferred to v0.4.
+  /// layer (error handling, optimistic UI) is deferred to v0.5.
   const PlaybackCommandsProvider._()
     : super(
         from: null,

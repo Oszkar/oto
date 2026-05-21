@@ -30,6 +30,14 @@ sonos-api = { workspace = true }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
 if-addrs = "0.15"
+# Non-blocking I/O multiplexing for the SSDP Phase-2 recv loop. The
+# previous stdlib design used per-socket blocking reads with a 250 ms
+# read timeout; on a host with many quiet sockets (VPN/Hyper-V/WSL
+# vEthernet adapters that bind+send but never receive) a single Phase-2
+# pass could consume the entire bounded window on timeouts and miss a
+# responder bound to a later socket. mio::Poll waits collectively, so a
+# quiet socket cannot consume any of the deadline. Win+Android+*nix.
+mio = { version = "1.0", features = ["net", "os-poll"] }
 # DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
 # the locked graph via sonos-api (transitive) — unify, don't bump.
 quick-xml = { workspace = true }

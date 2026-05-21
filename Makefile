@@ -2,10 +2,10 @@
 # clone can run `make check` without installing anything extra.
 
 .PHONY: default gen gen-rust gen-dart gen-check check fmt fmt-fix clippy analyze test \
-        test-rust test-dart deny install-hooks build-apk build-win bootstrap clean
+        test-rust test-dart test-integration deny install-hooks build-apk build-win bootstrap clean
 
 default:
-	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart deny install-hooks build-apk build-win bootstrap clean"
+	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart test-integration deny install-hooks build-apk build-win bootstrap clean"
 
 gen: gen-rust gen-dart
 
@@ -39,6 +39,10 @@ test-rust:
 
 test-dart:
 	cd app && flutter test
+
+# Bridge smoke — see justfile for full rationale. Not part of `test`/CI.
+test-integration:
+	cd app && flutter test integration_test/
 
 deny:
 	cd native && cargo deny check

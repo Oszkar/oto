@@ -74,7 +74,12 @@ pub enum CommandError {
 // multicast is dropped without it. v0.1 discovery is verified on Windows via
 // this bridge.
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
-/// NOT on the #[frb(init)] path. Identity-only snapshot.
+/// NOT on the #[frb(init)] path. The returned snapshot carries the
+/// topology — speaker identities (id / room / model / ip) plus the
+/// group identities they belong to, with the coordinator at
+/// `members[0]` (D3) — but no live state: volume, mute, and transport
+/// are read separately via `speaker_state`. Live state will move to an
+/// event-fed cache in v0.4 (ARCHITECTURE.md Open Q7).
 pub fn discover() -> Result<Topology, DiscoveryError> {
     // Glue only: delegate inward, then the representational map (tested
     // LAN-free in `native/tests/`; see `crate::map`).

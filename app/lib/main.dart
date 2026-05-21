@@ -16,7 +16,7 @@ class OtoApp extends StatelessWidget {
   }
 }
 
-/// Neutral placeholder scaffold. Real UI is v0.4.
+/// Neutral placeholder scaffold. Real UI is v0.5.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 

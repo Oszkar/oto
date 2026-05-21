@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+
+Post-v0.3 review batch (second tranche). Discovery robustness + doc drift cleanup.
+
+- **SSDP starvation under many quiet sockets:** `collect_until` now multiplexes on `mio::Poll`, so the Phase-2 wait is collective. The previous per-socket 250 ms read timeout could let 12+ quiet adapters (the multi-NIC Windows worst case: VPN/Hyper-V/WSL/Docker vEthernet enumerated ahead of the LAN) consume the full 3 s bounded window before reaching a responder. Adds a regression test with 13 quiet sockets ahead of the responder. `mio` was already a transitive dep; promoted to a direct one.
+- **All-NIC-fail diagnostic:** when every usable IPv4 interface fails bind/send/register, `discover_locations` now returns `WireError::Network` with the last underlying cause instead of `Ok(vec![])`. The old path mapped that to `NoDevicesFound`, which falsely implied an empty LAN when the real cause was a local socket-stack failure.
+- **Concurrent `discover_with` race:** added a `DISCOVER_LOCK` in `oto-app` that serialises overlapping discoveries end-to-end (make + `wire.discover()` + slot replacement). The slot lock is unchanged; playback commands are still independent of discovery duration. Prevents a slower-but-older `discover_with` from last-writer-wins overwriting a faster newer one.
+
+### Changed
+
+- `app/integration_test/simple_test.dart`: retargeted from the removed v0.1 `greet` scaffold onto the current placeholder `HomePage`. New `just test-integration` recipe (mirrored in `Makefile`) for the manual bridge smoke — not gated by CI yet (Flutter `integration_test` needs a display target).
+- README's `flutter_rust_bridge_codegen` install command pinned to `2.12.0` (matches CI / `native/Cargo.toml` / `CONTRIBUTING.md`'s alignment mandate).
+- Stale `v0.4` UI references swept to `v0.5` (UI = v0.5, events = v0.4) across `app/lib/main.dart`, `app/lib/src/state/playback.dart`, `app/test/playback_provider_test.dart`. `api.rs::discover` doc updated — the snapshot is no longer "identity-only" since v0.3 added groups + coordinators. Generated source refreshed via `just gen`.
+
 ## [0.3.0] - 2026-05-20
 
 ### Added
