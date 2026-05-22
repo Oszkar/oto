@@ -31,6 +31,19 @@ oto-wire = { path = "crates/wire" }
 # See AGENTS.md §4.
 sonos-api = "=0.5.2"
 
+# v0.4 Path A reactive event stack — the `tatimblin/sonos-sdk` family's
+# `sonos-sdk-state` + `sonos-sdk-event-manager` + `sonos-sdk-stream` +
+# `sonos-sdk-callback-server` crates. Wrap upstream GENA-driven property
+# events into one `ChangeEvent` stream inside `oto-wire`. Pinned exact
+# (same precedent as `sonos-api`); the v0.4 spike (see
+# `docs/superpowers/specs/2026-05-22-v0.4-spike-findings.md`) validated
+# the 0.5.2 surface on real hardware. Do NOT bump without re-running
+# the v0.4 acceptance gate.
+sonos-sdk-state = "=0.5.2"
+sonos-sdk-event-manager = "=0.5.2"
+sonos-sdk-stream = "=0.5.2"
+sonos-sdk-callback-server = "=0.5.2"
+
 # XML parser used by oto-wire's DIDL-Lite track-metadata parser
 # (parse_track_didl in control.rs). Already in the locked graph via
 # sonos-api — unify, don't bump.
