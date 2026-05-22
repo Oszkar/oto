@@ -236,6 +236,15 @@ impl Wire for MockWire {
             current_track: prev_track,
             position: None,
         });
+        // Auto-emit per-group Playback event (Slice 2). Real Sonos
+        // surfaces AVTransport TransportState NOTIFYs after a Play
+        // SOAP success; the mock mirrors that path.
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::Playback {
+                group: group.clone(),
+                state: PlaybackState::Playing,
+            });
+        }
         Ok(())
     }
 
@@ -257,6 +266,12 @@ impl Wire for MockWire {
             current_track: prev_track,
             position: None,
         });
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::Playback {
+                group: group.clone(),
+                state: PlaybackState::Paused,
+            });
+        }
         Ok(())
     }
 
@@ -302,6 +317,13 @@ impl Wire for MockWire {
             .get_mut(speaker)
             .ok_or_else(|| WireError::NotFound(speaker.to_string()))?;
         entry.muted = Some(muted);
+        // Auto-emit. Mirrors real Sonos: SOAP success → device NOTIFY.
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::Mute {
+                speaker: speaker.clone(),
+                muted,
+            });
+        }
         Ok(())
     }
 
@@ -340,18 +362,60 @@ impl Wire for MockWire {
             return Err(WireError::AlreadySubscribed);
         }
         let (tx, rx) = mpsc::channel();
-        // Seed: one Volume event per known speaker carrying its
-        // current cached volume (mirrors the real cold-start NOTIFY).
-        let seeds: Vec<ChangeEvent> = guard
-            .speakers
-            .iter()
-            .filter_map(|(sid, st)| {
-                st.volume.map(|v| ChangeEvent::Volume {
+        // ── Slice 2 seed events ─────────────────────────────────────────
+        //
+        // Real Sonos sends a cold-start NOTIFY per subscribed service
+        // when a new subscription opens. The mock mirrors that:
+        //   - per-speaker Volume (one event per cached speaker.volume)
+        //   - per-speaker Mute   (one event per cached speaker.muted)
+        //   - per-group   Playback (one event per group, state from
+        //     the coordinator's cached transport — defaults to
+        //     PlaybackState::Stopped from the seeded fixture)
+        //
+        // Track is intentionally NOT seeded: `oto_core::Track` carries
+        // optional metadata fields and the fixture has no media
+        // loaded (`transport.current_track` is None on every cached
+        // speaker), so emitting a Track seed would require either
+        // (a) inventing fake metadata that drifts from the rest of
+        // the fixture, or (b) adding a Track::default impl that
+        // pollutes the type system with "all None" sentinels for
+        // tests' sake. Slice-4 tests that need a track use
+        // `MockWire::push_event` (or the dev_push seam in api.rs).
+        let mut seeds: Vec<ChangeEvent> = Vec::with_capacity(
+            // 3 per speaker (volume+mute) + groups; ~8 for the
+            // 3-speaker / 2-group fixture. Capacity is a hint;
+            // re-allocation is fine.
+            guard.speakers.len() * 2 + guard.coords.len(),
+        );
+        for (sid, st) in &guard.speakers {
+            if let Some(v) = st.volume {
+                seeds.push(ChangeEvent::Volume {
                     speaker: sid.clone(),
                     volume: v,
-                })
-            })
-            .collect();
+                });
+            }
+            if let Some(m) = st.muted {
+                seeds.push(ChangeEvent::Mute {
+                    speaker: sid.clone(),
+                    muted: m,
+                });
+            }
+        }
+        for (gid, coord) in &guard.coords {
+            // Read the coordinator's cached transport state. The
+            // seeded fixture always populates this with
+            // PlaybackState::Stopped, so on an unmodified MockWire
+            // every group emits one Playback { Stopped } seed.
+            let state = guard
+                .speakers
+                .get(coord)
+                .and_then(|s| s.transport.as_ref().map(|t| t.state))
+                .unwrap_or(PlaybackState::Stopped);
+            seeds.push(ChangeEvent::Playback {
+                group: gid.clone(),
+                state,
+            });
+        }
         for ev in seeds {
             // Pre-pump send — receiver is buffered, so this can't fail.
             let _ = tx.send(ev);
@@ -548,23 +612,57 @@ mod tests {
         assert_eq!(w.subscribe_speakers(), Err(WireError::AlreadySubscribed));
     }
 
+    /// Collect every event the mock's pump has queued, with a short
+    /// per-recv timeout. Used by Slice 2 tests to drain the seed phase
+    /// without hardcoding a count (the count drifts as variants land).
+    fn drain_seeds(rx: &Receiver<ChangeEvent>) -> Vec<ChangeEvent> {
+        let mut out = Vec::new();
+        while let Ok(ev) = rx.recv_timeout(std::time::Duration::from_millis(50)) {
+            out.push(ev);
+        }
+        out
+    }
+
     #[test]
-    fn subscribe_emits_seed_volume_per_speaker() {
+    fn subscribe_emits_volume_mute_playback_seeds() {
         let w = MockWire::default();
         w.discover().unwrap();
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().expect("first take returns Some");
-        // Fixture has 3 speakers → 3 seed Volume events.
-        let mut seen = std::collections::HashSet::new();
-        for _ in 0..3 {
-            match rx.recv_timeout(std::time::Duration::from_millis(100)) {
-                Ok(ChangeEvent::Volume { speaker, .. }) => {
-                    seen.insert(speaker);
+
+        let seeds = drain_seeds(&rx);
+
+        // Fixture: 3 speakers + 2 groups. Expect:
+        //   3 Volume   (one per speaker, all SEED_VOLUME)
+        //   3 Mute     (one per speaker, all false)
+        //   2 Playback (one per group, all Stopped)
+        let mut volume_speakers = std::collections::HashSet::new();
+        let mut mute_speakers = std::collections::HashSet::new();
+        let mut playback_groups = std::collections::HashSet::new();
+        for ev in &seeds {
+            match ev {
+                ChangeEvent::Volume { speaker, .. } => {
+                    volume_speakers.insert(speaker.clone());
                 }
-                other => panic!("expected Volume seed, got {other:?}"),
+                ChangeEvent::Mute { speaker, muted } => {
+                    assert!(!muted, "seed mute starts unmuted");
+                    mute_speakers.insert(speaker.clone());
+                }
+                ChangeEvent::Playback { group, state } => {
+                    assert_eq!(*state, PlaybackState::Stopped, "seed playback is Stopped");
+                    playback_groups.insert(group.clone());
+                }
+                other => panic!("unexpected seed event: {other:?}"),
             }
         }
-        assert_eq!(seen.len(), 3, "one Volume seed per speaker");
+        assert_eq!(volume_speakers.len(), 3, "one Volume seed per speaker");
+        assert_eq!(mute_speakers.len(), 3, "one Mute seed per speaker");
+        assert_eq!(playback_groups.len(), 2, "one Playback seed per group");
+        assert_eq!(
+            seeds.len(),
+            3 + 3 + 2,
+            "no extra (e.g. Track) seeds emitted by default"
+        );
     }
 
     #[test]
@@ -573,10 +671,9 @@ mod tests {
         w.discover().unwrap();
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().unwrap();
-        // Drain the 3 seed events.
-        for _ in 0..3 {
-            rx.recv().unwrap();
-        }
+        // Drain the seeds (now 8 events: 3 Volume + 3 Mute + 2 Playback)
+        // without hardcoding the count.
+        let _ = drain_seeds(&rx);
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         w.set_volume(&kitchen, Volume::new(70).unwrap()).unwrap();
         match rx
@@ -592,14 +689,75 @@ mod tests {
     }
 
     #[test]
+    fn set_mute_auto_emits_mute_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let office = SpeakerId::new("RINCON_OFFICE");
+        w.set_mute(&office, true).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Mute { speaker, muted } => {
+                assert_eq!(speaker, office);
+                assert!(muted);
+            }
+            other => panic!("expected Mute event from set_mute, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn play_auto_emits_playback_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_KITCHEN:1");
+        w.play(&g).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Playback { group, state } => {
+                assert_eq!(group, g);
+                assert_eq!(state, PlaybackState::Playing);
+            }
+            other => panic!("expected Playback event from play, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pause_auto_emits_playback_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_OFFICE:0");
+        w.pause(&g).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Playback { group, state } => {
+                assert_eq!(group, g);
+                assert_eq!(state, PlaybackState::Paused);
+            }
+            other => panic!("expected Playback event from pause, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn push_event_surfaces_arbitrary_event() {
         let w = MockWire::default();
         w.discover().unwrap();
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().unwrap();
-        for _ in 0..3 {
-            rx.recv().unwrap();
-        } // drain seeds
+        let _ = drain_seeds(&rx);
         w.push_event(ChangeEvent::SubscriptionError {
             speaker: SpeakerId::new("RINCON_GHOST"),
             message: "synthesized for test".into(),
