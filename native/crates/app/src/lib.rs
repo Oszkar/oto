@@ -194,15 +194,6 @@ pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
         .and_then(|w| w.take_event_stream())
 }
 
-/// Apply an event to the StateManager cache. Called by the FRB
-/// consumer loop on the FRB worker thread.
-///
-/// Prefer `apply_event_at_generation` for the production consumer
-/// loop; this unconditional shim is kept for tests + back-compat.
-pub fn apply_event(event: &ChangeEvent) {
-    state_manager().apply_event(event);
-}
-
 /// Generation-aware apply — no-op if `gen` doesn't match the current
 /// `state_manager` generation. The FRB consumer loop captures the
 /// generation once at start, then passes it on every event so a

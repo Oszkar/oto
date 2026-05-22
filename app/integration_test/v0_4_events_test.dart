@@ -189,21 +189,30 @@ void main() {
   });
 
   test(
-    'v0.4 Slice 2: rediscovery — second devDiscoverMock replaces wire cleanly without stale events',
+    'v0.4 Slice 2: rediscovery — OLD stream completes cleanly and NEW stream emits fresh seed shape',
     () async {
-      // Acceptance test for the generation-token race fix (PR #43
-      // Codex P2 #3). The flow:
+      // This verifies the *stream lifecycle* across a discover_with-
+      // induced wire swap. It does NOT directly verify the generation-
+      // token's no-op behavior in `apply_event_at_generation` — that
+      // invariant is exercised by the Rust unit test
+      // `stale_consumer_loop_does_not_pollute_after_bump_and_clear` in
+      // `state_manager.rs`. Here we check the surrounding Dart/FRB
+      // plumbing the Rust fix relies on:
       //
       //   1. First discover  → subscribe → drain seeds.
-      //   2. setVolume on Kitchen → assert event arrives.
+      //   2. setVolume on Kitchen → assert event arrives on OLD stream.
       //   3. Second discover. The OLD wire's Sender is dropped by
       //      slot replacement; the OLD `subscribe_change_events` loop
       //      sees recv Err and returns; the Dart subscription on the
       //      OLD stream completes (onDone fires).
-      //   4. NEW subscribe → drain NEW seeds. The seed count must
-      //      match the freshly-discovered topology — if a stale OLD
-      //      event leaked into the NEW state, the seed count would
-      //      mismatch OR the seeded values would be wrong.
+      //   4. NEW subscribe → drain NEW seeds. Seed shape must match
+      //      the fresh deterministic fixture — Kitchen volume = 30
+      //      (SEED_VOLUME), NOT the 88 we wrote on the OLD wire.
+      //      The state-manager cache check happens in the Rust unit
+      //      test above; this Dart test pins that the mock instance
+      //      *itself* is freshly constructed on the second discover
+      //      (a leaked Arc<MockWire> would surface here as a stale
+      //      seed value).
 
       await api.devDiscoverMock();
       final h1 = _subscribeAndCollect();

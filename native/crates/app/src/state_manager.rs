@@ -80,14 +80,12 @@ impl StateManager {
         self.apply_event_inner(event);
     }
 
-    /// Apply a `ChangeEvent` to the cache unconditionally. Kept for
-    /// internal use + the existing `apply_event` shim so the
-    /// pre-generation tests continue to exercise the dispatch logic.
-    ///
-    /// External callers should prefer `apply_event_at_generation`;
-    /// `apply_event` exists as a thin proxy for tests that don't care
-    /// about the generation race.
-    pub fn apply_event(&self, event: &ChangeEvent) {
+    /// Apply a `ChangeEvent` to the cache unconditionally. Test-only —
+    /// pre-generation tests exercise the dispatch logic without
+    /// threading a generation through every call. Production paths
+    /// MUST use `apply_event_at_generation`.
+    #[cfg(test)]
+    pub(crate) fn apply_event(&self, event: &ChangeEvent) {
         self.apply_event_inner(event);
     }
 
@@ -203,6 +201,16 @@ impl StateManager {
     /// `Acquire` will then observe the cleared maps (which is the
     /// correct invariant: an event that lands at the new generation
     /// should be the only thing in the cache).
+    ///
+    /// Not atomic across `bump → speakers.clear → groups.clear`. Safe by
+    /// construction: no consumer can observe an intermediate state.
+    /// OLD consumers fail the gen check (the bump precedes both clears,
+    /// so an OLD consumer always sees the new gen as soon as it sees
+    /// any side effect) and skip without reading or writing. NEW
+    /// consumers can only enter via `take_event_stream`, which requires
+    /// the wire slot to be replaced — and `discover_with` runs the slot
+    /// replacement *after* this call returns, so NEW consumers cannot
+    /// observe a partially-cleared cache.
     pub fn bump_and_clear(&self) {
         // Order: bump first (Release), then clear. The Acquire-load
         // in `apply_event_at_generation` will see the bumped value
