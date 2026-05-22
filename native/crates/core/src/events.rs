@@ -26,7 +26,10 @@ pub enum ChangeEvent {
     Mute { speaker: SpeakerId, muted: bool },
     /// A group's transport state changed (per-group — applies to all
     /// coordinator + member speakers in the group; see oto-core D2).
-    Playback { group: GroupId, state: PlaybackState },
+    Playback {
+        group: GroupId,
+        state: PlaybackState,
+    },
     /// A group's current track changed. Carries the full `Track` so a
     /// Slice 4 cache reader gets metadata + URI in one event.
     Track { group: GroupId, track: Track },

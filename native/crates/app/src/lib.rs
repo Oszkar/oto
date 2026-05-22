@@ -382,22 +382,31 @@ mod tests {
              MockWire's tx channel is None and the receiver is unreachable",
         );
 
-        // Drain seed events with a generous bound: the fixture has
-        // 3 speakers, so subscribe seeds exactly 3 Volume events.
-        // Use `recv_timeout` so a regression (e.g. subscribe never
-        // happened, so the channel is empty) fails the test fast
-        // instead of hanging.
+        // Drain seed events until the channel goes quiet. Slice 2
+        // expanded the mock's seed set (Volume + Mute + Playback —
+        // see `MockWire::subscribe_speakers`); rather than hardcode
+        // the exact count, count the Volume seeds specifically and
+        // assert ≥3 (one per fixture speaker). A regression that
+        // dropped the subscribe call would surface as zero events
+        // arriving in the recv_timeout window.
         let mut volume_seeds = 0usize;
-        for _ in 0..3 {
-            match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                Ok(ChangeEvent::Volume { .. }) => volume_seeds += 1,
-                Ok(other) => panic!("expected Volume seed, got {other:?}"),
-                Err(e) => panic!("missing seed event: {e:?}"),
+        let mut total_seeds = 0usize;
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                Ok(ChangeEvent::Volume { .. }) => {
+                    volume_seeds += 1;
+                    total_seeds += 1;
+                }
+                Ok(_) => total_seeds += 1,
+                Err(_) => break,
+            }
+            if total_seeds > 32 {
+                panic!("seed phase produced > 32 events; runaway");
             }
         }
         assert!(
             volume_seeds >= 3,
-            "subscribe_speakers must emit ≥3 Volume seeds for the 3-speaker fixture; got {volume_seeds}"
+            "subscribe_speakers must emit ≥3 Volume seeds for the 3-speaker fixture; got {volume_seeds} (total seeds: {total_seeds})"
         );
     }
 
