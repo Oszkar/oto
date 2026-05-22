@@ -32,6 +32,15 @@ pub fn to_discovery_error(e: WireError) -> DiscoveryError {
         WireError::NoDevicesFound => DiscoveryError::NoDevicesFound,
         WireError::Backend(m) => DiscoveryError::Sdk(m),
         WireError::NotFound(m) => DiscoveryError::Sdk(format!("not found: {m}")),
+        // v0.4 subscription errors raised by `discover_with` after a
+        // successful `wire.discover()` — surface as a diagnostic so a
+        // logic bug here is visible to Dart rather than masked.
+        WireError::NoSpeakersDiscovered => {
+            DiscoveryError::Sdk("subscribe_speakers called before discovery".into())
+        }
+        WireError::AlreadySubscribed => {
+            DiscoveryError::Sdk("subscribe_speakers already called on this wire".into())
+        }
     }
 }
 
@@ -51,6 +60,15 @@ pub fn to_command_error(e: WireError) -> CommandError {
         // the match is exhaustive. Surface as NotFound so Dart can handle it
         // uniformly with a missing-speaker condition.
         WireError::NoDevicesFound => CommandError::NotFound("no devices discovered".into()),
+        // v0.4 subscription errors cannot reach a command (they're raised
+        // by `discover_with` before the wire is installed), but the match
+        // must be exhaustive. Surface as a Sonos diagnostic.
+        WireError::NoSpeakersDiscovered => {
+            CommandError::Sonos("subscribe_speakers called before discovery".into())
+        }
+        WireError::AlreadySubscribed => {
+            CommandError::Sonos("subscribe_speakers already called on this wire".into())
+        }
     }
 }
 

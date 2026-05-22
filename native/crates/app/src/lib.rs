@@ -43,10 +43,16 @@
 //!   `discover_with` that acquires the lock last is the one whose wire
 //!   ends up in the slot.
 
+mod state_manager;
+
 use std::sync::{Mutex, OnceLock};
 
-use oto_core::{DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, Volume, Wire, WireError};
+use oto_core::{
+    ChangeEvent, DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, Volume, Wire, WireError,
+};
 use oto_wire::SonosWire;
+
+use crate::state_manager::StateManager;
 
 // `Send` lets the wire cross threads into the static; `Sync` is not
 // needed — all access is serialised by the `Mutex`. Don't add `+ Sync`.
@@ -64,6 +70,14 @@ fn slot() -> &'static Mutex<Option<HeldWire>> {
 fn discover_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
+}
+
+/// Process-global event-fed cache. Mutated by the FRB-worker consumer
+/// loop in `api.rs::subscribe_change_events` via `apply_event`, cleared
+/// by `discover_with` on every wire replacement.
+fn state_manager() -> &'static StateManager {
+    static SM: OnceLock<StateManager> = OnceLock::new();
+    SM.get_or_init(StateManager::new)
 }
 
 /// Lock the slot and call `f` with the held wire, returning
@@ -96,6 +110,14 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let wire = make();
     let snapshot = wire.discover()?;
+    // v0.4: activate the subscription before installing the wire so
+    // `take_event_stream` is callable as soon as the slot is replaced.
+    // A NoSpeakersDiscovered here would be a logic bug (discover()
+    // just succeeded), but treat any error as a discovery failure.
+    wire.subscribe_speakers()?;
+    // Replace the wire AND clear the cache — old wire's state is
+    // stale; new wire seeds via initial NOTIFYs.
+    state_manager().clear();
     *slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(wire);
@@ -142,6 +164,31 @@ pub fn speaker_state(speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
     with_wire(|w| w.speaker_state(speaker))
 }
 
+/// Hand the v0.4 event-stream receiver to the FRB consumer loop.
+/// Called by `api.rs::subscribe_change_events`. Returns `None` if no
+/// wire is installed yet, or if the receiver has already been taken
+/// (one consumer per wire — per spec § 4 + FRB pre-check § 5).
+pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
+    slot()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .and_then(|w| w.take_event_stream())
+}
+
+/// Apply an event to the StateManager cache. Called by the FRB
+/// consumer loop on the FRB worker thread.
+pub fn apply_event(event: &ChangeEvent) {
+    state_manager().apply_event(event);
+}
+
+/// Read a speaker's cached volume — used by Slice 4's
+/// cache-backed `speaker_state`. v0.4 read surface; the full cache
+/// API lands in Task 2 / Slice 4 of this plan.
+pub fn cached_volume(speaker: &SpeakerId) -> Option<Volume> {
+    state_manager().volume_of(speaker)
+}
+
 // ── Test-only helpers ─────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -149,6 +196,9 @@ fn clear_slot() {
     *slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    // Cache survives across tests in the same process otherwise; clear it
+    // so the next test starts from a known-empty state.
+    state_manager().clear();
 }
 
 #[cfg(test)]
