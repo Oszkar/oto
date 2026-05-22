@@ -503,13 +503,37 @@ impl SseDecode for crate::api::ChangeEventDto {
             }
             1 => {
                 let mut var_speakerId = <String>::sse_decode(deserializer);
+                let mut var_muted = <bool>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::Mute {
+                    speaker_id: var_speakerId,
+                    muted: var_muted,
+                };
+            }
+            2 => {
+                let mut var_groupId = <String>::sse_decode(deserializer);
+                let mut var_state = <crate::api::PlaybackStateDto>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::Playback {
+                    group_id: var_groupId,
+                    state: var_state,
+                };
+            }
+            3 => {
+                let mut var_groupId = <String>::sse_decode(deserializer);
+                let mut var_track = <crate::api::TrackDto>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::Track {
+                    group_id: var_groupId,
+                    track: var_track,
+                };
+            }
+            4 => {
+                let mut var_speakerId = <String>::sse_decode(deserializer);
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::ChangeEventDto::SubscriptionError {
                     speaker_id: var_speakerId,
                     message: var_message,
                 };
             }
-            2 => {
+            5 => {
                 let mut var_speakerId = <String>::sse_decode(deserializer);
                 return crate::api::ChangeEventDto::SubscriptionRecovered {
                     speaker_id: var_speakerId,
@@ -878,17 +902,35 @@ impl flutter_rust_bridge::IntoDart for crate::api::ChangeEventDto {
                 volume.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            crate::api::ChangeEventDto::Mute { speaker_id, muted } => [
+                1.into_dart(),
+                speaker_id.into_into_dart().into_dart(),
+                muted.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ChangeEventDto::Playback { group_id, state } => [
+                2.into_dart(),
+                group_id.into_into_dart().into_dart(),
+                state.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ChangeEventDto::Track { group_id, track } => [
+                3.into_dart(),
+                group_id.into_into_dart().into_dart(),
+                track.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             crate::api::ChangeEventDto::SubscriptionError {
                 speaker_id,
                 message,
             } => [
-                1.into_dart(),
+                4.into_dart(),
                 speaker_id.into_into_dart().into_dart(),
                 message.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
-                [2.into_dart(), speaker_id.into_into_dart().into_dart()].into_dart()
+                [5.into_dart(), speaker_id.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -1123,16 +1165,31 @@ impl SseEncode for crate::api::ChangeEventDto {
                 <String>::sse_encode(speaker_id, serializer);
                 <u32>::sse_encode(volume, serializer);
             }
+            crate::api::ChangeEventDto::Mute { speaker_id, muted } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(speaker_id, serializer);
+                <bool>::sse_encode(muted, serializer);
+            }
+            crate::api::ChangeEventDto::Playback { group_id, state } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(group_id, serializer);
+                <crate::api::PlaybackStateDto>::sse_encode(state, serializer);
+            }
+            crate::api::ChangeEventDto::Track { group_id, track } => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(group_id, serializer);
+                <crate::api::TrackDto>::sse_encode(track, serializer);
+            }
             crate::api::ChangeEventDto::SubscriptionError {
                 speaker_id,
                 message,
             } => {
-                <i32>::sse_encode(1, serializer);
+                <i32>::sse_encode(4, serializer);
                 <String>::sse_encode(speaker_id, serializer);
                 <String>::sse_encode(message, serializer);
             }
             crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
-                <i32>::sse_encode(2, serializer);
+                <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(speaker_id, serializer);
             }
             _ => {

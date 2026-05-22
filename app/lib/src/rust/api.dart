@@ -95,6 +95,18 @@ sealed class ChangeEventDto with _$ChangeEventDto {
     required String speakerId,
     required int volume,
   }) = ChangeEventDto_Volume;
+  const factory ChangeEventDto.mute({
+    required String speakerId,
+    required bool muted,
+  }) = ChangeEventDto_Mute;
+  const factory ChangeEventDto.playback({
+    required String groupId,
+    required PlaybackStateDto state,
+  }) = ChangeEventDto_Playback;
+  const factory ChangeEventDto.track({
+    required String groupId,
+    required TrackDto track,
+  }) = ChangeEventDto_Track;
   const factory ChangeEventDto.subscriptionError({
     required String speakerId,
     required String message,

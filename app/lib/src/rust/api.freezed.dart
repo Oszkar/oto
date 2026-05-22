@@ -14,61 +14,30 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$ChangeEventDto {
 
- String get speakerId;
-/// Create a copy of ChangeEventDto
-/// with the given fields replaced by the non-null parameter values.
-@JsonKey(includeFromJson: false, includeToJson: false)
-@pragma('vm:prefer-inline')
-$ChangeEventDtoCopyWith<ChangeEventDto> get copyWith => _$ChangeEventDtoCopyWithImpl<ChangeEventDto>(this as ChangeEventDto, _$identity);
+
 
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto&&(identical(other.speakerId, speakerId) || other.speakerId == speakerId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto);
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,speakerId);
+int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'ChangeEventDto(speakerId: $speakerId)';
+  return 'ChangeEventDto()';
 }
 
 
 }
 
 /// @nodoc
-abstract mixin class $ChangeEventDtoCopyWith<$Res>  {
-  factory $ChangeEventDtoCopyWith(ChangeEventDto value, $Res Function(ChangeEventDto) _then) = _$ChangeEventDtoCopyWithImpl;
-@useResult
-$Res call({
- String speakerId
-});
-
-
-
-
-}
-/// @nodoc
-class _$ChangeEventDtoCopyWithImpl<$Res>
-    implements $ChangeEventDtoCopyWith<$Res> {
-  _$ChangeEventDtoCopyWithImpl(this._self, this._then);
-
-  final ChangeEventDto _self;
-  final $Res Function(ChangeEventDto) _then;
-
-/// Create a copy of ChangeEventDto
-/// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? speakerId = null,}) {
-  return _then(_self.copyWith(
-speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
-as String,
-  ));
-}
-
+class $ChangeEventDtoCopyWith<$Res>  {
+$ChangeEventDtoCopyWith(ChangeEventDto _, $Res Function(ChangeEventDto) __);
 }
 
 
@@ -86,11 +55,14 @@ extension ChangeEventDtoPatterns on ChangeEventDto {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_Mute value)?  mute,TResult Function( ChangeEventDto_Playback value)?  playback,TResult Function( ChangeEventDto_Track value)?  track,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
-return volume(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return volume(_that);case ChangeEventDto_Mute() when mute != null:
+return mute(_that);case ChangeEventDto_Playback() when playback != null:
+return playback(_that);case ChangeEventDto_Track() when track != null:
+return track(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that);case _:
   return orElse();
@@ -110,11 +82,14 @@ return subscriptionRecovered(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_Mute value)  mute,required TResult Function( ChangeEventDto_Playback value)  playback,required TResult Function( ChangeEventDto_Track value)  track,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume():
-return volume(_that);case ChangeEventDto_SubscriptionError():
+return volume(_that);case ChangeEventDto_Mute():
+return mute(_that);case ChangeEventDto_Playback():
+return playback(_that);case ChangeEventDto_Track():
+return track(_that);case ChangeEventDto_SubscriptionError():
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered():
 return subscriptionRecovered(_that);}
 }
@@ -130,11 +105,14 @@ return subscriptionRecovered(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_Mute value)?  mute,TResult? Function( ChangeEventDto_Playback value)?  playback,TResult? Function( ChangeEventDto_Track value)?  track,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
-return volume(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return volume(_that);case ChangeEventDto_Mute() when mute != null:
+return mute(_that);case ChangeEventDto_Playback() when playback != null:
+return playback(_that);case ChangeEventDto_Track() when track != null:
+return track(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that);case _:
   return null;
@@ -153,10 +131,13 @@ return subscriptionRecovered(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  bool muted)?  mute,TResult Function( String groupId,  PlaybackStateDto state)?  playback,TResult Function( String groupId,  TrackDto track)?  track,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
-return volume(_that.speakerId,_that.volume);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute() when mute != null:
+return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback() when playback != null:
+return playback(_that.groupId,_that.state);case ChangeEventDto_Track() when track != null:
+return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that.speakerId);case _:
   return orElse();
@@ -176,10 +157,13 @@ return subscriptionRecovered(_that.speakerId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  bool muted)  mute,required TResult Function( String groupId,  PlaybackStateDto state)  playback,required TResult Function( String groupId,  TrackDto track)  track,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume():
-return volume(_that.speakerId,_that.volume);case ChangeEventDto_SubscriptionError():
+return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute():
+return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback():
+return playback(_that.groupId,_that.state);case ChangeEventDto_Track():
+return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError():
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered():
 return subscriptionRecovered(_that.speakerId);}
 }
@@ -195,10 +179,13 @@ return subscriptionRecovered(_that.speakerId);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  bool muted)?  mute,TResult? Function( String groupId,  PlaybackStateDto state)?  playback,TResult? Function( String groupId,  TrackDto track)?  track,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
-return volume(_that.speakerId,_that.volume);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute() when mute != null:
+return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback() when playback != null:
+return playback(_that.groupId,_that.state);case ChangeEventDto_Track() when track != null:
+return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that.speakerId);case _:
   return null;
@@ -215,12 +202,12 @@ class ChangeEventDto_Volume extends ChangeEventDto {
   const ChangeEventDto_Volume({required this.speakerId, required this.volume}): super._();
   
 
-@override final  String speakerId;
+ final  String speakerId;
  final  int volume;
 
 /// Create a copy of ChangeEventDto
 /// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
+@JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
 $ChangeEventDto_VolumeCopyWith<ChangeEventDto_Volume> get copyWith => _$ChangeEventDto_VolumeCopyWithImpl<ChangeEventDto_Volume>(this, _$identity);
 
@@ -246,7 +233,7 @@ String toString() {
 /// @nodoc
 abstract mixin class $ChangeEventDto_VolumeCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
   factory $ChangeEventDto_VolumeCopyWith(ChangeEventDto_Volume value, $Res Function(ChangeEventDto_Volume) _then) = _$ChangeEventDto_VolumeCopyWithImpl;
-@override @useResult
+@useResult
 $Res call({
  String speakerId, int volume
 });
@@ -265,7 +252,7 @@ class _$ChangeEventDto_VolumeCopyWithImpl<$Res>
 
 /// Create a copy of ChangeEventDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? volume = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? volume = null,}) {
   return _then(ChangeEventDto_Volume(
 speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
 as String,volume: null == volume ? _self.volume : volume // ignore: cast_nullable_to_non_nullable
@@ -279,16 +266,220 @@ as int,
 /// @nodoc
 
 
+class ChangeEventDto_Mute extends ChangeEventDto {
+  const ChangeEventDto_Mute({required this.speakerId, required this.muted}): super._();
+  
+
+ final  String speakerId;
+ final  bool muted;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_MuteCopyWith<ChangeEventDto_Mute> get copyWith => _$ChangeEventDto_MuteCopyWithImpl<ChangeEventDto_Mute>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_Mute&&(identical(other.speakerId, speakerId) || other.speakerId == speakerId)&&(identical(other.muted, muted) || other.muted == muted));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,speakerId,muted);
+
+@override
+String toString() {
+  return 'ChangeEventDto.mute(speakerId: $speakerId, muted: $muted)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_MuteCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_MuteCopyWith(ChangeEventDto_Mute value, $Res Function(ChangeEventDto_Mute) _then) = _$ChangeEventDto_MuteCopyWithImpl;
+@useResult
+$Res call({
+ String speakerId, bool muted
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_MuteCopyWithImpl<$Res>
+    implements $ChangeEventDto_MuteCopyWith<$Res> {
+  _$ChangeEventDto_MuteCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_Mute _self;
+  final $Res Function(ChangeEventDto_Mute) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? muted = null,}) {
+  return _then(ChangeEventDto_Mute(
+speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
+as String,muted: null == muted ? _self.muted : muted // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_Playback extends ChangeEventDto {
+  const ChangeEventDto_Playback({required this.groupId, required this.state}): super._();
+  
+
+ final  String groupId;
+ final  PlaybackStateDto state;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_PlaybackCopyWith<ChangeEventDto_Playback> get copyWith => _$ChangeEventDto_PlaybackCopyWithImpl<ChangeEventDto_Playback>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_Playback&&(identical(other.groupId, groupId) || other.groupId == groupId)&&(identical(other.state, state) || other.state == state));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,groupId,state);
+
+@override
+String toString() {
+  return 'ChangeEventDto.playback(groupId: $groupId, state: $state)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_PlaybackCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_PlaybackCopyWith(ChangeEventDto_Playback value, $Res Function(ChangeEventDto_Playback) _then) = _$ChangeEventDto_PlaybackCopyWithImpl;
+@useResult
+$Res call({
+ String groupId, PlaybackStateDto state
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_PlaybackCopyWithImpl<$Res>
+    implements $ChangeEventDto_PlaybackCopyWith<$Res> {
+  _$ChangeEventDto_PlaybackCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_Playback _self;
+  final $Res Function(ChangeEventDto_Playback) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? groupId = null,Object? state = null,}) {
+  return _then(ChangeEventDto_Playback(
+groupId: null == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
+as String,state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
+as PlaybackStateDto,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_Track extends ChangeEventDto {
+  const ChangeEventDto_Track({required this.groupId, required this.track}): super._();
+  
+
+ final  String groupId;
+ final  TrackDto track;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_TrackCopyWith<ChangeEventDto_Track> get copyWith => _$ChangeEventDto_TrackCopyWithImpl<ChangeEventDto_Track>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_Track&&(identical(other.groupId, groupId) || other.groupId == groupId)&&(identical(other.track, track) || other.track == track));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,groupId,track);
+
+@override
+String toString() {
+  return 'ChangeEventDto.track(groupId: $groupId, track: $track)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_TrackCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_TrackCopyWith(ChangeEventDto_Track value, $Res Function(ChangeEventDto_Track) _then) = _$ChangeEventDto_TrackCopyWithImpl;
+@useResult
+$Res call({
+ String groupId, TrackDto track
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_TrackCopyWithImpl<$Res>
+    implements $ChangeEventDto_TrackCopyWith<$Res> {
+  _$ChangeEventDto_TrackCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_Track _self;
+  final $Res Function(ChangeEventDto_Track) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? groupId = null,Object? track = null,}) {
+  return _then(ChangeEventDto_Track(
+groupId: null == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
+as String,track: null == track ? _self.track : track // ignore: cast_nullable_to_non_nullable
+as TrackDto,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
 class ChangeEventDto_SubscriptionError extends ChangeEventDto {
   const ChangeEventDto_SubscriptionError({required this.speakerId, required this.message}): super._();
   
 
-@override final  String speakerId;
+ final  String speakerId;
  final  String message;
 
 /// Create a copy of ChangeEventDto
 /// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
+@JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
 $ChangeEventDto_SubscriptionErrorCopyWith<ChangeEventDto_SubscriptionError> get copyWith => _$ChangeEventDto_SubscriptionErrorCopyWithImpl<ChangeEventDto_SubscriptionError>(this, _$identity);
 
@@ -314,7 +505,7 @@ String toString() {
 /// @nodoc
 abstract mixin class $ChangeEventDto_SubscriptionErrorCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
   factory $ChangeEventDto_SubscriptionErrorCopyWith(ChangeEventDto_SubscriptionError value, $Res Function(ChangeEventDto_SubscriptionError) _then) = _$ChangeEventDto_SubscriptionErrorCopyWithImpl;
-@override @useResult
+@useResult
 $Res call({
  String speakerId, String message
 });
@@ -333,7 +524,7 @@ class _$ChangeEventDto_SubscriptionErrorCopyWithImpl<$Res>
 
 /// Create a copy of ChangeEventDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? message = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? message = null,}) {
   return _then(ChangeEventDto_SubscriptionError(
 speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
 as String,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
@@ -351,11 +542,11 @@ class ChangeEventDto_SubscriptionRecovered extends ChangeEventDto {
   const ChangeEventDto_SubscriptionRecovered({required this.speakerId}): super._();
   
 
-@override final  String speakerId;
+ final  String speakerId;
 
 /// Create a copy of ChangeEventDto
 /// with the given fields replaced by the non-null parameter values.
-@override @JsonKey(includeFromJson: false, includeToJson: false)
+@JsonKey(includeFromJson: false, includeToJson: false)
 @pragma('vm:prefer-inline')
 $ChangeEventDto_SubscriptionRecoveredCopyWith<ChangeEventDto_SubscriptionRecovered> get copyWith => _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl<ChangeEventDto_SubscriptionRecovered>(this, _$identity);
 
@@ -381,7 +572,7 @@ String toString() {
 /// @nodoc
 abstract mixin class $ChangeEventDto_SubscriptionRecoveredCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
   factory $ChangeEventDto_SubscriptionRecoveredCopyWith(ChangeEventDto_SubscriptionRecovered value, $Res Function(ChangeEventDto_SubscriptionRecovered) _then) = _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl;
-@override @useResult
+@useResult
 $Res call({
  String speakerId
 });
@@ -400,7 +591,7 @@ class _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl<$Res>
 
 /// Create a copy of ChangeEventDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? speakerId = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? speakerId = null,}) {
   return _then(ChangeEventDto_SubscriptionRecovered(
 speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
 as String,

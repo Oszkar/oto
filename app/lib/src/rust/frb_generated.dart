@@ -545,11 +545,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           volume: dco_decode_u_32(raw[2]),
         );
       case 1:
+        return ChangeEventDto_Mute(
+          speakerId: dco_decode_String(raw[1]),
+          muted: dco_decode_bool(raw[2]),
+        );
+      case 2:
+        return ChangeEventDto_Playback(
+          groupId: dco_decode_String(raw[1]),
+          state: dco_decode_playback_state_dto(raw[2]),
+        );
+      case 3:
+        return ChangeEventDto_Track(
+          groupId: dco_decode_String(raw[1]),
+          track: dco_decode_box_autoadd_track_dto(raw[2]),
+        );
+      case 4:
         return ChangeEventDto_SubscriptionError(
           speakerId: dco_decode_String(raw[1]),
           message: dco_decode_String(raw[2]),
         );
-      case 2:
+      case 5:
         return ChangeEventDto_SubscriptionRecovered(
           speakerId: dco_decode_String(raw[1]),
         );
@@ -842,12 +857,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         );
       case 1:
         var var_speakerId = sse_decode_String(deserializer);
+        var var_muted = sse_decode_bool(deserializer);
+        return ChangeEventDto_Mute(speakerId: var_speakerId, muted: var_muted);
+      case 2:
+        var var_groupId = sse_decode_String(deserializer);
+        var var_state = sse_decode_playback_state_dto(deserializer);
+        return ChangeEventDto_Playback(groupId: var_groupId, state: var_state);
+      case 3:
+        var var_groupId = sse_decode_String(deserializer);
+        var var_track = sse_decode_box_autoadd_track_dto(deserializer);
+        return ChangeEventDto_Track(groupId: var_groupId, track: var_track);
+      case 4:
+        var var_speakerId = sse_decode_String(deserializer);
         var var_message = sse_decode_String(deserializer);
         return ChangeEventDto_SubscriptionError(
           speakerId: var_speakerId,
           message: var_message,
         );
-      case 2:
+      case 5:
         var var_speakerId = sse_decode_String(deserializer);
         return ChangeEventDto_SubscriptionRecovered(speakerId: var_speakerId);
       default:
@@ -1220,15 +1247,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(0, serializer);
         sse_encode_String(speakerId, serializer);
         sse_encode_u_32(volume, serializer);
+      case ChangeEventDto_Mute(speakerId: final speakerId, muted: final muted):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(speakerId, serializer);
+        sse_encode_bool(muted, serializer);
+      case ChangeEventDto_Playback(groupId: final groupId, state: final state):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(groupId, serializer);
+        sse_encode_playback_state_dto(state, serializer);
+      case ChangeEventDto_Track(groupId: final groupId, track: final track):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(groupId, serializer);
+        sse_encode_box_autoadd_track_dto(track, serializer);
       case ChangeEventDto_SubscriptionError(
         speakerId: final speakerId,
         message: final message,
       ):
-        sse_encode_i_32(1, serializer);
+        sse_encode_i_32(4, serializer);
         sse_encode_String(speakerId, serializer);
         sse_encode_String(message, serializer);
       case ChangeEventDto_SubscriptionRecovered(speakerId: final speakerId):
-        sse_encode_i_32(2, serializer);
+        sse_encode_i_32(5, serializer);
         sse_encode_String(speakerId, serializer);
     }
   }
