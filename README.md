@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![CI](https://img.shields.io/github/actions/workflow/status/Oszkar/oto/ci.yml?branch=main&label=CI)](https://github.com/Oszkar/oto/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Oszkar/oto?label=release)](https://github.com/Oszkar/oto/releases/latest)
 
-A fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI on top of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. All discovery, SOAP control, and event-subscription logic stays in Rust via the [`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP; the UI talks to it only through generated FRB bindings.
+A fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI on top of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. Discovery and SOAP control stay in Rust via the [`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP; v0.4 live events build on the same SDK family's reactive state layer. The UI talks to Rust only through generated FRB bindings.
 
 > note: `oto` is a working name for now. It means `sound` in Japanese and it is a palindrome, just like Sonos 
 
@@ -27,7 +27,7 @@ oto/
 │  ├─ src/map.rs         # domain → FRB-DTO map (off the bridged surface, so testable)
 │  ├─ src/lib.rs         # mounts api + map + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types + Wire trait
-│  ├─ crates/wire/       # oto-wire: production Wire — own multi-NIC SSDP + direct sonos-api SOAP
+│  ├─ crates/wire/       # oto-wire: production Wire — own SSDP + direct sonos-api SOAP + event subscriptions
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml

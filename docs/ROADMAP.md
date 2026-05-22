@@ -18,12 +18,12 @@ v0.1, v0.2, and v0.3 are verified on Windows. Android **release** discovery is n
 
 ## v0.4 — Live property events
 
-Reactive state via GENA: Rust → Dart event stream, no polling. **Property events only** — volume, mute, transport state, current track. Topology change events and group form/break are v0.5 (see below); pulling them in inflates one milestone with two cache shapes, two cold-start stories, and the less-exercised side of the upstream reactive layer.
+Reactive state via GENA: Rust → Dart event stream, no oto-owned polling. **Property events only** — volume, mute, transport state, current track. The chosen upstream reactive layer maintains GENA subscriptions and also polls internally for some properties; v0.4 does not add a second oto polling loop. Topology change events and group form/break are v0.5 (see below); pulling them in inflates one milestone with two cache shapes, two cold-start stories, and the less-exercised side of the upstream reactive layer.
 
 ### Adds
 
 - `StateManager` in `oto-app` caching per-speaker properties, emitting `ChangeEvent`s on change.
-- One multiplexed event-pump thread (not per-speaker, per the [event-model design note](sonos-notes.md#opt-in-via-watch)).
+- One multiplexed event-pump thread (not per-speaker, per the [event-model design note](sonos-notes.md#opt-in-via-watch--one-multiplexed-pump-thread)).
 - Riverpod providers shift from `FutureProvider` (one-shot reads) to `StreamProvider` (subscribed projections); they hold projections for rendering, not source data. State mutations stay in Rust, avoiding cross-FFI consistency bugs.
 - `Wire::speaker_state` impl swaps fetch → event-cache read. The `Wire` signature is unchanged across the swap (designed in v0.2 for this).
 - Resolves the v0.2 ADR's deeper "revisit at v0.3 → revisit at v0.4" item: transport may move off `SpeakerState` onto a group-addressed read when state is event-fed.
@@ -36,7 +36,7 @@ Reactive state via GENA: Rust → Dart event stream, no polling. **Property even
 
 ### Pre-milestone spike
 
-The "upstream reactive layer vs. raw `callback-server` + own change-detection" decision is made **before** v0.4 implementation begins, by a small hardware spike against the 4-speaker LAN. v0.4 implements only the chosen path — don't carry both adapters.
+The "upstream reactive layer vs. raw `callback-server` + own change-detection" decision was made **before** v0.4 implementation began, by a small hardware spike against the 4-speaker LAN. v0.4 implements only the chosen path — don't carry both adapters.
 
 This collapses the previous "decide with real-hardware data once events are wired end-to-end" framing: that ambiguity is too expensive inside the milestone. The non-chosen path stays a v0.5 reconsideration point — if topology events expose new reliability evidence in v0.5, the question reopens then.
 
@@ -44,8 +44,8 @@ This collapses the previous "decide with real-hardware data once events are wire
 
 Detail in [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing). Headlines:
 
-- **Watch-after-fetch initial-event suppression** — upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` cached the same value. Documented upstream as by-design. Implication: treat `.watch()` itself as the seed probe; cold-start handling is the main thing to settle this milestone.
-- **Upstream reactive layer is the weak spot.** `sonos-state` / `sonos-stream` / `sonos-event-manager` carry the only known live correctness concern (intermittent `position` updates, open upstream) and have no hardware CI coverage. The lower layers (`soap-client`, `sonos-api`, `callback-server`) are solid.
+- **Watch-after-fetch initial-event suppression** — upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` cached the same value. Documented upstream as by-design. v0.4 avoids that pattern: `.watch()` is the seed probe, and the initial SUBSCRIBE NOTIFY populates the cache.
+- **Upstream reactive layer is the chosen v0.4 path, not a permanent bet.** The v0.4 spike did not reproduce the old intermittent-`position` concern, but it was one hardware session on one LAN. The non-chosen raw `callback-server` path stays a v0.5 reconsideration point if topology events expose reliability issues.
 
 ## v0.5 — Hardening before UI
 

@@ -1,6 +1,6 @@
 # Architecture
 
-How oto is structured: a Flutter UI over a Rust core, with Sonos networking handled in Rust — SSDP and SOAP via `sonos-api` and oto's own multi-NIC SSDP.
+How oto is structured: a Flutter UI over a Rust core, with Sonos networking handled in Rust — SSDP and SOAP via `sonos-api`, live events via the same SDK family's reactive layer, and discovery via oto's own multi-NIC SSDP.
 
 Sibling docs: [ROADMAP.md](ROADMAP.md) for milestone status and forward plan; [sonos-notes.md](sonos-notes.md) for Sonos protocol / SDK reference.
 
@@ -14,9 +14,9 @@ flowchart TD
     APP["oto-app<br/>translation + lifecycle"]
     CORE["oto-core<br/>domain types"]
     WIRE{{"Wire trait"}}
-    WIREIMPL["oto-wire<br/>own SSDP + sonos-api"]
+    WIREIMPL["oto-wire<br/>own SSDP + sonos-api + events"]
     MOCK["oto-mock<br/>deterministic fakes"]
-    SDK["sonos-api<br/>SOAP"]
+    SDK["sonos-api / SDK reactive layer<br/>SOAP + events"]
     NET(("Sonos speakers<br/>on the LAN"))
 
     UI --> RP
@@ -37,14 +37,14 @@ flowchart TD
 | `oto_native` | `native/` | FRB cdylib. Thin shim — `discover()` + 7 non-sync playback commands + identity/playback DTOs + `CommandError`; delegates to `oto-app`. |
 | `oto-app` | `native/crates/app` | Owns runtime state (the active `Wire` in a process-global, lock held across SOAP); routes `discover()` and the 7 playback/state commands. |
 | `oto-core` | `native/crates/core` | Pure domain types (`Speaker`, `Group`, `TransportState`, `Track`, `Volume`, identifiers, `SpeakerState`, `SpeakerIdentity`, `GroupIdentity`, `DiscoverySnapshot`) + the `Wire` trait + `WireError`. No networking, no async, no third-party deps. |
-| `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP + direct `sonos_api` (=0.5.2) SOAP — `ZoneGroupTopology` (`GetZoneGroupState`) for discovery and group/coordinator mapping; AVTransport / RenderingControl for playback control and state reads. No `SonosSystem`, no `sonos-sdk` umbrella. Interior-mutable id→addr / group→coordinator / speaker→coordinator cache populated by `discover()`. |
+| `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP + direct `sonos_api` (=0.5.2) SOAP for discovery, playback control, and one-shot state reads; v0.4 live property events use the upstream reactive state/event layer from the same SDK family. No `SonosSystem`. Interior-mutable id→addr / group→coordinator / speaker→coordinator cache populated by `discover()`. |
 | `oto-mock` | `native/crates/mock` | Stateful `Wire` implementation (`MockWire`) — in-memory per-speaker model (commands mutate it, `speaker_state` reflects it); integration tests run without a LAN. |
 
 The Dart side is Flutter + Riverpod 3 (codegen). Providers live in `app/lib/src/state/`; FRB-generated bindings in `app/lib/src/rust/`.
 
 ## State ownership
 
-State lives in Rust, not Dart. Each `speaker_state` call today is a one-shot SOAP read; the impl will swap to an event-fed cache in v0.4, with the `Wire` signature unchanged (see [ROADMAP § v0.4](ROADMAP.md#v04--live-events)).
+State lives in Rust, not Dart. Each `speaker_state` call today is a one-shot SOAP read; the impl will swap to an event-fed cache in v0.4, with the `Wire` signature unchanged (see [ROADMAP § v0.4](ROADMAP.md#v04--live-property-events)).
 
 Consequences:
 
@@ -88,15 +88,15 @@ sequenceDiagram
 
 ## Concurrency model
 
-`sonos-api` is sync-first; no async runtime is required at the bridge.
+`sonos-api` command calls are sync-first at oto's boundary; event subscriptions add an upstream-managed runtime internally, but no async runtime is exposed at the FRB or `Wire` command surface.
 
 Commands are non-sync FRB fns (Dart `Future`) into blocking `sonos_api` SOAP calls. `oto-app` holds its `Mutex<Option<…>>` **locked across the SOAP call** — deliberate: commands are user-initiated and low-frequency; serializing all commands is the LAN-politeness story (no command storms against the user's speakers). Revisit only if v0.4 event threads and commands contend on the lock.
 
-No `tokio` in oto's own code. `sonos-api` uses async internally; that is encapsulated and does not surface at the `Wire` boundary.
+No async/await in oto's own surface code. `sonos-api` uses async internally, and v0.4's Path A event stack pulls a tokio runtime transitively via the upstream event manager. The architectural rule is that commands stay sync/blocking at the `Wire` boundary and event delivery is pumped by dedicated threads; tokio in the lockfile is not itself a violation.
 
 ## The `Wire` seam
 
-`oto-app` depends on a `Wire` trait rather than on `sonos-api` directly. Production uses `oto-wire` (own SSDP + direct `sonos_api` SOAP); tests use `oto-mock` (stateful in-memory fixtures). This keeps integration tests runnable without a Sonos device and isolates any future library swap to a single crate.
+`oto-app` depends on a `Wire` trait rather than on `sonos-api` or the SDK reactive layer directly. Production uses `oto-wire` (own SSDP + direct `sonos_api` SOAP + event subscriptions); tests use `oto-mock` (stateful in-memory fixtures). This keeps integration tests runnable without a Sonos device and isolates any future library swap to a single crate.
 
 ```rust
 pub trait Wire {
@@ -119,7 +119,7 @@ pub trait Wire {
 
 `DiscoverySnapshot` is built from lean identity types (`SpeakerIdentity` / `GroupIdentity`).
 
-**Discovery.** `oto-wire` runs its own multi-interface SSDP to collect responder IPs, then issues a direct `sonos_api` `GetZoneGroupState` SOAP call to any responding speaker to retrieve the full household topology. The snapshot is built from ZoneGroupTopology members; `<Satellite Invisible="1">` children are folded into their primary speaker and never surfaced as standalone players (the v0.1 bonded-as-standalone bug is fixed by construction); `<VanishedDevices>` are ignored. `oto-wire` depends only on `sonos-api =0.5.2` (+ `quick-xml =0.31.0` for DIDL-Lite). Protocol detail: [sonos-notes.md § SSDP discovery](sonos-notes.md#ssdp-discovery), [§ Topology](sonos-notes.md#topology--getzonegroupstate-soap).
+**Discovery.** `oto-wire` runs its own multi-interface SSDP to collect responder IPs, then issues a direct `sonos_api` `GetZoneGroupState` SOAP call to any responding speaker to retrieve the full household topology. The snapshot is built from ZoneGroupTopology members; `<Satellite Invisible="1">` children are folded into their primary speaker and never surfaced as standalone players (the v0.1 bonded-as-standalone bug is fixed by construction); `<VanishedDevices>` are ignored. The direct discovery/control path uses `sonos-api =0.5.2` (+ `quick-xml =0.31.0` for DIDL-Lite); v0.4 events add the upstream reactive state/event crates. Protocol detail: [sonos-notes.md § SSDP discovery](sonos-notes.md#ssdp-discovery), [§ Topology](sonos-notes.md#topology--getzonegroupstate-soap).
 
 **Playback control.** `oto-wire` holds an interior-mutable id→addr / group→coordinator / speaker→coordinator cache (populated by `discover()`). Commands issue direct `sonos_api::SonosClient::execute_enhanced(ip, op)` SOAP calls. `quick-xml` is used for DIDL-Lite track-metadata parsing.
 
@@ -131,4 +131,4 @@ pub trait Wire {
 
 ## Known constraints
 
-- **Watch-after-fetch event suppression (v0.4-relevant).** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value (documented upstream as by-design). The natural fetch-then-subscribe pattern will silently miss the first event. v0.4 constraint: treat `.watch()` itself as the reachability/seed probe. Detail and the v0.4 fallback strategy live in [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing) and [ROADMAP § v0.4](ROADMAP.md#v04--live-events).
+- **Watch-after-fetch event suppression (v0.4-relevant).** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value (documented upstream as by-design). The natural fetch-then-subscribe pattern will silently miss the first event. v0.4 avoids that pattern: `.watch()` itself is the reachability/seed probe, and the initial SUBSCRIBE NOTIFY populates the cache. Detail lives in [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing) and [ROADMAP § v0.4](ROADMAP.md#v04--live-property-events).

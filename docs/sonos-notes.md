@@ -10,9 +10,8 @@ Audience: anyone touching `oto-wire`. If you're touching the GENA event path for
 
 - `sonos-api = "=0.5.2"` (exact). Don't bump without re-checking the SOAP surface here and the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76).
 - `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl`. Already in the locked graph via `sonos-api` — unify, don't bump.
-- The `sonos-sdk` umbrella and its `test-support` / `reqwest` / `tokio` tree are **not** in oto-wire's dependency graph (dropped at v0.3). `sonos-api` is the only Sonos crate `oto-wire` depends on.
-
-If v0.4 wants GENA callbacks, the natural next dep is `callback-server` (same family as `sonos-api`) — see [Event model](#event-model-v04-load-bearing).
+- The `sonos-sdk` umbrella and its `test-support` tree are **not** in oto-wire's dependency graph (dropped at v0.3). v0.4 live events add the upstream reactive state/event crates from the same SDK family; `sonos-api` remains the only Sonos crate used for direct SOAP commands and discovery.
+- Raw `callback-server` + own change-detection was prototyped for v0.4 and remains the v0.5 reconsideration path, not the chosen v0.4 implementation path — see [Event model](#event-model-v04-load-bearing).
 
 ## SSDP discovery
 
@@ -101,7 +100,7 @@ let resp = client.execute_enhanced(&ip, op)?;
 Conventions:
 - **`InstanceID = 0`** is hardcoded inside each operation's macro payload. Not a parameter.
 - **Channel for RenderingControl ops:** `"Master"`.
-- All operations are **sync/blocking** (`ureq` under the hood). No tokio reactor needed.
+- Direct SOAP operations are **sync/blocking** (`ureq` under the hood). No tokio reactor is needed for this one-shot command/read path.
 
 Operation table (hardware-verified — Run 1 stopped/empty queue, Run 2 playing Spotify):
 
@@ -327,7 +326,7 @@ Migration cost A → B is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB
 
 ## Concurrency
 
-`sonos-api` is sync-first; no async runtime is required.
+`sonos-api` command calls are sync-first at oto's boundary; the v0.4 event stack may carry an upstream-managed async runtime internally.
 
 - **Commands:** non-sync FRB fns (Dart `Future`) into blocking `sonos-api` SOAP. `oto-app` holds a `Mutex<Option<HeldWire>>` **locked across the SOAP call**. Deliberate: commands are user-initiated and low-frequency; serializing them is the LAN-politeness story (no command storms against the user's speakers).
 - **Events (v0.4):** a `ChangeIterator`-equivalent `recv()` blocks. Each event stream exposed to Dart is pumped by a dedicated OS thread that reads the iterator and pushes onto an FRB `Stream`. Revisit lock granularity only if v0.4 event threads contend with command threads on the slot lock.
