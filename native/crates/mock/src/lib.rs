@@ -382,9 +382,9 @@ impl Wire for MockWire {
         // tests' sake. Slice-4 tests that need a track use
         // `MockWire::push_event` (or the dev_push seam in api.rs).
         let mut seeds: Vec<ChangeEvent> = Vec::with_capacity(
-            // 3 per speaker (volume+mute) + groups; ~8 for the
-            // 3-speaker / 2-group fixture. Capacity is a hint;
-            // re-allocation is fine.
+            // 2 per speaker (Volume + Mute) + 1 per group (Playback);
+            // 8 events total for the 3-speaker / 2-group fixture.
+            // Capacity is a hint; re-allocation is fine.
             guard.speakers.len() * 2 + guard.coords.len(),
         );
         for (sid, st) in &guard.speakers {

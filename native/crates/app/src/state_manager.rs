@@ -69,38 +69,41 @@ impl StateManager {
     /// in-flight writes from an old wire's consumer loop after a
     /// `discover_with` replacement.
     ///
+    /// **Race-closed under-lock generation check** (per /copilot review
+    /// on PR #44): each cache-mutating arm takes the relevant write
+    /// lock *first*, then re-checks the generation under the lock,
+    /// only writing if the gen still matches. A stranded OLD consumer
+    /// that resumed after `bump_and_clear` released its write lock
+    /// will see the bumped generation here and return without
+    /// repopulating the freshly-cleared cache. The earlier design
+    /// pre-checked before the lock, which left a window where an OLD
+    /// consumer could pass the check, block on the lock during
+    /// `bump_and_clear`, then resume and write stale data.
+    ///
     /// The check uses `Ordering::Acquire` to pair with the `Release`
-    /// store in `bump_and_clear`: a thread that *first* sees the bump
-    /// here will not subsequently observe the pre-bump cache state,
-    /// which would race against the clear.
+    /// store in `bump_and_clear`: a thread that observes the bump
+    /// will not subsequently write into a stale cache.
     pub fn apply_event_at_generation(&self, gen: u64, event: &ChangeEvent) {
-        if self.generation.load(Ordering::Acquire) != gen {
-            return;
-        }
-        self.apply_event_inner(event);
-    }
-
-    /// Apply a `ChangeEvent` to the cache unconditionally. Test-only —
-    /// pre-generation tests exercise the dispatch logic without
-    /// threading a generation through every call. Production paths
-    /// MUST use `apply_event_at_generation`.
-    #[cfg(test)]
-    pub(crate) fn apply_event(&self, event: &ChangeEvent) {
-        self.apply_event_inner(event);
-    }
-
-    fn apply_event_inner(&self, event: &ChangeEvent) {
         match event {
             ChangeEvent::Volume { speaker, volume } => {
                 let mut guard = self.speakers.write().unwrap_or_else(|p| p.into_inner());
+                if self.generation.load(Ordering::Acquire) != gen {
+                    return;
+                }
                 guard.entry(speaker.clone()).or_default().volume = Some(*volume);
             }
             ChangeEvent::Mute { speaker, muted } => {
                 let mut guard = self.speakers.write().unwrap_or_else(|p| p.into_inner());
+                if self.generation.load(Ordering::Acquire) != gen {
+                    return;
+                }
                 guard.entry(speaker.clone()).or_default().muted = Some(*muted);
             }
             ChangeEvent::Playback { group, state } => {
                 let mut guard = self.groups.write().unwrap_or_else(|p| p.into_inner());
+                if self.generation.load(Ordering::Acquire) != gen {
+                    return;
+                }
                 let entry = guard.entry(group.clone()).or_default();
                 // Preserve current_track + position from any prior
                 // transport snapshot; only the state field changes
@@ -120,6 +123,9 @@ impl StateManager {
             }
             ChangeEvent::Track { group, track } => {
                 let mut guard = self.groups.write().unwrap_or_else(|p| p.into_inner());
+                if self.generation.load(Ordering::Acquire) != gen {
+                    return;
+                }
                 let entry = guard.entry(group.clone()).or_default();
                 entry.track = Some(track.clone());
                 // Keep cached transport.current_track coherent with
@@ -138,9 +144,23 @@ impl StateManager {
                 }
             }
             // SubscriptionError / SubscriptionRecovered have no cache
-            // effect — they're surface events for the UI.
+            // effect — they're surface events for the UI. Don't take
+            // any lock; the gen check is moot for non-mutating events.
             ChangeEvent::SubscriptionError { .. } | ChangeEvent::SubscriptionRecovered { .. } => {}
         }
+    }
+
+    /// Apply a `ChangeEvent` to the cache unconditionally. Test-only —
+    /// pre-generation tests exercise the dispatch logic without
+    /// threading a generation through every call. Production paths
+    /// MUST use `apply_event_at_generation`.
+    ///
+    /// Delegates to `apply_event_at_generation` with the current
+    /// generation so the dispatch logic lives in exactly one place.
+    #[cfg(test)]
+    pub(crate) fn apply_event(&self, event: &ChangeEvent) {
+        let gen = self.generation.load(Ordering::Acquire);
+        self.apply_event_at_generation(gen, event);
     }
 
     /// Read a speaker's cached volume (None if no event seen yet).
