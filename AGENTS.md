@@ -19,7 +19,7 @@ If requirements are ambiguous, incomplete, or conflicting:
 
 ## 1. System Context
 
-oto = a fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI over a Rust core, bridged with `flutter_rust_bridge` (FRB) v2; discovery / SOAP via the `sonos-api` crate (from the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) plus oto's own multi-NIC SSDP; events are v0.4.
+oto = a fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI over a Rust core, bridged with `flutter_rust_bridge` (FRB) v2; discovery / SOAP via the `sonos-api` crate (from the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) plus oto's own multi-NIC SSDP; v0.4 live events use the same SDK family's reactive state/event layer.
 
 This is a **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team. Bounded: once Stable (v1.0, externally tested), expect maintenance only.
 
@@ -47,8 +47,8 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 | Rust edition / MSRV | 2021 / 1.94 (workspace `Cargo.toml`); CI pins toolchain `1.94.0` |
 | Workspace | one Cargo workspace at `native/`; root `oto_native` cdylib + `crates/{core,wire,mock}`; shared deps via `[workspace.dependencies]` |
 | `oto-core` | pure: no networking/async/third-party deps; typed newtypes; manual `Error` enum (no `thiserror`); `#![deny(unsafe_code)]` |
-| `sonos-api` | pinned **`=0.5.2`** (exact) — direct UPnP SOAP (ZoneGroupTopology / AVTransport / RenderingControl); `oto-wire`'s only sonos dep. The `sonos-sdk` umbrella was dropped at v0.3 (Open Q5). Don't bump without re-checking the SOAP surface + the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76) |
-| FRB surface | `native/src/api.rs` is a thin shim (currently minimal — `greet`/`init_app`); **target:** sync commands return `Result`, events as a `Stream` (v0.4; `sonos-api` event path per ARCHITECTURE Open Q7). Extending the surface needs an ARCHITECTURE.md update first |
+| `sonos-api` | pinned **`=0.5.2`** (exact) — direct UPnP SOAP (ZoneGroupTopology / AVTransport / RenderingControl). `sonos-api` remains the direct-SOAP crate; v0.4 events use the same SDK family's reactive state/event crates. The `sonos-sdk` umbrella was dropped at v0.3 (Open Q5). Don't bump without re-checking the SOAP surface + the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76) |
+| FRB surface | `native/src/api.rs` is a thin shim (currently minimal — `greet`/`init_app`); **target:** sync commands return `Result`, events as a `Stream` (v0.4; SDK reactive event path per ARCHITECTURE / sonos-notes). Extending the surface needs an ARCHITECTURE.md update first |
 | Frontend | Flutter + Riverpod 3 (codegen); providers in `app/lib/src/state/` via `@riverpod`, consumed from `ConsumerWidget`. `app/pubspec.yaml` `version:` is the canonical project version |
 | Generated source | FRB bindings (`app/lib/src/rust/`, `native/src/frb_generated*`) and `*.g.dart` are committed; regenerate with `just gen` after editing `native/src/api.rs` or any `@riverpod` provider |
 | Lint floor | `just check` (gen-check + fmt + clippy `-D warnings` + flutter analyze + cargo deny) and `just test` (cargo-nextest + flutter test) pass |
@@ -89,9 +89,9 @@ oto/
 ### Architectural boundaries — agents must respect
 
 1. **`oto-core` is pure.** Domain types only; no networking/async/deps. Other crates depend inward on it; it depends on nothing.
-2. **`oto-wire` is the only crate that touches `sonos-api`.** Sole `sonos-api` integration point: runs its own multi-interface SSDP and reads topology / playback / state via direct `sonos-api` SOAP (ZoneGroupTopology / AVTransport / RenderingControl) — **never** `SonosSystem` (the `sonos-sdk` umbrella was dropped at v0.3, Open Q5; its topology layer was hardware-proven lazy / non-deterministic, Open Q1). `sonos-sdk-discovery`'s `0.0.0.0` SSDP is broken on multi-NIC hosts ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)) — which is why `oto-wire` owns SSDP.
+2. **`oto-wire` is the only crate that touches Sonos SDK / network integration crates.** Sole direct `sonos-api` integration point: runs its own multi-interface SSDP and reads topology / playback / state via direct `sonos-api` SOAP (ZoneGroupTopology / AVTransport / RenderingControl). v0.4 live events also terminate in `oto-wire` via the SDK reactive state/event layer — **never** `SonosSystem` (the `sonos-sdk` umbrella was dropped at v0.3, Open Q5; its topology layer was hardware-proven lazy / non-deterministic, Open Q1). `sonos-sdk-discovery`'s `0.0.0.0` SSDP is broken on multi-NIC hosts ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)) — which is why `oto-wire` owns SSDP.
 3. **`oto-mock` is the test `Wire` impl** — deterministic fixtures, no network; integration tests run without real Sonos.
-4. **`oto-app` is the sole owner of runtime state** and the only place `sonos-api` types are translated to `oto_core` types.
+4. **`oto-app` is the sole owner of runtime state**; SDK / `sonos-api` types are translated to `oto_core` types before crossing inward.
 5. **`oto_native` is glue only.** No business logic in `native/src/api.rs`; it delegates inward. Commands sync, events `Stream`.
 6. **Frontend talks to the backend only via the FRB command/event surface.** Adding a command/event needs an ARCHITECTURE.md update first.
 
