@@ -3,9 +3,10 @@
 //! commands + a one-shot state read. v0.3: real ZoneGroupTopology grouping;
 //! signatures unchanged as designed.
 
-use std::fmt;
+use std::{fmt, sync::mpsc::Receiver};
 
 use crate::{
+    events::ChangeEvent,
     identifiers::{GroupId, SpeakerId},
     identity::DiscoverySnapshot,
     state::SpeakerState,
@@ -34,6 +35,23 @@ pub trait Wire {
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
 
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError>;
+
+    /// Register v0.4 property-event interest for all currently-known
+    /// speakers (per the latest `discover()`). Activates the upstream
+    /// subscription + the wire's pump thread. One-shot per wire.
+    ///
+    /// Returns `WireError::NoSpeakersDiscovered` if the wire has no
+    /// discovery snapshot yet, `WireError::AlreadySubscribed` if
+    /// called twice on the same wire. Runtime per-speaker
+    /// subscription failures surface in-band as
+    /// `ChangeEvent::SubscriptionError`, not via this `Result`.
+    fn subscribe_speakers(&self) -> Result<(), WireError>;
+
+    /// Take the unified event-stream receiver. Returns `None` if
+    /// already taken or if no `subscribe_*` call has activated the
+    /// pump yet. May be called before or after `subscribe_speakers`;
+    /// events flow only once at least one `subscribe_*` is active.
+    fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +70,10 @@ pub enum WireError {
     /// or no discovery has populated the wire yet. A precondition error,
     /// distinct from a transport failure.
     NotFound(String),
+    /// `subscribe_speakers` was called before a successful `discover()`.
+    NoSpeakersDiscovered,
+    /// `subscribe_speakers` was called more than once on the same wire.
+    AlreadySubscribed,
 }
 
 impl fmt::Display for WireError {
@@ -63,6 +85,12 @@ impl fmt::Display for WireError {
             }
             WireError::Backend(m) => write!(f, "backend error: {m}"),
             WireError::NotFound(w) => write!(f, "not found: {w}"),
+            WireError::NoSpeakersDiscovered => {
+                write!(f, "subscribe_speakers called before discovery")
+            }
+            WireError::AlreadySubscribed => {
+                write!(f, "subscribe_speakers already called on this wire")
+            }
         }
     }
 }
@@ -90,6 +118,14 @@ mod tests {
         assert_eq!(
             WireError::NotFound("RINCON_X".into()).to_string(),
             "not found: RINCON_X"
+        );
+        assert_eq!(
+            WireError::NoSpeakersDiscovered.to_string(),
+            "subscribe_speakers called before discovery"
+        );
+        assert_eq!(
+            WireError::AlreadySubscribed.to_string(),
+            "subscribe_speakers already called on this wire"
         );
     }
 }
