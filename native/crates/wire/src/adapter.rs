@@ -283,6 +283,24 @@ impl Wire for SonosWire {
         let transport_addr = self.resolve_transport_addr(speaker)?;
         control::soap_speaker_state(&self.client, speaker_addr, transport_addr)
     }
+
+    fn subscribe_speakers(&self) -> Result<(), WireError> {
+        // TODO(v0.4 Slice 3): wire up the sonos-sdk-state pump thread.
+        // Slice 1 ships the trait + MockWire impl; SonosWire is a no-op
+        // until Path A lands. `discover_with` calls this after a
+        // successful `discover()`, so returning Ok keeps the production
+        // flow green while we validate the architecture against
+        // MockWire end-to-end.
+        Ok(())
+    }
+
+    fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<oto_core::ChangeEvent>> {
+        // TODO(v0.4 Slice 3): return the Receiver wired to the pump
+        // thread. Slice 1 has no real producer for SonosWire; the
+        // FRB consumer loop sees None and exits cleanly, which is
+        // correct — there are no events to forward until Slice 3.
+        None
+    }
 }
 
 #[cfg(test)]

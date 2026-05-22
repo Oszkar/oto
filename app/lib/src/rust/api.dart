@@ -8,6 +8,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'api.freezed.dart';
 
+// These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `take_event_stream`
+
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
 /// topology — speaker identities (id / room / model / ip) plus the
@@ -55,28 +59,50 @@ Future<void> setMute({required String speakerId, required bool muted}) =>
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
 
-/// DEV-ONLY: emits `count` monotonically increasing u64 ticks, `interval_ms`
-/// apart, then terminates. Returns early — incrementing
-/// `DEV_CANCEL_OBSERVATIONS` — if `sink.add` returns `Err`, which happens
-/// when the Dart subscriber cancels.
-Stream<BigInt> devTickStream({required int intervalMs, required int count}) =>
-    RustLib.instance.api.crateApiDevTickStream(
-      intervalMs: intervalMs,
-      count: count,
-    );
+/// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
+/// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
+/// symbol is preserved so FRB-generated bindings still link, but the
+/// production wire cannot be replaced from a release-built Dart client.
+Future<Topology> devDiscoverMock() =>
+    RustLib.instance.api.crateApiDevDiscoverMock();
 
-/// DEV-ONLY: emits 3 ticks at 50 ms apart, then `sink.add_error(...)` —
-/// the correct in-band channel for stream errors. (Returning `Err` from
-/// a StreamSink fn does NOT propagate to the Dart Stream's `onError`;
-/// the generated binding wraps the function call in `unawaited(...)`
-/// and the error becomes an unhandled async exception. Verified
-/// empirically during the precheck — see the findings note.)
-Stream<BigInt> devErrorStream() =>
-    RustLib.instance.api.crateApiDevErrorStream();
+/// DEV-ONLY: push a `SubscriptionError` event into the held MockWire's
+/// channel (debug builds only). Returns an error if `dev_discover_mock`
+/// hasn't run yet. In release builds the body is a no-op that returns
+/// `CommandError::Sonos`.
+Future<void> devPushSubscriptionErrorOnMock({
+  required String speakerId,
+  required String message,
+}) => RustLib.instance.api.crateApiDevPushSubscriptionErrorOnMock(
+  speakerId: speakerId,
+  message: message,
+);
 
-/// DEV-ONLY: read the cancel-observation counter (see `DEV_CANCEL_OBSERVATIONS`).
-Future<int> devCancelObservationsCount() =>
-    RustLib.instance.api.crateApiDevCancelObservationsCount();
+/// Subscribe to the unified v0.4 change-event stream. One call per app
+/// instance; the Dart `subscribeChangeEventsProvider` is the consumer.
+/// Stream completes (`onDone` fires) when `discover()` replaces the
+/// wire — the Dart provider depends on `discoveryProvider` and
+/// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`
+/// (FRB pre-check § 3).
+Stream<ChangeEventDto> subscribeChangeEvents() =>
+    RustLib.instance.api.crateApiSubscribeChangeEvents();
+
+@freezed
+sealed class ChangeEventDto with _$ChangeEventDto {
+  const ChangeEventDto._();
+
+  const factory ChangeEventDto.volume({
+    required String speakerId,
+    required int volume,
+  }) = ChangeEventDto_Volume;
+  const factory ChangeEventDto.subscriptionError({
+    required String speakerId,
+    required String message,
+  }) = ChangeEventDto_SubscriptionError;
+  const factory ChangeEventDto.subscriptionRecovered({
+    required String speakerId,
+  }) = ChangeEventDto_SubscriptionRecovered;
+}
 
 @freezed
 sealed class CommandError with _$CommandError implements FrbException {

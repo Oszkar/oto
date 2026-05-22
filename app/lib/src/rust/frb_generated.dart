@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -317136448;
+  int get rustContentHash => 464743971;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -78,13 +78,11 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<int> crateApiDevCancelObservationsCount();
+  Future<Topology> crateApiDevDiscoverMock();
 
-  Stream<BigInt> crateApiDevErrorStream();
-
-  Stream<BigInt> crateApiDevTickStream({
-    required int intervalMs,
-    required int count,
+  Future<void> crateApiDevPushSubscriptionErrorOnMock({
+    required String speakerId,
+    required String message,
   });
 
   Future<Topology> crateApiDiscover();
@@ -110,6 +108,8 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<SpeakerStateDto> crateApiSpeakerState({required String speakerId});
+
+  Stream<ChangeEventDto> crateApiSubscribeChangeEvents();
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -121,7 +121,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<int> crateApiDevCancelObservationsCount() {
+  Future<Topology> crateApiDevDiscoverMock() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -134,92 +134,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_u_32,
-          decodeErrorData: null,
+          decodeSuccessData: sse_decode_topology,
+          decodeErrorData: sse_decode_discovery_error,
         ),
-        constMeta: kCrateApiDevCancelObservationsCountConstMeta,
+        constMeta: kCrateApiDevDiscoverMockConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiDevCancelObservationsCountConstMeta =>
-      const TaskConstMeta(
-        debugName: "dev_cancel_observations_count",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateApiDevDiscoverMockConstMeta =>
+      const TaskConstMeta(debugName: "dev_discover_mock", argNames: []);
 
   @override
-  Stream<BigInt> crateApiDevErrorStream() {
-    final sink = RustStreamSink<BigInt>();
-    unawaited(
-      handler.executeNormal(
-        NormalTask(
-          callFfi: (port_) {
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_StreamSink_u_64_Sse(sink, serializer);
-            pdeCallFfi(
-              generalizedFrbRustBinding,
-              serializer,
-              funcId: 2,
-              port: port_,
-            );
-          },
-          codec: SseCodec(
-            decodeSuccessData: sse_decode_unit,
-            decodeErrorData: null,
-          ),
-          constMeta: kCrateApiDevErrorStreamConstMeta,
-          argValues: [sink],
-          apiImpl: this,
-        ),
-      ),
-    );
-    return sink.stream;
-  }
-
-  TaskConstMeta get kCrateApiDevErrorStreamConstMeta =>
-      const TaskConstMeta(debugName: "dev_error_stream", argNames: ["sink"]);
-
-  @override
-  Stream<BigInt> crateApiDevTickStream({
-    required int intervalMs,
-    required int count,
+  Future<void> crateApiDevPushSubscriptionErrorOnMock({
+    required String speakerId,
+    required String message,
   }) {
-    final sink = RustStreamSink<BigInt>();
-    unawaited(
-      handler.executeNormal(
-        NormalTask(
-          callFfi: (port_) {
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            sse_encode_StreamSink_u_64_Sse(sink, serializer);
-            sse_encode_u_32(intervalMs, serializer);
-            sse_encode_u_32(count, serializer);
-            pdeCallFfi(
-              generalizedFrbRustBinding,
-              serializer,
-              funcId: 3,
-              port: port_,
-            );
-          },
-          codec: SseCodec(
-            decodeSuccessData: sse_decode_unit,
-            decodeErrorData: null,
-          ),
-          constMeta: kCrateApiDevTickStreamConstMeta,
-          argValues: [sink, intervalMs, count],
-          apiImpl: this,
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(speakerId, serializer);
+          sse_encode_String(message, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_command_error,
         ),
+        constMeta: kCrateApiDevPushSubscriptionErrorOnMockConstMeta,
+        argValues: [speakerId, message],
+        apiImpl: this,
       ),
     );
-    return sink.stream;
   }
 
-  TaskConstMeta get kCrateApiDevTickStreamConstMeta => const TaskConstMeta(
-    debugName: "dev_tick_stream",
-    argNames: ["sink", "intervalMs", "count"],
-  );
+  TaskConstMeta get kCrateApiDevPushSubscriptionErrorOnMockConstMeta =>
+      const TaskConstMeta(
+        debugName: "dev_push_subscription_error_on_mock",
+        argNames: ["speakerId", "message"],
+      );
 
   @override
   Future<Topology> crateApiDiscover() {
@@ -230,7 +191,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 3,
             port: port_,
           );
         },
@@ -257,7 +218,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 4,
             port: port_,
           );
         },
@@ -285,7 +246,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 5,
             port: port_,
           );
         },
@@ -313,7 +274,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 6,
             port: port_,
           );
         },
@@ -341,7 +302,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 7,
             port: port_,
           );
         },
@@ -369,7 +330,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 8,
             port: port_,
           );
         },
@@ -401,7 +362,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 9,
             port: port_,
           );
         },
@@ -435,7 +396,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 10,
             port: port_,
           );
         },
@@ -465,7 +426,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 11,
             port: port_,
           );
         },
@@ -483,6 +444,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSpeakerStateConstMeta =>
       const TaskConstMeta(debugName: "speaker_state", argNames: ["speakerId"]);
 
+  @override
+  Stream<ChangeEventDto> crateApiSubscribeChangeEvents() {
+    final sink = RustStreamSink<ChangeEventDto>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_change_event_dto_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 12,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiSubscribeChangeEventsConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiSubscribeChangeEventsConstMeta =>
+      const TaskConstMeta(
+        debugName: "subscribe_change_events",
+        argNames: ["sink"],
+      );
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -490,7 +486,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<BigInt> dco_decode_StreamSink_u_64_Sse(dynamic raw) {
+  RustStreamSink<ChangeEventDto> dco_decode_StreamSink_change_event_dto_Sse(
+    dynamic raw,
+  ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
   }
@@ -535,6 +533,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BigInt dco_decode_box_autoadd_u_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_u_64(raw);
+  }
+
+  @protected
+  ChangeEventDto dco_decode_change_event_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return ChangeEventDto_Volume(
+          speakerId: dco_decode_String(raw[1]),
+          volume: dco_decode_u_32(raw[2]),
+        );
+      case 1:
+        return ChangeEventDto_SubscriptionError(
+          speakerId: dco_decode_String(raw[1]),
+          message: dco_decode_String(raw[2]),
+        );
+      case 2:
+        return ChangeEventDto_SubscriptionRecovered(
+          speakerId: dco_decode_String(raw[1]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
   }
 
   @protected
@@ -754,7 +775,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  RustStreamSink<BigInt> sse_decode_StreamSink_u_64_Sse(
+  RustStreamSink<ChangeEventDto> sse_decode_StreamSink_change_event_dto_Sse(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -804,6 +825,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_64(deserializer));
+  }
+
+  @protected
+  ChangeEventDto sse_decode_change_event_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_speakerId = sse_decode_String(deserializer);
+        var var_volume = sse_decode_u_32(deserializer);
+        return ChangeEventDto_Volume(
+          speakerId: var_speakerId,
+          volume: var_volume,
+        );
+      case 1:
+        var var_speakerId = sse_decode_String(deserializer);
+        var var_message = sse_decode_String(deserializer);
+        return ChangeEventDto_SubscriptionError(
+          speakerId: var_speakerId,
+          message: var_message,
+        );
+      case 2:
+        var var_speakerId = sse_decode_String(deserializer);
+        return ChangeEventDto_SubscriptionRecovered(speakerId: var_speakerId);
+      default:
+        throw UnimplementedError('');
+    }
   }
 
   @protected
@@ -1093,15 +1142,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_StreamSink_u_64_Sse(
-    RustStreamSink<BigInt> self,
+  void sse_encode_StreamSink_change_event_dto_Sse(
+    RustStreamSink<ChangeEventDto> self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(
       self.setupAndSerialize(
         codec: SseCodec(
-          decodeSuccessData: sse_decode_u_64,
+          decodeSuccessData: sse_decode_change_event_dto,
           decodeErrorData: sse_decode_AnyhowException,
         ),
       ),
@@ -1155,6 +1204,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_change_event_dto(
+    ChangeEventDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case ChangeEventDto_Volume(
+        speakerId: final speakerId,
+        volume: final volume,
+      ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(speakerId, serializer);
+        sse_encode_u_32(volume, serializer);
+      case ChangeEventDto_SubscriptionError(
+        speakerId: final speakerId,
+        message: final message,
+      ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(speakerId, serializer);
+        sse_encode_String(message, serializer);
+      case ChangeEventDto_SubscriptionRecovered(speakerId: final speakerId):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(speakerId, serializer);
+    }
   }
 
   @protected

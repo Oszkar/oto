@@ -22,7 +22,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
-  RustStreamSink<BigInt> dco_decode_StreamSink_u_64_Sse(dynamic raw);
+  RustStreamSink<ChangeEventDto> dco_decode_StreamSink_change_event_dto_Sse(
+    dynamic raw,
+  );
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -44,6 +46,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  ChangeEventDto dco_decode_change_event_dto(dynamic raw);
 
   @protected
   CommandError dco_decode_command_error(dynamic raw);
@@ -121,7 +126,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
-  RustStreamSink<BigInt> sse_decode_StreamSink_u_64_Sse(
+  RustStreamSink<ChangeEventDto> sse_decode_StreamSink_change_event_dto_Sse(
     SseDeserializer deserializer,
   );
 
@@ -147,6 +152,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  ChangeEventDto sse_decode_change_event_dto(SseDeserializer deserializer);
 
   @protected
   CommandError sse_decode_command_error(SseDeserializer deserializer);
@@ -233,8 +241,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_StreamSink_u_64_Sse(
-    RustStreamSink<BigInt> self,
+  void sse_encode_StreamSink_change_event_dto_Sse(
+    RustStreamSink<ChangeEventDto> self,
     SseSerializer serializer,
   );
 
@@ -264,6 +272,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_change_event_dto(
+    ChangeEventDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_command_error(CommandError self, SseSerializer serializer);

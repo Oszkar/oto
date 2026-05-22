@@ -13,6 +13,7 @@
 //! DIDL-Lite → `Track`, transport state strings → `PlaybackState`).
 
 pub mod error;
+pub mod events;
 pub mod group;
 pub mod identifiers;
 pub mod identity;
@@ -24,6 +25,7 @@ pub mod volume;
 pub mod wire;
 
 pub use error::Error;
+pub use events::ChangeEvent;
 pub use group::Group;
 pub use identifiers::{GroupId, SpeakerId, TrackId};
 pub use identity::{DiscoverySnapshot, GroupIdentity, SpeakerIdentity};

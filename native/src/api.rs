@@ -1,5 +1,7 @@
 use oto_app::discover as app_discover;
 
+use crate::frb_generated::StreamSink;
+
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
@@ -65,6 +67,16 @@ pub enum CommandError {
     NotFound(String),
     Network(String),
     Sonos(String),
+}
+
+// ── v0.4 event DTOs ──────────────────────────────────────────────────────────
+
+/// FRB DTO for `oto_core::ChangeEvent`. Volume is the v0.4 starter;
+/// Mute / Playback / Track lands in Slice 2 (this plan, Task 2).
+pub enum ChangeEventDto {
+    Volume { speaker_id: String, volume: u32 },
+    SubscriptionError { speaker_id: String, message: String },
+    SubscriptionRecovered { speaker_id: String },
 }
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
@@ -141,56 +153,179 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
     Ok(crate::map::to_speaker_state_dto(state))
 }
 
-// ── DEV-ONLY: v0.4 FRB Stream pre-check ─────────────────────────────────────
+// ── v0.4 DEV-ONLY: MockWire injection for integration tests ───────────────────
 //
-// TODO(v0.4): remove this entire section when `subscribe_change_events`
-// lands. These functions exist only to empirically verify FRB v2's
-// Stream<T> semantics (threading, drop/cancel detection, error
-// propagation) before designing the real event-stream surface. Findings
-// note: docs/superpowers/specs/2026-05-22-v0.4-frb-precheck-findings.md.
+// TODO(v0.5): consider removing once the v0.4 integration test pattern
+// is established. Until then, this is the only FRB-side seam to drive
+// the LAN-free end-to-end test in `app/integration_test/v0_4_events_test.dart`.
+//
+// Trust boundary (per /codex review on PR #43, finding P1 #2): the FRB
+// fn symbols (`dev_discover_mock`, `dev_push_subscription_error_on_mock`)
+// must exist unconditionally — FRB v2's generated `frb_generated.rs`
+// references every exposed `pub fn` and a cfg gate at the symbol level
+// breaks the release cdylib link. But the BODIES are `cfg(debug_assertions)`
+// gated: in release builds they return an error, so a release-built Dart
+// client cannot use them to replace the production wire with a mock or
+// inject fake events. All supporting machinery (`MockWireArc`,
+// `dev_mock_handle`, `Arc/OnceLock/MockWire` imports) is fully cfg-gated
+// out of release builds.
 
-use std::sync::atomic::{AtomicU32, Ordering};
+#[cfg(debug_assertions)]
+use std::sync::{Arc, OnceLock};
 
-use crate::frb_generated::StreamSink;
+#[cfg(debug_assertions)]
+use oto_mock::MockWire;
 
-/// Counts how many times a `dev_tick_stream` invocation observed Dart-side
-/// subscription drop (the sink returning `Err` on `add`). The precheck test
-/// snapshots this before + after a cancellation to prove the Rust side can
-/// detect cancel without polling. `AtomicU32` matches the FRB-exposed
-/// return type of `dev_cancel_observations_count` exactly — no truncation
-/// cast at the boundary.
-static DEV_CANCEL_OBSERVATIONS: AtomicU32 = AtomicU32::new(0);
+/// Side-channel handle to the MockWire created by `dev_discover_mock`.
+/// `dev_push_subscription_error_on_mock` reaches in here because
+/// `MockWire::push_event` is an inherent method (not on the `Wire`
+/// trait — adversarial pushes are a test-only affordance), so the
+/// regular `oto_app::slot()` path can't surface it.
+#[cfg(debug_assertions)]
+fn dev_mock_handle() -> &'static std::sync::Mutex<Option<Arc<MockWire>>> {
+    static MOCK: OnceLock<std::sync::Mutex<Option<Arc<MockWire>>>> = OnceLock::new();
+    MOCK.get_or_init(|| std::sync::Mutex::new(None))
+}
 
-/// DEV-ONLY: emits `count` monotonically increasing u64 ticks, `interval_ms`
-/// apart, then terminates. Returns early — incrementing
-/// `DEV_CANCEL_OBSERVATIONS` — if `sink.add` returns `Err`, which happens
-/// when the Dart subscriber cancels.
-pub fn dev_tick_stream(sink: StreamSink<u64>, interval_ms: u32, count: u32) {
-    for i in 0..count {
-        if sink.add(u64::from(i)).is_err() {
-            DEV_CANCEL_OBSERVATIONS.fetch_add(1, Ordering::Relaxed);
+/// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
+/// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
+/// symbol is preserved so FRB-generated bindings still link, but the
+/// production wire cannot be replaced from a release-built Dart client.
+pub fn dev_discover_mock() -> Result<Topology, DiscoveryError> {
+    #[cfg(debug_assertions)]
+    {
+        let mock = Arc::new(MockWire::default());
+        // Keep a side reference so dev_push_subscription_error_on_mock can
+        // call push_event on the SAME instance that's in oto_app::slot().
+        *dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&mock));
+        let mock_for_app = Arc::clone(&mock);
+        let snap = oto_app::discover_with(move || Box::new(MockWireArc(mock_for_app)))
+            .map_err(crate::map::to_discovery_error)?;
+        Ok(crate::map::to_topology(snap))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Err(DiscoveryError::Sdk(
+            "dev_discover_mock is debug-only; not available in release builds".into(),
+        ))
+    }
+}
+
+/// DEV-ONLY: push a `SubscriptionError` event into the held MockWire's
+/// channel (debug builds only). Returns an error if `dev_discover_mock`
+/// hasn't run yet. In release builds the body is a no-op that returns
+/// `CommandError::Sonos`.
+pub fn dev_push_subscription_error_on_mock(
+    speaker_id: String,
+    message: String,
+) -> Result<(), CommandError> {
+    #[cfg(debug_assertions)]
+    {
+        let guard = dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner());
+        let mock = guard
+            .as_ref()
+            .ok_or_else(|| CommandError::NotFound("dev_discover_mock not called yet".into()))?;
+        mock.push_event(oto_core::ChangeEvent::SubscriptionError {
+            speaker: oto_core::SpeakerId::new(speaker_id),
+            message,
+        });
+        Ok(())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        // Silence unused-parameter warnings in release builds without
+        // changing the FRB-visible signature.
+        let _ = (speaker_id, message);
+        Err(CommandError::Sonos(
+            "dev_push_subscription_error_on_mock is debug-only; not available in release builds"
+                .into(),
+        ))
+    }
+}
+
+/// Newtype wrapping `Arc<MockWire>` so it implements `Wire` and can be
+/// boxed into the `oto_app::slot()`. We can't `Box<Arc<MockWire>>`
+/// directly because the slot holds `Box<dyn Wire>` and `Arc<T>` itself
+/// doesn't impl `Wire` (the impl is on `T`).
+#[cfg(debug_assertions)]
+struct MockWireArc(Arc<MockWire>);
+
+#[cfg(debug_assertions)]
+impl oto_core::Wire for MockWireArc {
+    fn discover(&self) -> Result<oto_core::DiscoverySnapshot, oto_core::WireError> {
+        self.0.discover()
+    }
+    fn play(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.play(group)
+    }
+    fn pause(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.pause(group)
+    }
+    fn next(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.next(group)
+    }
+    fn previous(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.previous(group)
+    }
+    fn set_volume(
+        &self,
+        speaker: &oto_core::SpeakerId,
+        volume: oto_core::Volume,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.set_volume(speaker, volume)
+    }
+    fn set_mute(
+        &self,
+        speaker: &oto_core::SpeakerId,
+        muted: bool,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.set_mute(speaker, muted)
+    }
+    fn speaker_state(
+        &self,
+        speaker: &oto_core::SpeakerId,
+    ) -> Result<oto_core::SpeakerState, oto_core::WireError> {
+        self.0.speaker_state(speaker)
+    }
+    fn subscribe_speakers(&self) -> Result<(), oto_core::WireError> {
+        self.0.subscribe_speakers()
+    }
+    fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<oto_core::ChangeEvent>> {
+        self.0.take_event_stream()
+    }
+}
+
+// ── v0.4 event stream ────────────────────────────────────────────────────────
+
+/// Subscribe to the unified v0.4 change-event stream. One call per app
+/// instance; the Dart `subscribeChangeEventsProvider` is the consumer.
+/// Stream completes (`onDone` fires) when `discover()` replaces the
+/// wire — the Dart provider depends on `discoveryProvider` and
+/// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`
+/// (FRB pre-check § 3).
+pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
+    // Body runs on the FRB worker thread (pre-check § 2). Blocking
+    // `recv()` here is fine — it blocks the worker, not the UI.
+    let Some(rx) = oto_app::take_event_stream() else {
+        // No wire installed yet, or stream already taken. The Dart
+        // provider depends on `discoveryProvider`; once discover()
+        // succeeds, this fn will be called again against the new wire.
+        return;
+    };
+    loop {
+        let event = match rx.recv() {
+            Ok(e) => e,
+            // Sender dropped — wire was replaced (discover() ran).
+            // Return cleanly; FRB stream completes; Dart rebuilds.
+            Err(_) => return,
+        };
+        oto_app::apply_event(&event);
+        let dto = crate::map::to_change_event_dto(event);
+        if sink.add(dto).is_err() {
+            // Dart subscriber cancelled. Return cleanly; the
+            // sender stays alive for any next consumer (in
+            // practice there isn't one until the next discover()).
             return;
         }
-        std::thread::sleep(std::time::Duration::from_millis(u64::from(interval_ms)));
     }
-}
-
-/// DEV-ONLY: emits 3 ticks at 50 ms apart, then `sink.add_error(...)` —
-/// the correct in-band channel for stream errors. (Returning `Err` from
-/// a StreamSink fn does NOT propagate to the Dart Stream's `onError`;
-/// the generated binding wraps the function call in `unawaited(...)`
-/// and the error becomes an unhandled async exception. Verified
-/// empirically during the precheck — see the findings note.)
-pub fn dev_error_stream(sink: StreamSink<u64>) {
-    for i in 0..3 {
-        sink.add(i).ok();
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
-    sink.add_error("intentional error from dev_error_stream".to_string())
-        .ok();
-}
-
-/// DEV-ONLY: read the cancel-observation counter (see `DEV_CANCEL_OBSERVATIONS`).
-pub fn dev_cancel_observations_count() -> u32 {
-    DEV_CANCEL_OBSERVATIONS.load(Ordering::Relaxed)
 }

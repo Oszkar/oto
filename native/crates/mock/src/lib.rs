@@ -10,12 +10,16 @@
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, Sender},
+        Mutex,
+    },
 };
 
 use oto_core::{
-    DiscoverySnapshot, GroupId, GroupIdentity, PlaybackState, SpeakerId, SpeakerIdentity,
-    SpeakerState, TransportState, Volume, Wire, WireError,
+    ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, PlaybackState, SpeakerId,
+    SpeakerIdentity, SpeakerState, TransportState, Volume, Wire, WireError,
 };
 
 // ── Internal model ───────────────────────────────────────────────────────────
@@ -29,6 +33,11 @@ struct Model {
     /// (solo speaker maps to itself). Used by `speaker_state` to implement D2
     /// semantics: own volume/mute + coordinator's transport.
     member_to_coord: HashMap<SpeakerId, SpeakerId>,
+    /// Sender half of the v0.4 unified event channel. Lazy-init: only
+    /// populated by `subscribe_speakers`. `None` ↔ "no pump active".
+    tx: Option<Sender<ChangeEvent>>,
+    /// Receiver half — taken once via `take_event_stream`.
+    rx: Option<Receiver<ChangeEvent>>,
 }
 
 /// Volume every speaker is seeded at. Shared by `Model::seeded` and the
@@ -41,6 +50,8 @@ impl Model {
             speakers: HashMap::new(),
             coords: HashMap::new(),
             member_to_coord: HashMap::new(),
+            tx: None,
+            rx: None,
         }
     }
 
@@ -74,6 +85,8 @@ impl Model {
             speakers,
             coords,
             member_to_coord,
+            tx: None,
+            rx: None,
         }
     }
 }
@@ -82,9 +95,22 @@ impl Model {
 
 /// A `Wire` that yields a fixed topology (or a fixed error) and maintains
 /// per-speaker state so command→state round-trips are testable without a LAN.
+///
+/// Lifecycle: `MockWire::default()` pre-seeds the model so commands round-trip
+/// to state out of the box, but `discovered: AtomicBool` is **false** until a
+/// successful `discover()` call. `subscribe_speakers` checks the flag rather
+/// than `speakers.is_empty()` so the mock enforces the same "discover first,
+/// then subscribe" lifecycle as a real `SonosWire`. Reason: a fixture-only
+/// MockWire is not the same thing as a wire whose discovery has been
+/// acknowledged by the caller — per /codex review on PR #43, finding P2 #4.
 pub struct MockWire {
     outcome: Result<DiscoverySnapshot, WireError>,
     state: Mutex<Model>,
+    /// `true` after at least one successful `discover()` call. Mirrors the
+    /// real-wire invariant that subscription requires a prior discovery
+    /// snapshot. Atomic so `discover()` (sync, `&self`) can flip it without
+    /// touching the state `Mutex`.
+    discovered: AtomicBool,
 }
 
 impl MockWire {
@@ -94,6 +120,7 @@ impl MockWire {
         Self {
             outcome: Err(err),
             state: Mutex::new(Model::empty()),
+            discovered: AtomicBool::new(false),
         }
     }
 
@@ -142,9 +169,13 @@ impl Default for MockWire {
     fn default() -> Self {
         let snap = Self::fixture();
         let model = Model::seeded(&snap);
+        // Pre-seeded model lets commands work pre-discover, but `discovered`
+        // is still false: callers must run `discover()` before
+        // `subscribe_speakers()` to match the real-wire contract.
         Self {
             outcome: Ok(snap),
             state: Mutex::new(model),
+            discovered: AtomicBool::new(false),
         }
     }
 }
@@ -161,9 +192,28 @@ macro_rules! lock {
     };
 }
 
+impl MockWire {
+    /// Push an arbitrary `ChangeEvent` into the unified channel.
+    /// Test-only affordance for adversarial scenarios
+    /// (`SubscriptionError`, recovery, out-of-order). No-op if no
+    /// pump is active.
+    pub fn push_event(&self, event: ChangeEvent) {
+        if let Some(tx) = &lock!(self).tx {
+            let _ = tx.send(event);
+        }
+    }
+}
+
 impl Wire for MockWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
-        self.outcome.clone()
+        let result = self.outcome.clone();
+        if result.is_ok() {
+            // Flip the lifecycle gate so `subscribe_speakers` can succeed.
+            // Idempotent: repeat discovers stay `true`. Failed discoveries
+            // (the `failing()` constructor) leave it `false`.
+            self.discovered.store(true, Ordering::SeqCst);
+        }
+        result
     }
 
     fn play(&self, group: &GroupId) -> Result<(), WireError> {
@@ -235,6 +285,13 @@ impl Wire for MockWire {
             .get_mut(speaker)
             .ok_or_else(|| WireError::NotFound(speaker.to_string()))?;
         entry.volume = Some(volume);
+        // Auto-emit. Mirrors real Sonos: SOAP success → device NOTIFY.
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::Volume {
+                speaker: speaker.clone(),
+                volume,
+            });
+        }
         Ok(())
     }
 
@@ -267,6 +324,45 @@ impl Wire for MockWire {
             muted: own.muted,
             transport,
         })
+    }
+
+    fn subscribe_speakers(&self) -> Result<(), WireError> {
+        // Match the real-wire contract: subscription requires a prior
+        // successful `discover()`. The pre-seeded fixture in
+        // `MockWire::default()` doesn't count as discovery — the caller
+        // must actually call `discover()` first (per /codex review on
+        // PR #43, finding P2 #4).
+        if !self.discovered.load(Ordering::SeqCst) {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
+        let mut guard = lock!(self);
+        if guard.tx.is_some() {
+            return Err(WireError::AlreadySubscribed);
+        }
+        let (tx, rx) = mpsc::channel();
+        // Seed: one Volume event per known speaker carrying its
+        // current cached volume (mirrors the real cold-start NOTIFY).
+        let seeds: Vec<ChangeEvent> = guard
+            .speakers
+            .iter()
+            .filter_map(|(sid, st)| {
+                st.volume.map(|v| ChangeEvent::Volume {
+                    speaker: sid.clone(),
+                    volume: v,
+                })
+            })
+            .collect();
+        for ev in seeds {
+            // Pre-pump send — receiver is buffered, so this can't fail.
+            let _ = tx.send(ev);
+        }
+        guard.tx = Some(tx);
+        guard.rx = Some(rx);
+        Ok(())
+    }
+
+    fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
+        lock!(self).rx.take()
     }
 }
 
@@ -411,5 +507,116 @@ mod tests {
             Some(Volume::new(55).unwrap()),
             "own volume, independent of the coordinator"
         );
+    }
+
+    // ── v0.4 event surface ────────────────────────────────────────────────
+
+    /// Failed-discovery path: `failing()` never flips `discovered`, so
+    /// `subscribe_speakers` must reject. Covers the "discover errored"
+    /// branch of the lifecycle gate.
+    #[test]
+    fn subscribe_speakers_errors_without_successful_discovery() {
+        let w = MockWire::failing(WireError::NoDevicesFound);
+        assert_eq!(w.subscribe_speakers(), Err(WireError::NoSpeakersDiscovered));
+    }
+
+    /// Default-but-no-discover path: `MockWire::default()` pre-seeds the
+    /// model so commands work, but `discover()` hasn't been called, so
+    /// `subscribe_speakers` must STILL reject. This is the regression
+    /// fix for /codex review P2 #4 — the previous `speakers.is_empty()`
+    /// check let pre-seeded mocks bypass the discover-first contract.
+    #[test]
+    fn subscribe_speakers_errors_on_default_without_discover() {
+        let w = MockWire::default();
+        assert_eq!(w.subscribe_speakers(), Err(WireError::NoSpeakersDiscovered));
+    }
+
+    /// After a successful `discover()`, `subscribe_speakers` works.
+    /// Idempotency: repeat `discover()` keeps `discovered` true.
+    #[test]
+    fn discover_then_subscribe_speakers_ok() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        assert!(w.subscribe_speakers().is_ok());
+    }
+
+    #[test]
+    fn subscribe_speakers_twice_errors() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        assert!(w.subscribe_speakers().is_ok());
+        assert_eq!(w.subscribe_speakers(), Err(WireError::AlreadySubscribed));
+    }
+
+    #[test]
+    fn subscribe_emits_seed_volume_per_speaker() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().expect("first take returns Some");
+        // Fixture has 3 speakers → 3 seed Volume events.
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..3 {
+            match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok(ChangeEvent::Volume { speaker, .. }) => {
+                    seen.insert(speaker);
+                }
+                other => panic!("expected Volume seed, got {other:?}"),
+            }
+        }
+        assert_eq!(seen.len(), 3, "one Volume seed per speaker");
+    }
+
+    #[test]
+    fn set_volume_auto_emits_volume_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        // Drain the 3 seed events.
+        for _ in 0..3 {
+            rx.recv().unwrap();
+        }
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        w.set_volume(&kitchen, Volume::new(70).unwrap()).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Volume { speaker, volume } => {
+                assert_eq!(speaker, kitchen);
+                assert_eq!(volume, Volume::new(70).unwrap());
+            }
+            other => panic!("expected Volume event from set_volume, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn push_event_surfaces_arbitrary_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        for _ in 0..3 {
+            rx.recv().unwrap();
+        } // drain seeds
+        w.push_event(ChangeEvent::SubscriptionError {
+            speaker: SpeakerId::new("RINCON_GHOST"),
+            message: "synthesized for test".into(),
+        });
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100))
+                .unwrap(),
+            ChangeEvent::SubscriptionError { .. }
+        ));
+    }
+
+    #[test]
+    fn take_event_stream_is_one_shot() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        assert!(w.take_event_stream().is_some());
+        assert!(w.take_event_stream().is_none(), "second take returns None");
     }
 }
