@@ -59,11 +59,17 @@ Future<void> setMute({required String speakerId, required bool muted}) =>
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
 
+/// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
+/// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
+/// symbol is preserved so FRB-generated bindings still link, but the
+/// production wire cannot be replaced from a release-built Dart client.
 Future<Topology> devDiscoverMock() =>
     RustLib.instance.api.crateApiDevDiscoverMock();
 
-/// Push a `SubscriptionError` event into the held MockWire's channel.
-/// Returns an error if `dev_discover_mock` hasn't run yet.
+/// DEV-ONLY: push a `SubscriptionError` event into the held MockWire's
+/// channel (debug builds only). Returns an error if `dev_discover_mock`
+/// hasn't run yet. In release builds the body is a no-op that returns
+/// `CommandError::Sonos`.
 Future<void> devPushSubscriptionErrorOnMock({
   required String speakerId,
   required String message,

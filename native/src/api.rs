@@ -159,13 +159,21 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
 // is established. Until then, this is the only FRB-side seam to drive
 // the LAN-free end-to-end test in `app/integration_test/v0_4_events_test.dart`.
 //
-// NOTE: not `cfg(debug_assertions)`-gated. FRB's generated
-// `frb_generated.rs` unconditionally references every exposed fn, so a
-// cfg gate would break the release cdylib build. The cost is one extra
-// symbol in the release binary; oto-mock is a small workspace crate.
+// Trust boundary (per /codex review on PR #43, finding P1 #2): the FRB
+// fn symbols (`dev_discover_mock`, `dev_push_subscription_error_on_mock`)
+// must exist unconditionally — FRB v2's generated `frb_generated.rs`
+// references every exposed `pub fn` and a cfg gate at the symbol level
+// breaks the release cdylib link. But the BODIES are `cfg(debug_assertions)`
+// gated: in release builds they return an error, so a release-built Dart
+// client cannot use them to replace the production wire with a mock or
+// inject fake events. All supporting machinery (`MockWireArc`,
+// `dev_mock_handle`, `Arc/OnceLock/MockWire` imports) is fully cfg-gated
+// out of release builds.
 
+#[cfg(debug_assertions)]
 use std::sync::{Arc, OnceLock};
 
+#[cfg(debug_assertions)]
 use oto_mock::MockWire;
 
 /// Side-channel handle to the MockWire created by `dev_discover_mock`.
@@ -173,45 +181,76 @@ use oto_mock::MockWire;
 /// `MockWire::push_event` is an inherent method (not on the `Wire`
 /// trait — adversarial pushes are a test-only affordance), so the
 /// regular `oto_app::slot()` path can't surface it.
+#[cfg(debug_assertions)]
 fn dev_mock_handle() -> &'static std::sync::Mutex<Option<Arc<MockWire>>> {
     static MOCK: OnceLock<std::sync::Mutex<Option<Arc<MockWire>>>> = OnceLock::new();
     MOCK.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+/// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
+/// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
+/// symbol is preserved so FRB-generated bindings still link, but the
+/// production wire cannot be replaced from a release-built Dart client.
 pub fn dev_discover_mock() -> Result<Topology, DiscoveryError> {
-    let mock = Arc::new(MockWire::default());
-    // Keep a side reference so dev_push_subscription_error_on_mock can
-    // call push_event on the SAME instance that's in oto_app::slot().
-    *dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&mock));
-    let mock_for_app = Arc::clone(&mock);
-    let snap = oto_app::discover_with(move || Box::new(MockWireArc(mock_for_app)))
-        .map_err(crate::map::to_discovery_error)?;
-    Ok(crate::map::to_topology(snap))
+    #[cfg(debug_assertions)]
+    {
+        let mock = Arc::new(MockWire::default());
+        // Keep a side reference so dev_push_subscription_error_on_mock can
+        // call push_event on the SAME instance that's in oto_app::slot().
+        *dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&mock));
+        let mock_for_app = Arc::clone(&mock);
+        let snap = oto_app::discover_with(move || Box::new(MockWireArc(mock_for_app)))
+            .map_err(crate::map::to_discovery_error)?;
+        Ok(crate::map::to_topology(snap))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Err(DiscoveryError::Sdk(
+            "dev_discover_mock is debug-only; not available in release builds".into(),
+        ))
+    }
 }
 
-/// Push a `SubscriptionError` event into the held MockWire's channel.
-/// Returns an error if `dev_discover_mock` hasn't run yet.
+/// DEV-ONLY: push a `SubscriptionError` event into the held MockWire's
+/// channel (debug builds only). Returns an error if `dev_discover_mock`
+/// hasn't run yet. In release builds the body is a no-op that returns
+/// `CommandError::Sonos`.
 pub fn dev_push_subscription_error_on_mock(
     speaker_id: String,
     message: String,
 ) -> Result<(), CommandError> {
-    let guard = dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner());
-    let mock = guard
-        .as_ref()
-        .ok_or_else(|| CommandError::NotFound("dev_discover_mock not called yet".into()))?;
-    mock.push_event(oto_core::ChangeEvent::SubscriptionError {
-        speaker: oto_core::SpeakerId::new(speaker_id),
-        message,
-    });
-    Ok(())
+    #[cfg(debug_assertions)]
+    {
+        let guard = dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner());
+        let mock = guard
+            .as_ref()
+            .ok_or_else(|| CommandError::NotFound("dev_discover_mock not called yet".into()))?;
+        mock.push_event(oto_core::ChangeEvent::SubscriptionError {
+            speaker: oto_core::SpeakerId::new(speaker_id),
+            message,
+        });
+        Ok(())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        // Silence unused-parameter warnings in release builds without
+        // changing the FRB-visible signature.
+        let _ = (speaker_id, message);
+        Err(CommandError::Sonos(
+            "dev_push_subscription_error_on_mock is debug-only; not available in release builds"
+                .into(),
+        ))
+    }
 }
 
 /// Newtype wrapping `Arc<MockWire>` so it implements `Wire` and can be
 /// boxed into the `oto_app::slot()`. We can't `Box<Arc<MockWire>>`
 /// directly because the slot holds `Box<dyn Wire>` and `Arc<T>` itself
 /// doesn't impl `Wire` (the impl is on `T`).
+#[cfg(debug_assertions)]
 struct MockWireArc(Arc<MockWire>);
 
+#[cfg(debug_assertions)]
 impl oto_core::Wire for MockWireArc {
     fn discover(&self) -> Result<oto_core::DiscoverySnapshot, oto_core::WireError> {
         self.0.discover()
