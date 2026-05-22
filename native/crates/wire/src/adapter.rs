@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -34,6 +35,17 @@ pub struct SonosWire {
     /// Maps each member `SpeakerId` → its group coordinator `SpeakerId`
     /// (oto-core D2). Coordinator maps to itself.
     speaker_to_coordinator: Mutex<HashMap<SpeakerId, SpeakerId>>,
+    /// One-shot "we logged the Slice-3 stub warning already" flag for
+    /// `subscribe_speakers`. The real wire calls it once per
+    /// `discover_with`, so the log fires once per discovery — but
+    /// belt-and-braces: keep it cheap & idempotent if a future caller
+    /// invokes it more than once.
+    subscribe_warned: AtomicBool,
+    /// Same shape as `subscribe_warned`, for `take_event_stream`. The
+    /// FRB consumer loop calls this exactly once per wire today (see
+    /// `api.rs::subscribe_change_events`), but keep the warning
+    /// one-shot in case future callers retry.
+    take_stream_warned: AtomicBool,
 }
 
 impl SonosWire {
@@ -43,6 +55,8 @@ impl SonosWire {
             id_to_addr: Mutex::new(HashMap::new()),
             group_to_coordinator: Mutex::new(HashMap::new()),
             speaker_to_coordinator: Mutex::new(HashMap::new()),
+            subscribe_warned: AtomicBool::new(false),
+            take_stream_warned: AtomicBool::new(false),
         }
     }
 
@@ -291,6 +305,18 @@ impl Wire for SonosWire {
         // successful `discover()`, so returning Ok keeps the production
         // flow green while we validate the architecture against
         // MockWire end-to-end.
+        //
+        // Log once per wire so hardware debugging is unambiguous:
+        // "no events on SonosWire" is expected today, not a bug.
+        // `tracing` is not yet an oto-wire dep; `eprintln!` is fine for
+        // this single Slice-3-bridge breadcrumb. Revisit when `tracing`
+        // lands (Slice 3 will need it for the pump thread anyway).
+        if !self.subscribe_warned.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "[oto-wire] SonosWire::subscribe_speakers is a Slice 3 stub — \
+                 no events will arrive until Path A (sonos-sdk-state) lands."
+            );
+        }
         Ok(())
     }
 
@@ -299,6 +325,16 @@ impl Wire for SonosWire {
         // thread. Slice 1 has no real producer for SonosWire; the
         // FRB consumer loop sees None and exits cleanly, which is
         // correct — there are no events to forward until Slice 3.
+        //
+        // Mirror the subscribe_speakers warning so the cause-vs-effect
+        // ("subscribe is a stub" / "we returned no stream") is visible
+        // in both places.
+        if !self.take_stream_warned.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "[oto-wire] SonosWire::take_event_stream is a Slice 3 stub — \
+                 returning None until Path A (sonos-sdk-state) lands."
+            );
+        }
         None
     }
 }

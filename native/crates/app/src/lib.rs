@@ -115,9 +115,27 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
     // A NoSpeakersDiscovered here would be a logic bug (discover()
     // just succeeded), but treat any error as a discovery failure.
     wire.subscribe_speakers()?;
-    // Replace the wire AND clear the cache — old wire's state is
-    // stale; new wire seeds via initial NOTIFYs.
-    state_manager().clear();
+    // ── Race window between OLD and NEW wire ─────────────────────────
+    //
+    // At this point the NEW wire's pump is live (subscribe_speakers
+    // succeeded) and queueing events into its tx channel; the old
+    // wire is still in the slot, and its consumer loop in
+    // `api.rs::subscribe_change_events` may still be calling
+    // `apply_event_at_generation(old_gen, ...)` against `state_manager`.
+    //
+    // Order (intentional):
+    //   1. bump_and_clear  →  makes any future apply_*_at_generation
+    //      from the OLD consumer no-op (gen mismatch), and clears the
+    //      stale cache before the NEW seeds repopulate it.
+    //   2. slot replacement → drops the old wire (Sender side of the
+    //      old channel), which unblocks the OLD consumer's `recv()`
+    //      with Err and lets the consumer exit.
+    //
+    // The NEW consumer hasn't been spawned yet (the Dart provider
+    // depends on `discoveryProvider`; it rebuilds + calls
+    // `subscribe_change_events` once this fn returns); it will
+    // capture the post-bump generation on entry.
+    state_manager().bump_and_clear();
     *slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(wire);
@@ -176,10 +194,20 @@ pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
         .and_then(|w| w.take_event_stream())
 }
 
-/// Apply an event to the StateManager cache. Called by the FRB
-/// consumer loop on the FRB worker thread.
-pub fn apply_event(event: &ChangeEvent) {
-    state_manager().apply_event(event);
+/// Generation-aware apply — no-op if `gen` doesn't match the current
+/// `state_manager` generation. The FRB consumer loop captures the
+/// generation once at start, then passes it on every event so a
+/// `discover_with` that bumps mid-stream causes any in-flight writes
+/// from the OLD wire's consumer to be dropped before they corrupt the
+/// NEW wire's freshly-seeded cache.
+pub fn apply_event_at_generation(gen: u64, event: &ChangeEvent) {
+    state_manager().apply_event_at_generation(gen, event);
+}
+
+/// Snapshot the current `state_manager` generation. Captured by the
+/// FRB consumer loop on entry; see `apply_event_at_generation`.
+pub fn current_generation() -> u64 {
+    state_manager().current_generation()
 }
 
 /// Read a speaker's cached volume — used by Slice 4's
@@ -187,6 +215,21 @@ pub fn apply_event(event: &ChangeEvent) {
 /// API lands in Task 2 / Slice 4 of this plan.
 pub fn cached_volume(speaker: &SpeakerId) -> Option<Volume> {
     state_manager().volume_of(speaker)
+}
+
+/// Read a speaker's cached mute state. Slice 4 read surface.
+pub fn cached_muted(speaker: &SpeakerId) -> Option<bool> {
+    state_manager().muted_of(speaker)
+}
+
+/// Read a group's cached transport. Slice 4 read surface.
+pub fn cached_transport(group: &GroupId) -> Option<oto_core::TransportState> {
+    state_manager().transport_of(group)
+}
+
+/// Read a group's cached current track. Slice 4 read surface.
+pub fn cached_track(group: &GroupId) -> Option<oto_core::Track> {
+    state_manager().track_of(group)
 }
 
 // ── Test-only helpers ─────────────────────────────────────────────────────────
@@ -300,6 +343,62 @@ mod tests {
         );
         // SEED_VOLUME is 30; confirm we got the fresh seed, not the old value.
         assert_eq!(vol_after_replace, Volume::new(30).unwrap());
+    }
+
+    /// Discover-with auto-invokes `subscribe_speakers` on the wire it
+    /// installs, so a Dart consumer that calls `subscribe_change_events`
+    /// (which is what `take_event_stream` underpins) sees seed events
+    /// without the caller having to drive subscription itself.
+    ///
+    /// PR #43 only exercised this transitively through the Dart
+    /// integration test (`v0_4_events_test.dart`). Pin the Rust-level
+    /// contract directly so the wire-installation path stays honest
+    /// even when the Dart layer is being reshaped.
+    #[test]
+    fn discover_with_auto_invokes_subscribe_speakers() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        clear_slot();
+
+        // `discover_with` is expected to call `subscribe_speakers`
+        // internally; absent that call, `take_event_stream` would
+        // return None even though the wire is installed.
+        let snap = discover_with(|| Box::new(MockWire::default())).expect("discover ok");
+        assert_eq!(snap.speakers.len(), 3, "fixture sanity");
+
+        let rx = take_event_stream().expect(
+            "discover_with must auto-invoke subscribe_speakers — without it the \
+             MockWire's tx channel is None and the receiver is unreachable",
+        );
+
+        // Drain seed events until the channel goes quiet. Slice 2
+        // expanded the mock's seed set (Volume + Mute + Playback —
+        // see `MockWire::subscribe_speakers`); rather than hardcode
+        // the exact count, count the Volume seeds specifically and
+        // assert ≥3 (one per fixture speaker). A regression that
+        // dropped the subscribe call would surface as zero events
+        // arriving in the recv_timeout window.
+        let mut volume_seeds = 0usize;
+        let mut total_seeds = 0usize;
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                Ok(ChangeEvent::Volume { .. }) => {
+                    volume_seeds += 1;
+                    total_seeds += 1;
+                }
+                Ok(_) => total_seeds += 1,
+                Err(_) => break,
+            }
+            if total_seeds > 32 {
+                panic!("seed phase produced > 32 events; runaway");
+            }
+        }
+        assert!(
+            volume_seeds >= 3,
+            "subscribe_speakers must emit ≥3 Volume seeds for the 3-speaker fixture; got {volume_seeds} (total seeds: {total_seeds})"
+        );
     }
 
     /// Regression for the concurrent-`discover()` race: the old design

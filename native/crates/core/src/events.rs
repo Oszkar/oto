@@ -11,14 +11,28 @@
 //! single FRB stream stays alive across recoverable upstream blips —
 //! see FRB pre-check § 4.
 
-use crate::{identifiers::SpeakerId, volume::Volume};
+use crate::{
+    identifiers::{GroupId, SpeakerId},
+    track::Track,
+    transport::PlaybackState,
+    volume::Volume,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChangeEvent {
     /// A speaker's volume changed (per-speaker — applies to one device).
     Volume { speaker: SpeakerId, volume: Volume },
-    // Mute (per-speaker) lands in Task 2.
-    // Playback / Track (per-group) land in Task 2.
+    /// A speaker's mute state changed (per-speaker — applies to one device).
+    Mute { speaker: SpeakerId, muted: bool },
+    /// A group's transport state changed (per-group — applies to all
+    /// coordinator + member speakers in the group; see oto-core D2).
+    Playback {
+        group: GroupId,
+        state: PlaybackState,
+    },
+    /// A group's current track changed. Carries the full `Track` so a
+    /// Slice 4 cache reader gets metadata + URI in one event.
+    Track { group: GroupId, track: Track },
     /// A per-speaker subscription failed and recovery is being
     /// attempted. The stream itself is still alive; the UI may show
     /// "stale" for that speaker. Reserve `sink.add_error` for fatal
@@ -77,5 +91,63 @@ mod tests {
         // Required for crossing the channel + the FRB worker boundary.
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<ChangeEvent>();
+    }
+
+    #[test]
+    fn mute_variant_round_trips_speaker_id() {
+        let sid = SpeakerId::new("RINCON_OFFICE");
+        let ev = ChangeEvent::Mute {
+            speaker: sid.clone(),
+            muted: true,
+        };
+        match ev {
+            ChangeEvent::Mute { speaker, muted } => {
+                assert_eq!(speaker, sid);
+                assert!(muted);
+            }
+            _ => panic!("expected Mute variant"),
+        }
+    }
+
+    #[test]
+    fn playback_variant_round_trips_group_id() {
+        let gid = GroupId::new("RINCON_KITCHEN:1");
+        let ev = ChangeEvent::Playback {
+            group: gid.clone(),
+            state: PlaybackState::Playing,
+        };
+        match ev {
+            ChangeEvent::Playback { group, state } => {
+                assert_eq!(group, gid);
+                assert_eq!(state, PlaybackState::Playing);
+            }
+            _ => panic!("expected Playback variant"),
+        }
+    }
+
+    #[test]
+    fn track_variant_round_trips_group_id() {
+        let gid = GroupId::new("RINCON_KITCHEN:1");
+        let track = Track {
+            id: None,
+            title: Some("Halcyon".into()),
+            artist: Some("Orbital".into()),
+            album: None,
+            track_number: None,
+            duration: None,
+            art_uri: None,
+            uri: None,
+        };
+        let ev = ChangeEvent::Track {
+            group: gid.clone(),
+            track: track.clone(),
+        };
+        match ev {
+            ChangeEvent::Track { group, track: t } => {
+                assert_eq!(group, gid);
+                assert_eq!(t, track);
+            }
+            _ => panic!("expected Track variant"),
+        }
     }
 }
