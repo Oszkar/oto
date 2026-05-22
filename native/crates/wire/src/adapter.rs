@@ -2,17 +2,18 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use oto_core::{
-    DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, SpeakerIdentity, SpeakerState, Volume,
-    Wire, WireError,
+    ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, SpeakerIdentity,
+    SpeakerState, Volume, Wire, WireError,
 };
 use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::SonosClient;
 
+use crate::events::{EventPump, PumpInputs};
 use crate::{control, ssdp};
 
 const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
@@ -20,8 +21,8 @@ const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
 /// Production wire implementation backed by `sonos_api` direct SOAP calls.
 ///
 /// Interior-mutable caches (`id_to_addr`, `group_to_coordinator`,
-/// `speaker_to_coordinator`) are populated by `discover()` and used by
-/// the playback/read methods.
+/// `speaker_to_coordinator`, `id_to_name`) are populated by `discover()`
+/// and used by the playback/read methods + the v0.4 event pump.
 /// All methods return `Err(WireError::NotFound)` if called before a
 /// successful `discover()` has populated the relevant entry.
 pub struct SonosWire {
@@ -35,17 +36,22 @@ pub struct SonosWire {
     /// Maps each member `SpeakerId` → its group coordinator `SpeakerId`
     /// (oto-core D2). Coordinator maps to itself.
     speaker_to_coordinator: Mutex<HashMap<SpeakerId, SpeakerId>>,
-    /// One-shot "we logged the Slice-3 stub warning already" flag for
-    /// `subscribe_speakers`. The real wire calls it once per
-    /// `discover_with`, so the log fires once per discovery — but
-    /// belt-and-braces: keep it cheap & idempotent if a future caller
-    /// invokes it more than once.
-    subscribe_warned: AtomicBool,
-    /// Same shape as `subscribe_warned`, for `take_event_stream`. The
-    /// FRB consumer loop calls this exactly once per wire today (see
-    /// `api.rs::subscribe_change_events`), but keep the warning
-    /// one-shot in case future callers retry.
-    take_stream_warned: AtomicBool,
+    /// Maps `SpeakerId` → its `room_name`. Used only by the v0.4 event
+    /// pump to populate the SDK's `sonos_discovery::Device` records.
+    id_to_name: Mutex<HashMap<SpeakerId, String>>,
+    /// v0.4 event pump + the still-takeable `Receiver`. `None` until
+    /// `subscribe_speakers` is called; `Some` thereafter for the
+    /// lifetime of the wire. The `Receiver` is taken once via
+    /// `take_event_stream` and then is `None` inside the option.
+    events_state: Mutex<Option<EventsState>>,
+}
+
+struct EventsState {
+    /// Owns the pump thread. Dropped when the wire is dropped, which
+    /// terminates the SDK subscriptions and joins the pump thread.
+    _pump: EventPump,
+    /// One-shot: taken on first `take_event_stream`, then `None`.
+    rx: Option<Receiver<ChangeEvent>>,
 }
 
 impl SonosWire {
@@ -55,9 +61,56 @@ impl SonosWire {
             id_to_addr: Mutex::new(HashMap::new()),
             group_to_coordinator: Mutex::new(HashMap::new()),
             speaker_to_coordinator: Mutex::new(HashMap::new()),
-            subscribe_warned: AtomicBool::new(false),
-            take_stream_warned: AtomicBool::new(false),
+            id_to_name: Mutex::new(HashMap::new()),
+            events_state: Mutex::new(None),
         }
+    }
+
+    /// Snapshot the wire's interior-mutable caches into a `PumpInputs`
+    /// for `EventPump::spawn`. Returns `NoSpeakersDiscovered` if the
+    /// caches are empty (called before discover()).
+    fn snapshot_for_pump(&self) -> Result<PumpInputs, WireError> {
+        let id_to_addr = self
+            .id_to_addr
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        if id_to_addr.is_empty() {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
+        let group_to_coord = self
+            .group_to_coordinator
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        let speaker_to_coord = self
+            .speaker_to_coordinator
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+        let id_to_name = self
+            .id_to_name
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone();
+
+        // Build coord_to_group by inverting group_to_coord.
+        let coord_to_group = group_to_coord
+            .into_iter()
+            .map(|(g, coord)| (coord, g))
+            .collect();
+
+        let speaker_ips = id_to_addr
+            .into_iter()
+            .map(|(sid, addr)| (sid, addr.ip()))
+            .collect();
+
+        Ok(PumpInputs {
+            speaker_ips,
+            coord_to_group,
+            speaker_to_coord,
+            speaker_names: id_to_name,
+        })
     }
 
     /// Resolve a `SpeakerId` to its cached `SocketAddr`.
@@ -120,6 +173,13 @@ impl SonosWire {
                 for m in &group.members {
                     cache.insert(m.clone(), group.coordinator.clone());
                 }
+            }
+        }
+        {
+            let mut cache = self.id_to_name.lock().unwrap_or_else(|p| p.into_inner());
+            cache.clear();
+            for speaker in &snapshot.speakers {
+                cache.insert(speaker.id.clone(), speaker.room_name.clone());
             }
         }
     }
@@ -299,43 +359,29 @@ impl Wire for SonosWire {
     }
 
     fn subscribe_speakers(&self) -> Result<(), WireError> {
-        // TODO(v0.4 Slice 3): wire up the sonos-sdk-state pump thread.
-        // Slice 1 ships the trait + MockWire impl; SonosWire is a no-op
-        // until Path A lands. `discover_with` calls this after a
-        // successful `discover()`, so returning Ok keeps the production
-        // flow green while we validate the architecture against
-        // MockWire end-to-end.
-        //
-        // Log once per wire so hardware debugging is unambiguous:
-        // "no events on SonosWire" is expected today, not a bug.
-        // `tracing` is not yet an oto-wire dep; `eprintln!` is fine for
-        // this single Slice-3-bridge breadcrumb. Revisit when `tracing`
-        // lands (Slice 3 will need it for the pump thread anyway).
-        if !self.subscribe_warned.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "[oto-wire] SonosWire::subscribe_speakers is a Slice 3 stub — \
-                 no events will arrive until Path A (sonos-sdk-state) lands."
-            );
+        // v0.4 Slice 3: wire up the sonos-sdk-state pump thread. One
+        // shot per wire — repeated calls error with `AlreadySubscribed`.
+        // Per-speaker subscription failures surface in-band via
+        // `ChangeEvent::SubscriptionError`, not via this Result.
+        let mut guard = self.events_state.lock().unwrap_or_else(|p| p.into_inner());
+        if guard.is_some() {
+            return Err(WireError::AlreadySubscribed);
         }
+        let inputs = self.snapshot_for_pump()?;
+        let (pump, rx) = EventPump::spawn(inputs)?;
+        *guard = Some(EventsState {
+            _pump: pump,
+            rx: Some(rx),
+        });
         Ok(())
     }
 
-    fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<oto_core::ChangeEvent>> {
-        // TODO(v0.4 Slice 3): return the Receiver wired to the pump
-        // thread. Slice 1 has no real producer for SonosWire; the
-        // FRB consumer loop sees None and exits cleanly, which is
-        // correct — there are no events to forward until Slice 3.
-        //
-        // Mirror the subscribe_speakers warning so the cause-vs-effect
-        // ("subscribe is a stub" / "we returned no stream") is visible
-        // in both places.
-        if !self.take_stream_warned.swap(true, Ordering::Relaxed) {
-            eprintln!(
-                "[oto-wire] SonosWire::take_event_stream is a Slice 3 stub — \
-                 returning None until Path A (sonos-sdk-state) lands."
-            );
-        }
-        None
+    fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
+        // One-shot per wire. Returns the Receiver the first time after
+        // `subscribe_speakers`; returns `None` thereafter (or if no
+        // subscribe call has happened yet).
+        let mut guard = self.events_state.lock().unwrap_or_else(|p| p.into_inner());
+        guard.as_mut().and_then(|s| s.rx.take())
     }
 }
 
