@@ -302,6 +302,53 @@ mod tests {
         assert_eq!(vol_after_replace, Volume::new(30).unwrap());
     }
 
+    /// Discover-with auto-invokes `subscribe_speakers` on the wire it
+    /// installs, so a Dart consumer that calls `subscribe_change_events`
+    /// (which is what `take_event_stream` underpins) sees seed events
+    /// without the caller having to drive subscription itself.
+    ///
+    /// PR #43 only exercised this transitively through the Dart
+    /// integration test (`v0_4_events_test.dart`). Pin the Rust-level
+    /// contract directly so the wire-installation path stays honest
+    /// even when the Dart layer is being reshaped.
+    #[test]
+    fn discover_with_auto_invokes_subscribe_speakers() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        clear_slot();
+
+        // `discover_with` is expected to call `subscribe_speakers`
+        // internally; absent that call, `take_event_stream` would
+        // return None even though the wire is installed.
+        let snap = discover_with(|| Box::new(MockWire::default())).expect("discover ok");
+        assert_eq!(snap.speakers.len(), 3, "fixture sanity");
+
+        let rx = take_event_stream().expect(
+            "discover_with must auto-invoke subscribe_speakers — without it the \
+             MockWire's tx channel is None and the receiver is unreachable",
+        );
+
+        // Drain seed events with a generous bound: the fixture has
+        // 3 speakers, so subscribe seeds exactly 3 Volume events.
+        // Use `recv_timeout` so a regression (e.g. subscribe never
+        // happened, so the channel is empty) fails the test fast
+        // instead of hanging.
+        let mut volume_seeds = 0usize;
+        for _ in 0..3 {
+            match rx.recv_timeout(std::time::Duration::from_millis(200)) {
+                Ok(ChangeEvent::Volume { .. }) => volume_seeds += 1,
+                Ok(other) => panic!("expected Volume seed, got {other:?}"),
+                Err(e) => panic!("missing seed event: {e:?}"),
+            }
+        }
+        assert!(
+            volume_seeds >= 3,
+            "subscribe_speakers must emit ≥3 Volume seeds for the 3-speaker fixture; got {volume_seeds}"
+        );
+    }
+
     /// Regression for the concurrent-`discover()` race: the old design
     /// ran `wire.discover()` *outside* any lock and only locked the slot
     /// for the final write, so two overlapping discoveries could finish
