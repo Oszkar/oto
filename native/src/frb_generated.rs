@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 290067655;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1225804131;
 
 // Section: executor
 
@@ -345,8 +345,64 @@ fn wire__crate__api__speaker_state_impl(
         },
     )
 }
+fn wire__crate__api__subscribe_change_events_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "subscribe_change_events",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_sink = <StreamSink<
+                crate::api::ChangeEventDto,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::subscribe_change_events(api_sink);
+                    })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
+
+impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::anyhow::anyhow!("{}", inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<crate::api::ChangeEventDto, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
 
 impl SseDecode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -360,6 +416,40 @@ impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for crate::api::ChangeEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_speakerId = <String>::sse_decode(deserializer);
+                let mut var_volume = <u32>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::Volume {
+                    speaker_id: var_speakerId,
+                    volume: var_volume,
+                };
+            }
+            1 => {
+                let mut var_speakerId = <String>::sse_decode(deserializer);
+                let mut var_message = <String>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::SubscriptionError {
+                    speaker_id: var_speakerId,
+                    message: var_message,
+                };
+            }
+            2 => {
+                let mut var_speakerId = <String>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::SubscriptionRecovered {
+                    speaker_id: var_speakerId,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -683,6 +773,7 @@ fn pde_ffi_dispatcher_primary_impl(
         7 => wire__crate__api__set_mute_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__api__set_volume_impl(port, ptr, rust_vec_len, data_len),
         9 => wire__crate__api__speaker_state_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__subscribe_change_events_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -701,6 +792,40 @@ fn pde_ffi_dispatcher_sync_impl(
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::ChangeEventDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::ChangeEventDto::Volume { speaker_id, volume } => [
+                0.into_dart(),
+                speaker_id.into_into_dart().into_dart(),
+                volume.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ChangeEventDto::SubscriptionError {
+                speaker_id,
+                message,
+            } => [
+                1.into_dart(),
+                speaker_id.into_into_dart().into_dart(),
+                message.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
+                [2.into_dart(), speaker_id.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::ChangeEventDto {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::ChangeEventDto> for crate::api::ChangeEventDto {
+    fn into_into_dart(self) -> crate::api::ChangeEventDto {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::CommandError {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -883,6 +1008,22 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::TransportDto> for crate::api:
     }
 }
 
+impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(format!("{:?}", self), serializer);
+    }
+}
+
+impl SseEncode
+    for StreamSink<crate::api::ChangeEventDto, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
 impl SseEncode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -894,6 +1035,34 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::ChangeEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::ChangeEventDto::Volume { speaker_id, volume } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(speaker_id, serializer);
+                <u32>::sse_encode(volume, serializer);
+            }
+            crate::api::ChangeEventDto::SubscriptionError {
+                speaker_id,
+                message,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(speaker_id, serializer);
+                <String>::sse_encode(message, serializer);
+            }
+            crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(speaker_id, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 

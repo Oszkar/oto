@@ -16,20 +16,14 @@ use crate::{identifiers::SpeakerId, volume::Volume};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChangeEvent {
     /// A speaker's volume changed (per-speaker — applies to one device).
-    Volume {
-        speaker: SpeakerId,
-        volume: Volume,
-    },
+    Volume { speaker: SpeakerId, volume: Volume },
     // Mute (per-speaker) lands in Task 2.
     // Playback / Track (per-group) land in Task 2.
     /// A per-speaker subscription failed and recovery is being
     /// attempted. The stream itself is still alive; the UI may show
     /// "stale" for that speaker. Reserve `sink.add_error` for fatal
     /// stream termination (FRB pre-check § 4).
-    SubscriptionError {
-        speaker: SpeakerId,
-        message: String,
-    },
+    SubscriptionError { speaker: SpeakerId, message: String },
     /// A previously-erroring speaker is back online — its cache is
     /// being refreshed via the next NOTIFY.
     SubscriptionRecovered { speaker: SpeakerId },

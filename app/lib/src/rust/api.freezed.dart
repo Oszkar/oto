@@ -12,6 +12,405 @@ part of 'api.dart';
 // dart format off
 T _$identity<T>(T value) => value;
 /// @nodoc
+mixin _$ChangeEventDto {
+
+ String get speakerId;
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDtoCopyWith<ChangeEventDto> get copyWith => _$ChangeEventDtoCopyWithImpl<ChangeEventDto>(this as ChangeEventDto, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto&&(identical(other.speakerId, speakerId) || other.speakerId == speakerId));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,speakerId);
+
+@override
+String toString() {
+  return 'ChangeEventDto(speakerId: $speakerId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDtoCopyWith<$Res>  {
+  factory $ChangeEventDtoCopyWith(ChangeEventDto value, $Res Function(ChangeEventDto) _then) = _$ChangeEventDtoCopyWithImpl;
+@useResult
+$Res call({
+ String speakerId
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDtoCopyWithImpl<$Res>
+    implements $ChangeEventDtoCopyWith<$Res> {
+  _$ChangeEventDtoCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto _self;
+  final $Res Function(ChangeEventDto) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? speakerId = null,}) {
+  return _then(_self.copyWith(
+speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [ChangeEventDto].
+extension ChangeEventDtoPatterns on ChangeEventDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case ChangeEventDto_Volume() when volume != null:
+return volume(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
+return subscriptionRecovered(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,}){
+final _that = this;
+switch (_that) {
+case ChangeEventDto_Volume():
+return volume(_that);case ChangeEventDto_SubscriptionError():
+return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered():
+return subscriptionRecovered(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,}){
+final _that = this;
+switch (_that) {
+case ChangeEventDto_Volume() when volume != null:
+return volume(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
+return subscriptionRecovered(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case ChangeEventDto_Volume() when volume != null:
+return volume(_that.speakerId,_that.volume);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
+return subscriptionRecovered(_that.speakerId);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,}) {final _that = this;
+switch (_that) {
+case ChangeEventDto_Volume():
+return volume(_that.speakerId,_that.volume);case ChangeEventDto_SubscriptionError():
+return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered():
+return subscriptionRecovered(_that.speakerId);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,}) {final _that = this;
+switch (_that) {
+case ChangeEventDto_Volume() when volume != null:
+return volume(_that.speakerId,_that.volume);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
+return subscriptionRecovered(_that.speakerId);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_Volume extends ChangeEventDto {
+  const ChangeEventDto_Volume({required this.speakerId, required this.volume}): super._();
+  
+
+@override final  String speakerId;
+ final  int volume;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_VolumeCopyWith<ChangeEventDto_Volume> get copyWith => _$ChangeEventDto_VolumeCopyWithImpl<ChangeEventDto_Volume>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_Volume&&(identical(other.speakerId, speakerId) || other.speakerId == speakerId)&&(identical(other.volume, volume) || other.volume == volume));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,speakerId,volume);
+
+@override
+String toString() {
+  return 'ChangeEventDto.volume(speakerId: $speakerId, volume: $volume)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_VolumeCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_VolumeCopyWith(ChangeEventDto_Volume value, $Res Function(ChangeEventDto_Volume) _then) = _$ChangeEventDto_VolumeCopyWithImpl;
+@override @useResult
+$Res call({
+ String speakerId, int volume
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_VolumeCopyWithImpl<$Res>
+    implements $ChangeEventDto_VolumeCopyWith<$Res> {
+  _$ChangeEventDto_VolumeCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_Volume _self;
+  final $Res Function(ChangeEventDto_Volume) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? volume = null,}) {
+  return _then(ChangeEventDto_Volume(
+speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
+as String,volume: null == volume ? _self.volume : volume // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_SubscriptionError extends ChangeEventDto {
+  const ChangeEventDto_SubscriptionError({required this.speakerId, required this.message}): super._();
+  
+
+@override final  String speakerId;
+ final  String message;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_SubscriptionErrorCopyWith<ChangeEventDto_SubscriptionError> get copyWith => _$ChangeEventDto_SubscriptionErrorCopyWithImpl<ChangeEventDto_SubscriptionError>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_SubscriptionError&&(identical(other.speakerId, speakerId) || other.speakerId == speakerId)&&(identical(other.message, message) || other.message == message));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,speakerId,message);
+
+@override
+String toString() {
+  return 'ChangeEventDto.subscriptionError(speakerId: $speakerId, message: $message)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_SubscriptionErrorCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_SubscriptionErrorCopyWith(ChangeEventDto_SubscriptionError value, $Res Function(ChangeEventDto_SubscriptionError) _then) = _$ChangeEventDto_SubscriptionErrorCopyWithImpl;
+@override @useResult
+$Res call({
+ String speakerId, String message
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_SubscriptionErrorCopyWithImpl<$Res>
+    implements $ChangeEventDto_SubscriptionErrorCopyWith<$Res> {
+  _$ChangeEventDto_SubscriptionErrorCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_SubscriptionError _self;
+  final $Res Function(ChangeEventDto_SubscriptionError) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? speakerId = null,Object? message = null,}) {
+  return _then(ChangeEventDto_SubscriptionError(
+speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
+as String,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_SubscriptionRecovered extends ChangeEventDto {
+  const ChangeEventDto_SubscriptionRecovered({required this.speakerId}): super._();
+  
+
+@override final  String speakerId;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_SubscriptionRecoveredCopyWith<ChangeEventDto_SubscriptionRecovered> get copyWith => _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl<ChangeEventDto_SubscriptionRecovered>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_SubscriptionRecovered&&(identical(other.speakerId, speakerId) || other.speakerId == speakerId));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,speakerId);
+
+@override
+String toString() {
+  return 'ChangeEventDto.subscriptionRecovered(speakerId: $speakerId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_SubscriptionRecoveredCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_SubscriptionRecoveredCopyWith(ChangeEventDto_SubscriptionRecovered value, $Res Function(ChangeEventDto_SubscriptionRecovered) _then) = _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl;
+@override @useResult
+$Res call({
+ String speakerId
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl<$Res>
+    implements $ChangeEventDto_SubscriptionRecoveredCopyWith<$Res> {
+  _$ChangeEventDto_SubscriptionRecoveredCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_SubscriptionRecovered _self;
+  final $Res Function(ChangeEventDto_SubscriptionRecovered) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? speakerId = null,}) {
+  return _then(ChangeEventDto_SubscriptionRecovered(
+speakerId: null == speakerId ? _self.speakerId : speakerId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$CommandError {
 
  String get field0;

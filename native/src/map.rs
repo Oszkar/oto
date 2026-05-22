@@ -14,11 +14,11 @@
 //! `u64` seconds (Sonos SOAP time fields carry no sub-second component, so
 //! this is lossless in practice).
 
-use oto_core::{DiscoverySnapshot, PlaybackState, SpeakerState, WireError};
+use oto_core::{ChangeEvent, DiscoverySnapshot, PlaybackState, SpeakerState, WireError};
 
 use crate::api::{
-    CommandError, DiscoveredGroup, DiscoveredSpeaker, DiscoveryError, PlaybackStateDto,
-    SpeakerStateDto, Topology, TrackDto, TransportDto,
+    ChangeEventDto, CommandError, DiscoveredGroup, DiscoveredSpeaker, DiscoveryError,
+    PlaybackStateDto, SpeakerStateDto, Topology, TrackDto, TransportDto,
 };
 
 /// `WireError` → the FRB-facing `DiscoveryError` (1:1; `Backend`/`NotFound` → `Sdk`).
@@ -128,6 +128,25 @@ fn to_playback_state_dto(state: PlaybackState) -> PlaybackStateDto {
         PlaybackState::Playing => PlaybackStateDto::Playing,
         PlaybackState::Paused => PlaybackStateDto::Paused,
         PlaybackState::Transitioning => PlaybackStateDto::Transitioning,
+    }
+}
+
+/// `ChangeEvent` → `ChangeEventDto`. Volume's `u8` widens to `u32` for
+/// the bridge (matches `SpeakerStateDto`'s pattern). v0.5
+/// `TopologyChanged` will need an additional DTO variant.
+pub fn to_change_event_dto(event: ChangeEvent) -> ChangeEventDto {
+    match event {
+        ChangeEvent::Volume { speaker, volume } => ChangeEventDto::Volume {
+            speaker_id: speaker.to_string(),
+            volume: u32::from(volume.get()),
+        },
+        ChangeEvent::SubscriptionError { speaker, message } => ChangeEventDto::SubscriptionError {
+            speaker_id: speaker.to_string(),
+            message,
+        },
+        ChangeEvent::SubscriptionRecovered { speaker } => ChangeEventDto::SubscriptionRecovered {
+            speaker_id: speaker.to_string(),
+        },
     }
 }
 
@@ -251,5 +270,53 @@ mod tests {
         assert_eq!(track.duration_secs, Some(593u64));
         assert_eq!(track.art_uri.as_deref(), Some("http://example/art.jpg"));
         assert_eq!(track.uri.as_deref(), Some("x-file-cifs://nas/halcyon.flac"));
+    }
+
+    // ── ChangeEventDto pinning tests ──────────────────────────────────────────
+
+    #[test]
+    fn change_event_volume_maps() {
+        let ev = ChangeEvent::Volume {
+            speaker: oto_core::SpeakerId::new("RINCON_X"),
+            volume: Volume::new(60).unwrap(),
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::Volume { speaker_id, volume } => {
+                assert_eq!(speaker_id, "RINCON_X");
+                assert_eq!(volume, 60u32);
+            }
+            _ => panic!("expected Volume DTO"),
+        }
+    }
+
+    #[test]
+    fn subscription_error_maps_string_through() {
+        let ev = ChangeEvent::SubscriptionError {
+            speaker: oto_core::SpeakerId::new("RINCON_Y"),
+            message: "boom".into(),
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::SubscriptionError {
+                speaker_id,
+                message,
+            } => {
+                assert_eq!(speaker_id, "RINCON_Y");
+                assert_eq!(message, "boom");
+            }
+            _ => panic!("expected SubscriptionError DTO"),
+        }
+    }
+
+    #[test]
+    fn subscription_recovered_maps() {
+        let ev = ChangeEvent::SubscriptionRecovered {
+            speaker: oto_core::SpeakerId::new("RINCON_Z"),
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::SubscriptionRecovered { speaker_id } => {
+                assert_eq!(speaker_id, "RINCON_Z");
+            }
+            _ => panic!("expected SubscriptionRecovered DTO"),
+        }
     }
 }

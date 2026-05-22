@@ -1,5 +1,7 @@
 use oto_app::discover as app_discover;
 
+use crate::frb_generated::StreamSink;
+
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
@@ -65,6 +67,16 @@ pub enum CommandError {
     NotFound(String),
     Network(String),
     Sonos(String),
+}
+
+// ── v0.4 event DTOs ──────────────────────────────────────────────────────────
+
+/// FRB DTO for `oto_core::ChangeEvent`. Volume is the v0.4 starter;
+/// Mute / Playback / Track lands in Slice 2 (this plan, Task 2).
+pub enum ChangeEventDto {
+    Volume { speaker_id: String, volume: u32 },
+    SubscriptionError { speaker_id: String, message: String },
+    SubscriptionRecovered { speaker_id: String },
 }
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
@@ -139,4 +151,39 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
     let id = oto_core::SpeakerId::new(speaker_id);
     let state = oto_app::speaker_state(&id).map_err(crate::map::to_command_error)?;
     Ok(crate::map::to_speaker_state_dto(state))
+}
+
+// ── v0.4 event stream ────────────────────────────────────────────────────────
+
+/// Subscribe to the unified v0.4 change-event stream. One call per app
+/// instance; the Dart `subscribeChangeEventsProvider` is the consumer.
+/// Stream completes (`onDone` fires) when `discover()` replaces the
+/// wire — the Dart provider depends on `discoveryProvider` and
+/// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`
+/// (FRB pre-check § 3).
+pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
+    // Body runs on the FRB worker thread (pre-check § 2). Blocking
+    // `recv()` here is fine — it blocks the worker, not the UI.
+    let Some(rx) = oto_app::take_event_stream() else {
+        // No wire installed yet, or stream already taken. The Dart
+        // provider depends on `discoveryProvider`; once discover()
+        // succeeds, this fn will be called again against the new wire.
+        return;
+    };
+    loop {
+        let event = match rx.recv() {
+            Ok(e) => e,
+            // Sender dropped — wire was replaced (discover() ran).
+            // Return cleanly; FRB stream completes; Dart rebuilds.
+            Err(_) => return,
+        };
+        oto_app::apply_event(&event);
+        let dto = crate::map::to_change_event_dto(event);
+        if sink.add(dto).is_err() {
+            // Dart subscriber cancelled. Return cleanly; the
+            // sender stays alive for any next consumer (in
+            // practice there isn't one until the next discover()).
+            return;
+        }
+    }
 }

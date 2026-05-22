@@ -21,6 +21,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  RustStreamSink<ChangeEventDto> dco_decode_StreamSink_change_event_dto_Sse(
+    dynamic raw,
+  );
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
@@ -40,6 +48,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  ChangeEventDto dco_decode_change_event_dto(dynamic raw);
 
   @protected
   CommandError dco_decode_command_error(dynamic raw);
@@ -114,6 +125,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<ChangeEventDto> sse_decode_StreamSink_change_event_dto_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
@@ -135,6 +154,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  ChangeEventDto sse_decode_change_event_dto(SseDeserializer deserializer);
 
   @protected
   CommandError sse_decode_command_error(SseDeserializer deserializer);
@@ -215,6 +237,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_change_event_dto_Sse(
+    RustStreamSink<ChangeEventDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
@@ -240,6 +274,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_change_event_dto(
+    ChangeEventDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_command_error(CommandError self, SseSerializer serializer);

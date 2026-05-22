@@ -483,10 +483,7 @@ mod tests {
     #[test]
     fn subscribe_speakers_errors_without_discovery() {
         let w = MockWire::failing(WireError::NoDevicesFound);
-        assert_eq!(
-            w.subscribe_speakers(),
-            Err(WireError::NoSpeakersDiscovered)
-        );
+        assert_eq!(w.subscribe_speakers(), Err(WireError::NoSpeakersDiscovered));
     }
 
     #[test]

@@ -45,10 +45,7 @@ impl StateManager {
     pub fn apply_event(&self, event: &ChangeEvent) {
         match event {
             ChangeEvent::Volume { speaker, volume } => {
-                let mut guard = self
-                    .speakers
-                    .write()
-                    .unwrap_or_else(|p| p.into_inner());
+                let mut guard = self.speakers.write().unwrap_or_else(|p| p.into_inner());
                 guard.entry(speaker.clone()).or_default().volume = Some(*volume);
             }
             // SubscriptionError / SubscriptionRecovered have no cache
@@ -106,9 +103,7 @@ mod tests {
     fn subscription_recovered_does_not_touch_cache() {
         let sm = StateManager::new();
         let k = SpeakerId::new("RINCON_K");
-        sm.apply_event(&ChangeEvent::SubscriptionRecovered {
-            speaker: k.clone(),
-        });
+        sm.apply_event(&ChangeEvent::SubscriptionRecovered { speaker: k.clone() });
         assert!(sm.volume_of(&k).is_none());
     }
 

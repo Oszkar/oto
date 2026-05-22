@@ -55,6 +55,32 @@ Future<void> setMute({required String speakerId, required bool muted}) =>
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
 
+/// Subscribe to the unified v0.4 change-event stream. One call per app
+/// instance; the Dart `subscribeChangeEventsProvider` is the consumer.
+/// Stream completes (`onDone` fires) when `discover()` replaces the
+/// wire — the Dart provider depends on `discoveryProvider` and
+/// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`
+/// (FRB pre-check § 3).
+Stream<ChangeEventDto> subscribeChangeEvents() =>
+    RustLib.instance.api.crateApiSubscribeChangeEvents();
+
+@freezed
+sealed class ChangeEventDto with _$ChangeEventDto {
+  const ChangeEventDto._();
+
+  const factory ChangeEventDto.volume({
+    required String speakerId,
+    required int volume,
+  }) = ChangeEventDto_Volume;
+  const factory ChangeEventDto.subscriptionError({
+    required String speakerId,
+    required String message,
+  }) = ChangeEventDto_SubscriptionError;
+  const factory ChangeEventDto.subscriptionRecovered({
+    required String speakerId,
+  }) = ChangeEventDto_SubscriptionRecovered;
+}
+
 @freezed
 sealed class CommandError with _$CommandError implements FrbException {
   const CommandError._();
