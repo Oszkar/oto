@@ -280,4 +280,219 @@ mod tests {
         sm.clear();
         assert!(sm.volume_of(&SpeakerId::new("RINCON_K")).is_none());
     }
+
+    // ── Slice 2 data-model coverage ──────────────────────────────────────
+
+    #[test]
+    fn apply_mute_event_populates_cache() {
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+        assert!(sm.muted_of(&k).is_none());
+        sm.apply_event(&ChangeEvent::Mute {
+            speaker: k.clone(),
+            muted: true,
+        });
+        assert_eq!(sm.muted_of(&k), Some(true));
+    }
+
+    #[test]
+    fn apply_playback_event_creates_transport_with_state() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        sm.apply_event(&ChangeEvent::Playback {
+            group: g.clone(),
+            state: PlaybackState::Playing,
+        });
+        let t = sm.transport_of(&g).expect("transport seeded by Playback");
+        assert_eq!(t.state, PlaybackState::Playing);
+        assert!(t.current_track.is_none());
+        assert!(t.position.is_none());
+    }
+
+    #[test]
+    fn apply_playback_preserves_existing_track_and_position() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        let track = Track {
+            id: None,
+            title: Some("T".into()),
+            artist: None,
+            album: None,
+            track_number: None,
+            duration: None,
+            art_uri: None,
+            uri: None,
+        };
+        // First Track populates entry.track + entry.transport.current_track.
+        sm.apply_event(&ChangeEvent::Track {
+            group: g.clone(),
+            track: track.clone(),
+        });
+        // Then Playback must NOT drop the track.
+        sm.apply_event(&ChangeEvent::Playback {
+            group: g.clone(),
+            state: PlaybackState::Paused,
+        });
+        let t = sm.transport_of(&g).unwrap();
+        assert_eq!(t.state, PlaybackState::Paused);
+        assert_eq!(t.current_track, Some(track));
+    }
+
+    #[test]
+    fn apply_track_updates_both_track_field_and_transport_current_track() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        let track = Track {
+            id: None,
+            title: Some("Belfast".into()),
+            artist: None,
+            album: None,
+            track_number: None,
+            duration: None,
+            art_uri: None,
+            uri: None,
+        };
+        sm.apply_event(&ChangeEvent::Track {
+            group: g.clone(),
+            track: track.clone(),
+        });
+        assert_eq!(sm.track_of(&g), Some(track.clone()));
+        // transport must be synthesised with the same track so a
+        // Slice 4 read of transport.current_track is coherent.
+        let t = sm.transport_of(&g).unwrap();
+        assert_eq!(t.current_track, Some(track));
+    }
+
+    // ── Generation token coverage (PR #43 Codex P2 #5 / Important #4) ─
+
+    #[test]
+    fn apply_event_at_generation_with_wrong_generation_is_noop() {
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+        let gen = sm.current_generation();
+        // Bump so the captured `gen` is now stale.
+        sm.bump_and_clear();
+        sm.apply_event_at_generation(
+            gen,
+            &ChangeEvent::Volume {
+                speaker: k.clone(),
+                volume: Volume::new(99).unwrap(),
+            },
+        );
+        assert!(
+            sm.volume_of(&k).is_none(),
+            "stale-gen write must not mutate the cache"
+        );
+    }
+
+    #[test]
+    fn apply_event_at_generation_with_right_generation_mutates_cache() {
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+        let gen = sm.current_generation();
+        sm.apply_event_at_generation(
+            gen,
+            &ChangeEvent::Volume {
+                speaker: k.clone(),
+                volume: Volume::new(60).unwrap(),
+            },
+        );
+        assert_eq!(sm.volume_of(&k), Some(Volume::new(60).unwrap()));
+    }
+
+    #[test]
+    fn bump_and_clear_increments_generation_and_clears_both_caches() {
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+        let g = GroupId::new("RINCON_K:1");
+        // Populate both caches.
+        sm.apply_event(&ChangeEvent::Volume {
+            speaker: k.clone(),
+            volume: Volume::new(50).unwrap(),
+        });
+        sm.apply_event(&ChangeEvent::Playback {
+            group: g.clone(),
+            state: PlaybackState::Playing,
+        });
+        assert!(sm.volume_of(&k).is_some());
+        assert!(sm.transport_of(&g).is_some());
+
+        let before = sm.current_generation();
+        sm.bump_and_clear();
+        let after = sm.current_generation();
+
+        assert_eq!(after, before + 1, "generation must be exactly bumped by 1");
+        assert!(
+            sm.volume_of(&k).is_none(),
+            "speakers cache must be cleared atomically with the bump"
+        );
+        assert!(
+            sm.transport_of(&g).is_none(),
+            "groups cache must be cleared atomically with the bump"
+        );
+    }
+
+    /// Adversarial concurrency: simulate a stale consumer loop still
+    /// draining the OLD wire's channel while the NEW wire is already
+    /// up. The stale consumer's `apply_event_at_generation(old_gen,
+    /// ...)` calls must not pollute the freshly-seeded cache after
+    /// `bump_and_clear`.
+    ///
+    /// This drives the *exact* shape of the api.rs::subscribe_change_events
+    /// path: `gen` is captured once, then used for every subsequent
+    /// apply. The fix is that the second apply (after `bump_and_clear`)
+    /// is a no-op because the captured generation is now stale.
+    #[test]
+    fn stale_consumer_loop_does_not_pollute_after_bump_and_clear() {
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+
+        // OLD consumer captures its generation on entry.
+        let old_gen = sm.current_generation();
+        // OLD consumer drains one event from the OLD wire — applies fine.
+        sm.apply_event_at_generation(
+            old_gen,
+            &ChangeEvent::Volume {
+                speaker: k.clone(),
+                volume: Volume::new(40).unwrap(),
+            },
+        );
+        assert_eq!(sm.volume_of(&k), Some(Volume::new(40).unwrap()));
+
+        // A new discover_with runs: bump + clear (per the new path).
+        sm.bump_and_clear();
+        // NEW wire has not seeded yet — cache is empty.
+        assert!(sm.volume_of(&k).is_none());
+
+        // OLD consumer's loop is still alive (Sender hasn't been
+        // dropped yet — slot replacement is the next step), so it
+        // pulls one more leftover event from the OLD channel and
+        // calls apply_event_at_generation with its CAPTURED old_gen.
+        sm.apply_event_at_generation(
+            old_gen,
+            &ChangeEvent::Volume {
+                speaker: k.clone(),
+                volume: Volume::new(40).unwrap(),
+            },
+        );
+
+        // The cache must STILL be empty — the stale apply is dropped.
+        assert!(
+            sm.volume_of(&k).is_none(),
+            "stale OLD-wire event must not repopulate cleared cache"
+        );
+
+        // Sanity: the NEW consumer (running at the post-bump gen)
+        // can seed normally.
+        let new_gen = sm.current_generation();
+        assert_ne!(new_gen, old_gen);
+        sm.apply_event_at_generation(
+            new_gen,
+            &ChangeEvent::Volume {
+                speaker: k.clone(),
+                volume: Volume::new(70).unwrap(),
+            },
+        );
+        assert_eq!(sm.volume_of(&k), Some(Volume::new(70).unwrap()));
+    }
 }
