@@ -153,6 +153,109 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
     Ok(crate::map::to_speaker_state_dto(state))
 }
 
+// ── v0.4 DEV-ONLY: MockWire injection for integration tests ───────────────────
+//
+// TODO(v0.5): consider removing once the v0.4 integration test pattern
+// is established. Until then, this is the only FRB-side seam to drive
+// the LAN-free end-to-end test in `app/integration_test/v0_4_events_test.dart`.
+//
+// NOTE: not `cfg(debug_assertions)`-gated. FRB's generated
+// `frb_generated.rs` unconditionally references every exposed fn, so a
+// cfg gate would break the release cdylib build. The cost is one extra
+// symbol in the release binary; oto-mock is a small workspace crate.
+
+use std::sync::{Arc, OnceLock};
+
+use oto_mock::MockWire;
+
+/// Side-channel handle to the MockWire created by `dev_discover_mock`.
+/// `dev_push_subscription_error_on_mock` reaches in here because
+/// `MockWire::push_event` is an inherent method (not on the `Wire`
+/// trait — adversarial pushes are a test-only affordance), so the
+/// regular `oto_app::slot()` path can't surface it.
+fn dev_mock_handle() -> &'static std::sync::Mutex<Option<Arc<MockWire>>> {
+    static MOCK: OnceLock<std::sync::Mutex<Option<Arc<MockWire>>>> = OnceLock::new();
+    MOCK.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+pub fn dev_discover_mock() -> Result<Topology, DiscoveryError> {
+    let mock = Arc::new(MockWire::default());
+    // Keep a side reference so dev_push_subscription_error_on_mock can
+    // call push_event on the SAME instance that's in oto_app::slot().
+    *dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&mock));
+    let mock_for_app = Arc::clone(&mock);
+    let snap = oto_app::discover_with(move || Box::new(MockWireArc(mock_for_app)))
+        .map_err(crate::map::to_discovery_error)?;
+    Ok(crate::map::to_topology(snap))
+}
+
+/// Push a `SubscriptionError` event into the held MockWire's channel.
+/// Returns an error if `dev_discover_mock` hasn't run yet.
+pub fn dev_push_subscription_error_on_mock(
+    speaker_id: String,
+    message: String,
+) -> Result<(), CommandError> {
+    let guard = dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner());
+    let mock = guard
+        .as_ref()
+        .ok_or_else(|| CommandError::NotFound("dev_discover_mock not called yet".into()))?;
+    mock.push_event(oto_core::ChangeEvent::SubscriptionError {
+        speaker: oto_core::SpeakerId::new(speaker_id),
+        message,
+    });
+    Ok(())
+}
+
+/// Newtype wrapping `Arc<MockWire>` so it implements `Wire` and can be
+/// boxed into the `oto_app::slot()`. We can't `Box<Arc<MockWire>>`
+/// directly because the slot holds `Box<dyn Wire>` and `Arc<T>` itself
+/// doesn't impl `Wire` (the impl is on `T`).
+struct MockWireArc(Arc<MockWire>);
+
+impl oto_core::Wire for MockWireArc {
+    fn discover(&self) -> Result<oto_core::DiscoverySnapshot, oto_core::WireError> {
+        self.0.discover()
+    }
+    fn play(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.play(group)
+    }
+    fn pause(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.pause(group)
+    }
+    fn next(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.next(group)
+    }
+    fn previous(&self, group: &oto_core::GroupId) -> Result<(), oto_core::WireError> {
+        self.0.previous(group)
+    }
+    fn set_volume(
+        &self,
+        speaker: &oto_core::SpeakerId,
+        volume: oto_core::Volume,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.set_volume(speaker, volume)
+    }
+    fn set_mute(
+        &self,
+        speaker: &oto_core::SpeakerId,
+        muted: bool,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.set_mute(speaker, muted)
+    }
+    fn speaker_state(
+        &self,
+        speaker: &oto_core::SpeakerId,
+    ) -> Result<oto_core::SpeakerState, oto_core::WireError> {
+        self.0.speaker_state(speaker)
+    }
+    fn subscribe_speakers(&self) -> Result<(), oto_core::WireError> {
+        self.0.subscribe_speakers()
+    }
+    fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<oto_core::ChangeEvent>> {
+        self.0.take_event_stream()
+    }
+}
+
 // ── v0.4 event stream ────────────────────────────────────────────────────────
 
 /// Subscribe to the unified v0.4 change-event stream. One call per app

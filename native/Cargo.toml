@@ -55,6 +55,15 @@ flutter_rust_bridge = "=2.12.0"
 oto-app = { workspace = true }
 oto-core = { workspace = true }
 
+# Debug-only: powers the `dev_discover_mock` FRB seam used by
+# `app/integration_test/v0_4_events_test.dart` to drive the v0.4
+# event surface end-to-end without a LAN. The FRB fn is itself
+# `cfg(debug_assertions)`-gated, so release builds never reference it.
+# Stays a regular (non-dev) dependency so the Flutter debug build of
+# the cdylib (which is what `flutter test integration_test/` uses)
+# resolves the symbol.
+oto-mock = { workspace = true }
+
 # Android cross-compile only. `sonos-api` pulls `reqwest` with default
 # features → `native-tls` → `openssl-sys`, and the Android NDK ships no
 # system OpenSSL, so the `aarch64/x86_64-linux-android` build fails to

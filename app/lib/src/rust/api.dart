@@ -8,6 +8,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'api.freezed.dart';
 
+// These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `take_event_stream`
+
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
 /// topology — speaker identities (id / room / model / ip) plus the
@@ -54,6 +58,19 @@ Future<void> setMute({required String speakerId, required bool muted}) =>
 /// Blocking SOAP round-trip; Dart `Future`.
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
+
+Future<Topology> devDiscoverMock() =>
+    RustLib.instance.api.crateApiDevDiscoverMock();
+
+/// Push a `SubscriptionError` event into the held MockWire's channel.
+/// Returns an error if `dev_discover_mock` hasn't run yet.
+Future<void> devPushSubscriptionErrorOnMock({
+  required String speakerId,
+  required String message,
+}) => RustLib.instance.api.crateApiDevPushSubscriptionErrorOnMock(
+  speakerId: speakerId,
+  message: message,
+);
 
 /// Subscribe to the unified v0.4 change-event stream. One call per app
 /// instance; the Dart `subscribeChangeEventsProvider` is the consumer.
