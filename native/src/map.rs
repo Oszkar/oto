@@ -14,7 +14,7 @@
 //! `u64` seconds (Sonos SOAP time fields carry no sub-second component, so
 //! this is lossless in practice).
 
-use oto_core::{ChangeEvent, DiscoverySnapshot, PlaybackState, SpeakerState, WireError};
+use oto_core::{ChangeEvent, DiscoverySnapshot, PlaybackState, SpeakerState, Track, WireError};
 
 use crate::api::{
     ChangeEventDto, CommandError, DiscoveredGroup, DiscoveredSpeaker, DiscoveryError,
@@ -107,17 +107,24 @@ pub fn to_speaker_state_dto(state: SpeakerState) -> SpeakerStateDto {
         transport: state.transport.map(|t| TransportDto {
             state: to_playback_state_dto(t.state),
             position_secs: t.position.map(|d| d.as_secs()),
-            current_track: t.current_track.map(|track| TrackDto {
-                id: track.id.map(|i| i.to_string()),
-                title: track.title,
-                artist: track.artist,
-                album: track.album,
-                track_number: track.track_number,
-                duration_secs: track.duration.map(|d| d.as_secs()),
-                art_uri: track.art_uri,
-                uri: track.uri,
-            }),
+            current_track: t.current_track.map(to_track_dto),
         }),
+    }
+}
+
+/// `Track` → `TrackDto`. Extracted so the Slice 2 `ChangeEvent::Track`
+/// mapping can reuse the same construction (DRY — the inline closure
+/// inside `to_speaker_state_dto` was the only previous build site).
+fn to_track_dto(track: Track) -> TrackDto {
+    TrackDto {
+        id: track.id.map(|i| i.to_string()),
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        track_number: track.track_number,
+        duration_secs: track.duration.map(|d| d.as_secs()),
+        art_uri: track.art_uri,
+        uri: track.uri,
     }
 }
 
@@ -139,6 +146,18 @@ pub fn to_change_event_dto(event: ChangeEvent) -> ChangeEventDto {
         ChangeEvent::Volume { speaker, volume } => ChangeEventDto::Volume {
             speaker_id: speaker.to_string(),
             volume: u32::from(volume.get()),
+        },
+        ChangeEvent::Mute { speaker, muted } => ChangeEventDto::Mute {
+            speaker_id: speaker.to_string(),
+            muted,
+        },
+        ChangeEvent::Playback { group, state } => ChangeEventDto::Playback {
+            group_id: group.to_string(),
+            state: to_playback_state_dto(state),
+        },
+        ChangeEvent::Track { group, track } => ChangeEventDto::Track {
+            group_id: group.to_string(),
+            track: to_track_dto(track),
         },
         ChangeEvent::SubscriptionError { speaker, message } => ChangeEventDto::SubscriptionError {
             speaker_id: speaker.to_string(),
@@ -317,6 +336,93 @@ mod tests {
                 assert_eq!(speaker_id, "RINCON_Z");
             }
             _ => panic!("expected SubscriptionRecovered DTO"),
+        }
+    }
+
+    #[test]
+    fn change_event_mute_maps() {
+        let ev = ChangeEvent::Mute {
+            speaker: oto_core::SpeakerId::new("RINCON_OFFICE"),
+            muted: true,
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::Mute { speaker_id, muted } => {
+                assert_eq!(speaker_id, "RINCON_OFFICE");
+                assert!(muted);
+            }
+            _ => panic!("expected Mute DTO"),
+        }
+    }
+
+    #[test]
+    fn change_event_playback_maps() {
+        let ev = ChangeEvent::Playback {
+            group: oto_core::GroupId::new("RINCON_KITCHEN:1"),
+            state: PlaybackState::Playing,
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::Playback { group_id, state } => {
+                assert_eq!(group_id, "RINCON_KITCHEN:1");
+                assert!(matches!(state, PlaybackStateDto::Playing));
+            }
+            _ => panic!("expected Playback DTO"),
+        }
+    }
+
+    #[test]
+    fn change_event_track_maps_full_fields() {
+        let ev = ChangeEvent::Track {
+            group: oto_core::GroupId::new("RINCON_KITCHEN:1"),
+            track: Track {
+                id: Some(TrackId::new("t-7")),
+                title: Some("Belfast".into()),
+                artist: Some("Orbital".into()),
+                album: Some("Brown Album".into()),
+                track_number: Some(2),
+                duration: Some(Duration::from_secs(587)),
+                art_uri: Some("http://example/belfast.jpg".into()),
+                uri: Some("x-rincon-mp3radio://belfast".into()),
+            },
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::Track { group_id, track } => {
+                assert_eq!(group_id, "RINCON_KITCHEN:1");
+                assert_eq!(track.id.as_deref(), Some("t-7"));
+                assert_eq!(track.title.as_deref(), Some("Belfast"));
+                assert_eq!(track.artist.as_deref(), Some("Orbital"));
+                assert_eq!(track.album.as_deref(), Some("Brown Album"));
+                assert_eq!(track.track_number, Some(2));
+                assert_eq!(track.duration_secs, Some(587));
+                assert_eq!(track.art_uri.as_deref(), Some("http://example/belfast.jpg"));
+                assert_eq!(track.uri.as_deref(), Some("x-rincon-mp3radio://belfast"));
+            }
+            _ => panic!("expected Track DTO"),
+        }
+    }
+
+    #[test]
+    fn change_event_track_maps_radio_stream() {
+        // Radio streams arrive with only `uri` populated.
+        let ev = ChangeEvent::Track {
+            group: oto_core::GroupId::new("RINCON_OFFICE:0"),
+            track: Track {
+                id: None,
+                title: None,
+                artist: None,
+                album: None,
+                track_number: None,
+                duration: None,
+                art_uri: None,
+                uri: Some("x-rincon-mp3radio://stream".into()),
+            },
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::Track { group_id, track } => {
+                assert_eq!(group_id, "RINCON_OFFICE:0");
+                assert!(track.title.is_none());
+                assert_eq!(track.uri.as_deref(), Some("x-rincon-mp3radio://stream"));
+            }
+            _ => panic!("expected Track DTO"),
         }
     }
 }

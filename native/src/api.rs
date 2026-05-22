@@ -71,12 +71,35 @@ pub enum CommandError {
 
 // ── v0.4 event DTOs ──────────────────────────────────────────────────────────
 
-/// FRB DTO for `oto_core::ChangeEvent`. Volume is the v0.4 starter;
-/// Mute / Playback / Track lands in Slice 2 (this plan, Task 2).
+/// FRB DTO for `oto_core::ChangeEvent`. Volume + the Subscription*
+/// variants landed in Slice 1; Mute / Playback / Track (Slice 2) cover
+/// the rest of the v0.4 property surface. Per spec § 4:
+///   - Volume / Mute are per-speaker (carry `speaker_id`).
+///   - Playback / Track are per-group (carry `group_id`).
 pub enum ChangeEventDto {
-    Volume { speaker_id: String, volume: u32 },
-    SubscriptionError { speaker_id: String, message: String },
-    SubscriptionRecovered { speaker_id: String },
+    Volume {
+        speaker_id: String,
+        volume: u32,
+    },
+    Mute {
+        speaker_id: String,
+        muted: bool,
+    },
+    Playback {
+        group_id: String,
+        state: PlaybackStateDto,
+    },
+    Track {
+        group_id: String,
+        track: TrackDto,
+    },
+    SubscriptionError {
+        speaker_id: String,
+        message: String,
+    },
+    SubscriptionRecovered {
+        speaker_id: String,
+    },
 }
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
@@ -312,6 +335,16 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         // succeeds, this fn will be called again against the new wire.
         return;
     };
+    // Capture the generation this consumer belongs to. If a future
+    // `discover_with` runs concurrently, it bumps the generation; our
+    // `apply_event_at_generation` calls then no-op so we cannot
+    // pollute the NEW wire's freshly-seeded cache with leftover
+    // events from the OLD wire's channel. The `sink.add(...)` path
+    // still surfaces these events to the Dart subscriber on the OLD
+    // stream until the rx Sender is dropped and `recv()` returns
+    // Err — that's correct because the OLD subscriber is the one
+    // listening on this sink.
+    let gen = oto_app::current_generation();
     loop {
         let event = match rx.recv() {
             Ok(e) => e,
@@ -319,7 +352,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
             // Return cleanly; FRB stream completes; Dart rebuilds.
             Err(_) => return,
         };
-        oto_app::apply_event(&event);
+        oto_app::apply_event_at_generation(gen, &event);
         let dto = crate::map::to_change_event_dto(event);
         if sink.add(dto).is_err() {
             // Dart subscriber cancelled. Return cleanly; the

@@ -115,9 +115,27 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
     // A NoSpeakersDiscovered here would be a logic bug (discover()
     // just succeeded), but treat any error as a discovery failure.
     wire.subscribe_speakers()?;
-    // Replace the wire AND clear the cache — old wire's state is
-    // stale; new wire seeds via initial NOTIFYs.
-    state_manager().clear();
+    // ── Race window between OLD and NEW wire ─────────────────────────
+    //
+    // At this point the NEW wire's pump is live (subscribe_speakers
+    // succeeded) and queueing events into its tx channel; the old
+    // wire is still in the slot, and its consumer loop in
+    // `api.rs::subscribe_change_events` may still be calling
+    // `apply_event_at_generation(old_gen, ...)` against `state_manager`.
+    //
+    // Order (intentional):
+    //   1. bump_and_clear  →  makes any future apply_*_at_generation
+    //      from the OLD consumer no-op (gen mismatch), and clears the
+    //      stale cache before the NEW seeds repopulate it.
+    //   2. slot replacement → drops the old wire (Sender side of the
+    //      old channel), which unblocks the OLD consumer's `recv()`
+    //      with Err and lets the consumer exit.
+    //
+    // The NEW consumer hasn't been spawned yet (the Dart provider
+    // depends on `discoveryProvider`; it rebuilds + calls
+    // `subscribe_change_events` once this fn returns); it will
+    // capture the post-bump generation on entry.
+    state_manager().bump_and_clear();
     *slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(wire);
@@ -178,8 +196,27 @@ pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
 
 /// Apply an event to the StateManager cache. Called by the FRB
 /// consumer loop on the FRB worker thread.
+///
+/// Prefer `apply_event_at_generation` for the production consumer
+/// loop; this unconditional shim is kept for tests + back-compat.
 pub fn apply_event(event: &ChangeEvent) {
     state_manager().apply_event(event);
+}
+
+/// Generation-aware apply — no-op if `gen` doesn't match the current
+/// `state_manager` generation. The FRB consumer loop captures the
+/// generation once at start, then passes it on every event so a
+/// `discover_with` that bumps mid-stream causes any in-flight writes
+/// from the OLD wire's consumer to be dropped before they corrupt the
+/// NEW wire's freshly-seeded cache.
+pub fn apply_event_at_generation(gen: u64, event: &ChangeEvent) {
+    state_manager().apply_event_at_generation(gen, event);
+}
+
+/// Snapshot the current `state_manager` generation. Captured by the
+/// FRB consumer loop on entry; see `apply_event_at_generation`.
+pub fn current_generation() -> u64 {
+    state_manager().current_generation()
 }
 
 /// Read a speaker's cached volume — used by Slice 4's
@@ -187,6 +224,21 @@ pub fn apply_event(event: &ChangeEvent) {
 /// API lands in Task 2 / Slice 4 of this plan.
 pub fn cached_volume(speaker: &SpeakerId) -> Option<Volume> {
     state_manager().volume_of(speaker)
+}
+
+/// Read a speaker's cached mute state. Slice 4 read surface.
+pub fn cached_muted(speaker: &SpeakerId) -> Option<bool> {
+    state_manager().muted_of(speaker)
+}
+
+/// Read a group's cached transport. Slice 4 read surface.
+pub fn cached_transport(group: &GroupId) -> Option<oto_core::TransportState> {
+    state_manager().transport_of(group)
+}
+
+/// Read a group's cached current track. Slice 4 read surface.
+pub fn cached_track(group: &GroupId) -> Option<oto_core::Track> {
+    state_manager().track_of(group)
 }
 
 // ── Test-only helpers ─────────────────────────────────────────────────────────
