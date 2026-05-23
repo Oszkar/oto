@@ -11,6 +11,7 @@
 
 pub mod adapter;
 pub mod control;
+pub(crate) mod events;
 pub mod ssdp;
 
 pub use adapter::SonosWire;

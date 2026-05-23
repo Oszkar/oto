@@ -41,3 +41,12 @@ mio = { version = "1.0", features = ["net", "os-poll"] }
 # DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
 # the locked graph via sonos-api (transitive) — unify, don't bump.
 quick-xml = { workspace = true }
+
+# v0.4 Path A reactive event stack. `oto-wire` is the only crate that
+# touches the Sonos SDK family (AGENTS.md §4). Pump thread in
+# `events.rs` wraps `StateManager` + `SonosEventManager` watches into
+# one `mpsc::Sender<ChangeEvent>`.
+sonos-sdk-state = { workspace = true }
+sonos-sdk-event-manager = { workspace = true }
+sonos-sdk-stream = { workspace = true }
+sonos-sdk-callback-server = { workspace = true }
