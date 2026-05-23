@@ -174,7 +174,59 @@ fn operator_play_pause_emits_per_group_event() {
     panic!("no Playback event within 10 s of the operator prompt");
 }
 
-/// Test #4 — extra-ignored long-running. Subscribes and idles for ≥ 26
+/// Test #4 — fully automatic. Calls `discover()` + `subscribe_speakers()`
+/// twice in sequence on the same wire? No — `subscribe_speakers` is
+/// one-shot per wire, so we construct two wires back-to-back. The
+/// regression we're guarding against: the v0.4 Slice 3 review-finding-C1
+/// `EventPump::Drop` self-deadlock would have hung the SECOND wire's
+/// constructor (because dropping the first wire also drops its
+/// `EventPump`, which under the old design joined a pump thread that
+/// was blocked on its own sender clone).
+///
+/// On real hardware: each wire performs SSDP + ZGT + SUBSCRIBE; both
+/// must complete within a generous budget. If the second wire hangs,
+/// this test will time out at the nextest test-level timeout (5 min).
+#[test]
+#[ignore = "requires a real Sonos LAN"]
+fn double_discover_does_not_hang() {
+    let start = Instant::now();
+
+    // Wire #1
+    {
+        let wire = SonosWire::new();
+        wire.discover().expect("wire 1 discover ok");
+        wire.subscribe_speakers().expect("wire 1 subscribe ok");
+        let _ = wire.take_event_stream().expect("wire 1 rx available");
+        // Brief observation window so the pump is actually running on
+        // a real LAN before we drop the wire.
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let after_first_drop = start.elapsed();
+    println!("[live_events] double_discover: first wire dropped at {after_first_drop:?}");
+
+    // Wire #2 — this is where the OLD design would hang in spawn ->
+    // subscribe_speakers (waiting for the first wire's pump to join,
+    // which never would).
+    {
+        let wire2 = SonosWire::new();
+        wire2.discover().expect("wire 2 discover ok");
+        wire2.subscribe_speakers().expect("wire 2 subscribe ok");
+        let _ = wire2.take_event_stream().expect("wire 2 rx available");
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let total = start.elapsed();
+    println!("[live_events] double_discover: both wires constructed + dropped in {total:?}");
+
+    // A generous budget: SSDP timeout (3 s) × 2 + setup + cleanup.
+    // Under the old broken design the second cycle would never finish;
+    // under the fix this should complete in well under 10 s on a LAN.
+    assert!(
+        total < Duration::from_secs(15),
+        "double-discover took {total:?}; expected well under 15 s"
+    );
+}
+
+/// Test #5 — extra-ignored long-running. Subscribes and idles for ≥ 26
 /// minutes, then asserts the channel is still alive (renewals fired at
 /// ~25 min per spike finding #8). Run only when explicitly invoked.
 ///

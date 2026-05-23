@@ -21,13 +21,22 @@ use std::{
     collections::HashMap,
     net::IpAddr,
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
         Arc,
     },
     thread::JoinHandle,
+    time::Duration,
 };
 
 use oto_core::{ChangeEvent, GroupId, SpeakerId, WireError};
+
+/// How often the pump thread checks the `stop` flag while waiting for an
+/// upstream event. Doubles as the worst-case latency for `EventPump::Drop`
+/// to join the pump thread. 250 ms is well under any human-perceptible
+/// shutdown wait and well over typical event arrival cadence — the timeout
+/// rarely fires on a busy LAN.
+const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Inputs the pump needs from the wire's discover-built caches.
 ///
@@ -49,33 +58,34 @@ pub(crate) struct PumpInputs {
     pub(crate) speaker_names: HashMap<SpeakerId, String>,
 }
 
-/// Owns the pump thread + the upstream `StateManager` keepalive.
+/// Owns the pump thread + the shared stop flag.
 ///
-/// Constructed inside `SonosWire::subscribe_speakers`. Dropped when
-/// the wire is replaced (next `discover_with`) — `Drop` releases the
-/// manager (closing the SDK's event channel) and then joins the pump
-/// thread.
+/// Constructed inside `SonosWire::subscribe_speakers`. Dropped when the
+/// wire is replaced (next `discover()`); `Drop` signals the thread to
+/// exit via `stop`, then joins. Worst-case join latency is one
+/// `POLL_INTERVAL` (~250 ms).
+///
+/// **Shutdown design:** we do NOT rely on dropping a `StateManager`
+/// "keepalive" to close the SDK's event channel. `StateManager::Clone`
+/// fans out independent `mpsc::Sender`s (see
+/// `sonos-sdk-state-0.5.2/src/state.rs:855`); the pump thread also
+/// holds its own clone (via the `move` closure on the manager argument)
+/// and would block forever on its own sender otherwise (Slice 3 review
+/// finding C1). The poll-loop + atomic-stop pattern avoids the fan-out
+/// trap entirely.
 pub(crate) struct EventPump {
     /// Set only while the thread is live. Cleared in `Drop` before join.
     handle: Option<JoinHandle<()>>,
-    /// Keepalive for the SDK's `StateManager`. Holding it keeps the
-    /// SDK's event worker alive; dropping it closes the worker's event
-    /// channel, which causes `ChangeIterator::recv()` to return `None`
-    /// and the pump thread to exit.
-    ///
-    /// Wrapped in `Option` so `Drop` can take ownership and release it
-    /// BEFORE joining the pump thread (the pump thread holds its own
-    /// clone of the manager; both must drop before the channel closes,
-    /// but releasing ours first is necessary on the lock-step path).
-    keepalive: Option<sonos_state::StateManager>,
+    /// Tells the pump thread to exit at its next poll boundary.
+    stop: Arc<AtomicBool>,
 }
 
 impl EventPump {
     /// Spawn the pump thread + start watching `Volume` + `Mute` per
     /// speaker, `PlaybackState` + `CurrentTrack` per coordinator.
     ///
-    /// Returns the pump (which owns the keepalive + JoinHandle) and the
-    /// `Receiver` to be handed out via `take_event_stream`.
+    /// Returns the pump (which owns the `JoinHandle` + stop flag) and
+    /// the `Receiver` to be handed out via `take_event_stream`.
     ///
     /// `NoSpeakersDiscovered` if `inputs.speaker_ips` is empty.
     /// `Backend` if the SDK fails to construct.
@@ -131,37 +141,43 @@ impl EventPump {
 
         // Register per-(speaker × property) watches. The SDK's first
         // NOTIFY per subscription seeds the cache (sonos-notes § "the
-        // initial SUBSCRIBE NOTIFY *is* the seed probe"). Per-speaker
-        // failures emit `SubscriptionError` and don't abort.
-        register_watches(&manager, &inputs, &tx);
+        // initial SUBSCRIBE NOTIFY *is* the seed probe").
+        //
+        // We do NOT attempt to surface per-speaker subscription
+        // failures here. The SDK at `=0.5.2` does not expose the
+        // information — see `register_watches` for the full citation.
+        // This is a known shortfall of the spec's "in-band per-speaker
+        // failure surfacing" contract; tracked as v0.5 follow-up.
+        register_watches(&manager, &inputs);
 
-        // Clone the manager for the pump thread. `StateManager: Clone`
-        // is internally Arc-backed (see sonos-sdk-state source) — the
-        // thread + the keepalive both observe the same SDK worker.
-        let manager_for_thread = manager.clone();
+        // Move `manager` into the pump thread. The thread owns the
+        // manager for its entire lifetime; when the thread exits, the
+        // manager drops, which decrements the internal
+        // `Arc<SonosEventManager>` refcount, and the SDK's event
+        // worker shuts down naturally via its own `Drop` impl. The
+        // local `em` Arc above also goes out of scope at the end of
+        // this function — that's fine; the manager kept its own clone
+        // via `with_event_manager`.
         let coord_to_group = inputs.coord_to_group.clone();
         let speaker_to_coord = inputs.speaker_to_coord.clone();
-        let tx_for_thread = tx.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_for_thread = Arc::clone(&stop);
         let handle = std::thread::Builder::new()
             .name("oto-wire-event-pump".into())
             .spawn(move || {
                 pump_loop(
-                    manager_for_thread,
+                    manager,
                     coord_to_group,
                     speaker_to_coord,
-                    tx_for_thread,
+                    tx,
+                    stop_for_thread,
                 );
             })
             .map_err(|e| WireError::Backend(format!("event pump thread spawn failed: {e}")))?;
 
-        // Drop the original `tx`. The pump thread owns its own clone;
-        // when the thread exits (because the iterator returns None),
-        // all senders are gone and the receiver wakes.
-        drop(tx);
-
         let pump = EventPump {
             handle: Some(handle),
-            keepalive: Some(manager),
+            stop,
         };
         Ok((pump, rx))
     }
@@ -169,18 +185,29 @@ impl EventPump {
 
 impl Drop for EventPump {
     fn drop(&mut self) {
-        // Release our keepalive on the SDK manager BEFORE joining the
-        // pump thread. The pump thread also holds a manager clone; the
-        // SDK's event channel closes only when the LAST clone is
-        // dropped. If we joined first while still holding our clone,
-        // the channel would stay open and the pump thread would block
-        // forever on `iter.recv()`.
+        // Signal the pump thread to exit at its next poll boundary
+        // (≤ POLL_INTERVAL). Then join.
         //
-        // Drop order: release keepalive (one clone gone) → join pump
-        // (thread's own clone goes out of scope at thread-exit, which
-        // happens once `iter.recv()` returns None, which happens once
-        // the LAST clone — ours, just released — is gone).
-        let _ = self.keepalive.take();
+        // We do NOT try to wake the pump faster by calling
+        // `event_manager().shutdown()` — the EventManager is owned by
+        // the StateManager, which is owned by the pump thread. The
+        // 250 ms worst-case join is well within any acceptable
+        // shutdown latency for a desktop discover() cycle, and not
+        // chasing the wake-up keeps the shutdown sequence simple and
+        // failure-mode-free (no double-shutdown races).
+        //
+        // Why this works where the v0.4 Slice 3 original didn't:
+        // `StateManager::Clone` fans out independent `mpsc::Sender`s
+        // (state.rs:855). The previous design held a "keepalive"
+        // manager clone in this struct AND moved another clone into
+        // the pump thread, on the (mistaken) assumption that the SDK's
+        // event channel would close when the keepalive dropped. It
+        // wouldn't: the pump thread's own clone kept the channel
+        // open, and the thread would block on `iter.recv()` forever,
+        // self-deadlocking on its own sender clone. The atomic-stop +
+        // recv_timeout polling avoids the trap entirely — the pump
+        // thread is no longer waiting on its own sender.
+        self.stop.store(true, Ordering::Release);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
@@ -189,15 +216,35 @@ impl Drop for EventPump {
 
 /// Register every per-(speaker × property) watch via the SDK's
 /// `watch_property_with_subscription` (the safe path per spike finding
-/// "ergonomic footgun"). Per-speaker failures surface as
-/// `ChangeEvent::SubscriptionError` and don't abort the registration
-/// loop — the spec's contract is "stream stays alive across
-/// recoverable upstream blips".
-fn register_watches(
-    manager: &sonos_state::StateManager,
-    inputs: &PumpInputs,
-    tx: &Sender<ChangeEvent>,
-) {
+/// "ergonomic footgun").
+///
+/// **No per-speaker error reporting (Slice 3 review finding I1).** The
+/// SDK at `=0.5.2` does not expose per-speaker subscription failures:
+///
+///   - `watch_property_with_subscription::<P>` swallows
+///     `ensure_service_subscribed` errors with `tracing::warn!` and
+///     returns `Ok(...)`. See
+///     `sonos-sdk-state-0.5.2/src/state.rs:610-633`.
+///   - `ensure_service_subscribed` itself only fails if the broker's
+///     command channel is closed; it returns `Ok` and queues a
+///     `Subscribe` command for an async worker even when the target
+///     device is unreachable. See
+///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:381-410`.
+///   - `is_service_subscribed` is a ref-count check (true iff a
+///     `Subscribe` command was *queued*), not a "device responded to
+///     SUBSCRIBE" probe. See
+///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:497-502`.
+///
+/// The previous version of this fn carried `if let Err(e) = manager
+/// .watch_property_with_subscription::<P>(...)` branches emitting
+/// `ChangeEvent::SubscriptionError`; those branches were essentially
+/// unreachable. They're gone. Honoring the spec's "in-band per-speaker
+/// failure surfacing" contract requires either (a) an SDK feature we
+/// don't have, or (b) a wire-side timeout-driven sweep we haven't
+/// designed yet — tracked as v0.5 follow-up; until then a silent
+/// failure manifests as the speaker's Volume/Mute/Playback events
+/// simply never arriving (and the UI shows the last-known value).
+fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
     use sonos_state::{CurrentTrack, Mute, PlaybackState, Volume};
 
     let sdk_id = |sid: &SpeakerId| sonos_state::SpeakerId::new(sid.as_str());
@@ -205,18 +252,11 @@ fn register_watches(
     for sid in inputs.speaker_ips.keys() {
         let sdk_sid = sdk_id(sid);
 
-        if let Err(e) = manager.watch_property_with_subscription::<Volume>(&sdk_sid) {
-            let _ = tx.send(ChangeEvent::SubscriptionError {
-                speaker: sid.clone(),
-                message: format!("watch Volume: {e}"),
-            });
-        }
-        if let Err(e) = manager.watch_property_with_subscription::<Mute>(&sdk_sid) {
-            let _ = tx.send(ChangeEvent::SubscriptionError {
-                speaker: sid.clone(),
-                message: format!("watch Mute: {e}"),
-            });
-        }
+        // RenderingControl-scoped: Volume + Mute. Both share one UPnP
+        // subscription — registering both watches keeps the SDK
+        // dispatch wired for each property key.
+        let _ = manager.watch_property_with_subscription::<Volume>(&sdk_sid);
+        let _ = manager.watch_property_with_subscription::<Mute>(&sdk_sid);
 
         // AVTransport-scoped properties live on the coordinator only.
         // Registering on coordinators (not every speaker) keeps the
@@ -224,18 +264,8 @@ fn register_watches(
         // (`resolve_subscription_target`) would coalesce anyway, but
         // the explicit gate is cheap and clearer.
         if inputs.coord_to_group.contains_key(sid) {
-            if let Err(e) = manager.watch_property_with_subscription::<PlaybackState>(&sdk_sid) {
-                let _ = tx.send(ChangeEvent::SubscriptionError {
-                    speaker: sid.clone(),
-                    message: format!("watch PlaybackState: {e}"),
-                });
-            }
-            if let Err(e) = manager.watch_property_with_subscription::<CurrentTrack>(&sdk_sid) {
-                let _ = tx.send(ChangeEvent::SubscriptionError {
-                    speaker: sid.clone(),
-                    message: format!("watch CurrentTrack: {e}"),
-                });
-            }
+            let _ = manager.watch_property_with_subscription::<PlaybackState>(&sdk_sid);
+            let _ = manager.watch_property_with_subscription::<CurrentTrack>(&sdk_sid);
         }
     }
 
@@ -248,17 +278,31 @@ fn register_watches(
 /// Map upstream `ChangeEvent`s to `oto_core::ChangeEvent`s and push to
 /// the channel. Runs on the pump thread.
 ///
-/// Exits when the SDK's `ChangeIterator::recv()` returns `None` — that
-/// happens once the LAST `StateManager` clone is dropped (us + the
-/// `EventPump`'s keepalive).
+/// Exits when **either**:
+///   - `EventPump::Drop` sets `stop` (worst-case `POLL_INTERVAL` later), or
+///   - the downstream consumer drops `rx`, so our `tx.send` returns Err.
+///
+/// We deliberately do NOT rely on `iter.recv()` returning `None` to
+/// drive shutdown — `StateManager::Clone` fans out independent
+/// `mpsc::Sender`s and this thread holds one transitively (via its
+/// `manager` argument). Blocking-recv would self-deadlock on our own
+/// sender clone. See `EventPump::drop` for the longer explanation.
 fn pump_loop(
     manager: sonos_state::StateManager,
     coord_to_group: HashMap<SpeakerId, GroupId>,
     speaker_to_coord: HashMap<SpeakerId, SpeakerId>,
     tx: Sender<ChangeEvent>,
+    stop: Arc<AtomicBool>,
 ) {
     let iter = manager.iter();
-    while let Some(upstream) = iter.recv() {
+    while !stop.load(Ordering::Acquire) {
+        let Some(upstream) = iter.recv_timeout(POLL_INTERVAL) else {
+            // Either the timeout fired (normal idle case) or the SDK
+            // worker's sender is gone (channel closed). Either way:
+            // loop, re-check `stop`, and on a real close we'll exit
+            // next iteration via the flag.
+            continue;
+        };
         let speaker = SpeakerId::new(upstream.speaker_id.as_str());
         if let Some(event) = map_upstream_event(
             &manager,
@@ -584,5 +628,102 @@ mod tests {
         };
         let err = EventPump::spawn(inputs).err().expect("must error");
         assert!(matches!(err, WireError::NoSpeakersDiscovered));
+    }
+
+    // ── EventPump construct/drop deadlock regression ──────────────────
+    //
+    // C1 regression coverage (Slice 3 review): the previous design
+    // self-deadlocked in `EventPump::Drop` because the pump thread held
+    // its own `StateManager::Clone` (= its own SDK event sender) and
+    // blocked on `iter.recv()`, which only returns `None` when the
+    // LAST sender drops. The thread couldn't drop its own sender until
+    // it exited; it couldn't exit until the sender dropped. The fix
+    // converts the loop to `recv_timeout` + an atomic stop flag.
+    //
+    // These tests use the REAL SDK with fake IPs. SUBSCRIBE attempts
+    // will fail in the SDK's async worker (no real Sonos at the IP);
+    // that's fine — we only assert that construct + drop terminates
+    // promptly, NOT that any events arrive. No network is required;
+    // the SDK only binds its local callback-server port (default range
+    // 3400-3500).
+
+    fn fake_inputs_one_speaker() -> PumpInputs {
+        let kitchen = sid("RINCON_FAKE_KITCHEN");
+        let mut speaker_ips = HashMap::new();
+        speaker_ips.insert(
+            kitchen.clone(),
+            // Documentation range (RFC 5737); will never resolve.
+            "192.0.2.10".parse().expect("parse fake ip"),
+        );
+        let mut coord_to_group = HashMap::new();
+        coord_to_group.insert(kitchen.clone(), gid("RINCON_FAKE_KITCHEN:1"));
+        let mut speaker_to_coord = HashMap::new();
+        speaker_to_coord.insert(kitchen.clone(), kitchen.clone());
+        let mut speaker_names = HashMap::new();
+        speaker_names.insert(kitchen, "Fake Kitchen".to_string());
+        PumpInputs {
+            speaker_ips,
+            coord_to_group,
+            speaker_to_coord,
+            speaker_names,
+        }
+    }
+
+    /// Run `op` on a worker thread and assert it finishes within
+    /// `budget`. On timeout, panic with a clear "hung" message — that
+    /// would have been the symptom of the C1 deadlock under the
+    /// previous design.
+    fn run_with_deadline<F>(label: &str, budget: std::time::Duration, op: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            op();
+            let _ = done_tx.send(());
+        });
+        done_rx
+            .recv_timeout(budget)
+            .unwrap_or_else(|_| panic!("'{label}' did not finish within {budget:?} (hang)"));
+    }
+
+    #[test]
+    fn pump_construct_and_drop_does_not_hang() {
+        // 5 s is ~20× the POLL_INTERVAL, plenty of headroom for SDK
+        // construction + the async worker setup + the join cycle. Was
+        // never returning under the old design.
+        run_with_deadline(
+            "EventPump::spawn + drop",
+            std::time::Duration::from_secs(5),
+            || {
+                let (pump, _rx) = EventPump::spawn(fake_inputs_one_speaker()).expect("spawn ok");
+                drop(pump);
+            },
+        );
+    }
+
+    #[test]
+    fn pump_can_be_spawned_and_dropped_twice_in_sequence() {
+        // Models the "rediscover" path: discover() builds a new wire,
+        // which drops the previous EventPump and constructs a fresh
+        // one. Under the C1 deadlock, the first drop would hang and
+        // the second spawn never run. Under the fix, both cycles
+        // complete promptly.
+        run_with_deadline(
+            "spawn/drop twice",
+            std::time::Duration::from_secs(10),
+            || {
+                {
+                    let (pump1, _rx1) =
+                        EventPump::spawn(fake_inputs_one_speaker()).expect("first spawn ok");
+                    drop(pump1);
+                }
+                {
+                    let (pump2, _rx2) =
+                        EventPump::spawn(fake_inputs_one_speaker()).expect("second spawn ok");
+                    drop(pump2);
+                }
+            },
+        );
     }
 }

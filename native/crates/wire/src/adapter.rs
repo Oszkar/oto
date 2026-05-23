@@ -47,8 +47,11 @@ pub struct SonosWire {
 }
 
 struct EventsState {
-    /// Owns the pump thread. Dropped when the wire is dropped, which
-    /// terminates the SDK subscriptions and joins the pump thread.
+    /// Owns the pump thread + the stop flag. Dropped when the wire is
+    /// dropped (or on `discover_with` replacement); `EventPump::Drop`
+    /// signals the pump to exit at the next poll boundary (~250 ms)
+    /// and joins. The SDK manager / event worker shut down naturally
+    /// once the pump thread releases its `StateManager` ownership.
     _pump: EventPump,
     /// One-shot: taken on first `take_event_stream`, then `None`.
     rx: Option<Receiver<ChangeEvent>>,
