@@ -297,10 +297,14 @@ fn pump_loop(
     let iter = manager.iter();
     while !stop.load(Ordering::Acquire) {
         let Some(upstream) = iter.recv_timeout(POLL_INTERVAL) else {
-            // Either the timeout fired (normal idle case) or the SDK
-            // worker's sender is gone (channel closed). Either way:
-            // loop, re-check `stop`, and on a real close we'll exit
-            // next iteration via the flag.
+            // Timeout fired — no event this poll cycle. The
+            // "disconnect" case (all SDK senders dropped → channel
+            // closed → recv_timeout returns None) is structurally
+            // unreachable from inside this loop: the pump thread owns
+            // the `manager` argument, which keeps the SDK event
+            // channel's senders alive for the entire thread lifetime.
+            // The only way out of the loop is `stop` flipping in
+            // `EventPump::Drop`. Continue and re-check the flag.
             continue;
         };
         let speaker = SpeakerId::new(upstream.speaker_id.as_str());

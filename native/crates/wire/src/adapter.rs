@@ -364,8 +364,21 @@ impl Wire for SonosWire {
     fn subscribe_speakers(&self) -> Result<(), WireError> {
         // v0.4 Slice 3: wire up the sonos-sdk-state pump thread. One
         // shot per wire — repeated calls error with `AlreadySubscribed`.
-        // Per-speaker subscription failures surface in-band via
-        // `ChangeEvent::SubscriptionError`, not via this Result.
+        //
+        // Per-speaker subscription failures do NOT currently surface
+        // in-band. The SDK at `=0.5.2` swallows
+        // `watch_property_with_subscription` failures internally
+        // (state.rs:610-633 — tracing::warn + Ok(option)) and
+        // `is_service_subscribed` only reports queue state, not
+        // device reachability. A silent subscription failure
+        // manifests as the speaker's events simply never arriving
+        // (the UI keeps showing the last-known value).
+        //
+        // Detecting this honestly requires either an SDK feature we
+        // don't have at this pin or a wire-side timeout-driven probe
+        // (e.g. expected-seed-NOTIFY watchdog). Tracked as v0.5
+        // follow-up; see `events::register_watches` for the full SDK
+        // source citations.
         let mut guard = self.events_state.lock().unwrap_or_else(|p| p.into_inner());
         if guard.is_some() {
             return Err(WireError::AlreadySubscribed);

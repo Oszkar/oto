@@ -23,7 +23,7 @@
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
-use oto_core::{ChangeEvent, Wire};
+use oto_core::{ChangeEvent, GroupId, SpeakerId, Wire};
 use oto_wire::SonosWire;
 
 /// Test #1 — fully automatic. Subscribe and assert the SDK's first
@@ -61,16 +61,44 @@ fn subscribe_then_seed_notifies_arrive() {
 /// Test #2 — interactive. Prompts the operator to change a speaker's
 /// volume in the Sonos app and asserts the matching `ChangeEvent::Volume`
 /// arrives within sub-second latency.
+///
+/// **False-positive guard (Copilot review on PR #45):** pre-fetches a
+/// per-speaker volume baseline via the v0.3 SOAP path before subscribing
+/// and only accepts `Volume` events whose value DIFFERS from baseline.
+/// This filters late-arriving seed NOTIFYs that report a speaker's
+/// existing volume — without the baseline check, a slow-to-seed speaker
+/// could deliver its seed AFTER the 2 s drain and falsely trip the test.
 #[test]
 #[ignore = "live-only — manual: change a speaker volume in the Sonos app within 5 s"]
 fn operator_volume_change_within_500ms() {
+    use std::collections::HashMap;
+
     let wire = SonosWire::new();
-    wire.discover().expect("discovery ok");
+    let snap = wire.discover().expect("discovery ok");
+
+    // Pre-fetch baseline volumes via the v0.3 SOAP path. This gives a
+    // deterministic per-speaker reference; events whose value matches
+    // are seeds (or no-ops), not the operator's action.
+    let mut baseline: HashMap<SpeakerId, u8> = HashMap::new();
+    for s in &snap.speakers {
+        if let Ok(state) = wire.speaker_state(&s.id) {
+            if let Some(v) = state.volume {
+                baseline.insert(s.id.clone(), v.get());
+            }
+        }
+    }
+    println!(
+        "[live_events] captured {} baseline volumes via SOAP",
+        baseline.len()
+    );
+
     wire.subscribe_speakers().expect("subscribe ok");
     let rx = wire.take_event_stream().expect("rx available");
 
     // Drain seed events for 2 s — these arrive from the initial
     // SUBSCRIBE NOTIFYs and shouldn't count as the operator action.
+    // The baseline check below also catches any late seeds that
+    // straggle past this window.
     let drain_until = Instant::now() + Duration::from_secs(2);
     while Instant::now() < drain_until {
         let _ = rx.recv_timeout(Duration::from_millis(100));
@@ -84,18 +112,34 @@ fn operator_volume_change_within_500ms() {
     while Instant::now() < deadline {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(ChangeEvent::Volume { speaker, volume }) => {
-                let elapsed = start.elapsed();
-                println!(
-                    "[live_events] Volume {} → {} after {:?}",
-                    speaker,
-                    volume.get(),
-                    elapsed
-                );
-                assert!(
-                    elapsed < Duration::from_millis(500),
-                    "event arrived in {elapsed:?}, design target ≤ 500 ms"
-                );
-                return;
+                let new = volume.get();
+                match baseline.get(&speaker) {
+                    Some(&old) if old == new => {
+                        // Late seed or no-op write. Update baseline so
+                        // subsequent events for this speaker compare
+                        // against the most-recent observed value.
+                        println!("[live_events] (filtered no-change Volume for {speaker}: {old})");
+                        baseline.insert(speaker, new);
+                    }
+                    _ => {
+                        // Either a real change (different from baseline)
+                        // OR a Volume event for a speaker whose baseline
+                        // SOAP read failed — treat as the operator action.
+                        let elapsed = start.elapsed();
+                        println!(
+                            "[live_events] Volume {} → {} (baseline {:?}) after {:?}",
+                            speaker,
+                            new,
+                            baseline.get(&speaker),
+                            elapsed
+                        );
+                        assert!(
+                            elapsed < Duration::from_millis(500),
+                            "event arrived in {elapsed:?}, design target ≤ 500 ms"
+                        );
+                        return;
+                    }
+                }
             }
             Ok(other) => {
                 // Other event variants are fine (Mute, Track, …) — only
@@ -113,9 +157,20 @@ fn operator_volume_change_within_500ms() {
 /// matching `ChangeEvent::Playback` arrives carrying the group's
 /// `GroupId`, NOT a `SpeakerId`. This verifies the coordinator-only
 /// filter + per-group addressing path end-to-end on real hardware.
+///
+/// **False-positive guard (Copilot review on PR #45):** pre-fetches a
+/// per-group transport-state baseline via the v0.3 SOAP path (reading
+/// the coordinator's state) and only accepts `Playback` events whose
+/// `PlaybackState` DIFFERS from baseline. This filters late-arriving
+/// seed NOTIFYs that report a group's existing state — without the
+/// baseline check, a slow-to-seed group could deliver its seed AFTER
+/// the 2 s drain and falsely trip the test.
 #[test]
 #[ignore = "live-only — manual: play or pause a group in the Sonos app within 10 s"]
 fn operator_play_pause_emits_per_group_event() {
+    use oto_core::PlaybackState;
+    use std::collections::HashMap;
+
     let wire = SonosWire::new();
     let snap = wire.discover().expect("discovery ok");
     println!(
@@ -132,10 +187,27 @@ fn operator_play_pause_emits_per_group_event() {
         );
     }
 
+    // Pre-fetch baseline transport state per group via the v0.3 SOAP
+    // path (reading the coordinator's transport). Events whose
+    // PlaybackState matches the baseline are seeds; only a real change
+    // counts as the operator's action.
+    let mut baseline: HashMap<GroupId, PlaybackState> = HashMap::new();
+    for g in &snap.groups {
+        if let Ok(state) = wire.speaker_state(&g.coordinator) {
+            if let Some(t) = state.transport {
+                baseline.insert(g.id.clone(), t.state);
+            }
+        }
+    }
+    println!(
+        "[live_events] captured {} baseline group transports via SOAP",
+        baseline.len()
+    );
+
     wire.subscribe_speakers().expect("subscribe ok");
     let rx = wire.take_event_stream().expect("rx available");
 
-    // Drain seeds.
+    // Drain seeds (any straggler is also caught by the baseline check).
     let drain_until = Instant::now() + Duration::from_secs(2);
     while Instant::now() < drain_until {
         let _ = rx.recv_timeout(Duration::from_millis(100));
@@ -152,18 +224,40 @@ fn operator_play_pause_emits_per_group_event() {
     while Instant::now() < deadline {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(ChangeEvent::Playback { group, state }) => {
-                let elapsed = start.elapsed();
-                println!("[live_events] Playback {group} → {state:?} after {elapsed:?}");
+                match baseline.get(&group) {
+                    Some(&old) if old == state => {
+                        // Late seed or no-op. Update baseline so a
+                        // subsequent real change for this group can
+                        // still be detected.
+                        println!(
+                            "[live_events] (filtered no-change Playback for {group}: {old:?})"
+                        );
+                        baseline.insert(group, state);
+                    }
+                    _ => {
+                        // Real state change (or no baseline available
+                        // because the coordinator's SOAP read failed
+                        // — treat as the operator's action either way).
+                        let elapsed = start.elapsed();
+                        println!(
+                            "[live_events] Playback {} → {:?} (baseline {:?}) after {:?}",
+                            group,
+                            state,
+                            baseline.get(&group),
+                            elapsed
+                        );
 
-                // Verify the GroupId matches one of the discovered groups.
-                // (The pump must address per-group, not per-speaker.)
-                assert!(
-                    snap.groups.iter().any(|g| g.id == group),
-                    "Playback event carried unknown GroupId {group}; \
-                     known groups: {:?}",
-                    snap.groups.iter().map(|g| &g.id).collect::<Vec<_>>(),
-                );
-                return;
+                        // Verify the GroupId matches one of the discovered groups.
+                        // (The pump must address per-group, not per-speaker.)
+                        assert!(
+                            snap.groups.iter().any(|g| g.id == group),
+                            "Playback event carried unknown GroupId {group}; \
+                             known groups: {:?}",
+                            snap.groups.iter().map(|g| &g.id).collect::<Vec<_>>(),
+                        );
+                        return;
+                    }
+                }
             }
             Ok(other) => {
                 println!("[live_events] (ignoring non-Playback event: {other:?})");
