@@ -231,36 +231,6 @@ impl Drop for EventPump {
     }
 }
 
-/// Register every per-(speaker × property) watch via the SDK's
-/// `watch_property_with_subscription` (the safe path per spike finding
-/// "ergonomic footgun").
-///
-/// **No per-speaker error reporting (Slice 3 review finding I1).** The
-/// SDK at `=0.5.2` does not expose per-speaker subscription failures:
-///
-///   - `watch_property_with_subscription::<P>` swallows
-///     `ensure_service_subscribed` errors with `tracing::warn!` and
-///     returns `Ok(...)`. See
-///     `sonos-sdk-state-0.5.2/src/state.rs:610-633`.
-///   - `ensure_service_subscribed` itself only fails if the broker's
-///     command channel is closed; it returns `Ok` and queues a
-///     `Subscribe` command for an async worker even when the target
-///     device is unreachable. See
-///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:381-410`.
-///   - `is_service_subscribed` is a ref-count check (true iff a
-///     `Subscribe` command was *queued*), not a "device responded to
-///     SUBSCRIBE" probe. See
-///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:497-502`.
-///
-/// The previous version of this fn carried `if let Err(e) = manager
-/// .watch_property_with_subscription::<P>(...)` branches emitting
-/// `ChangeEvent::SubscriptionError`; those branches were essentially
-/// unreachable. They're gone. Honoring the spec's "in-band per-speaker
-/// failure surfacing" contract requires either (a) an SDK feature we
-/// don't have, or (b) a wire-side timeout-driven sweep we haven't
-/// designed yet — tracked as v0.5 follow-up; until then a silent
-/// failure manifests as the speaker's Volume/Mute/Playback events
-/// simply never arriving (and the UI shows the last-known value).
 /// Build the `sonos_state::Topology` payload required by
 /// `manager.initialize(...)`. The SDK uses this to populate its
 /// internal speaker + group store; `resolve_subscription_target`
@@ -335,6 +305,36 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
     Topology::new(speakers, groups)
 }
 
+/// Register every per-(speaker × property) watch via the SDK's
+/// `watch_property_with_subscription` (the safe path per spike finding
+/// "ergonomic footgun").
+///
+/// **No per-speaker error reporting (Slice 3 review finding I1).** The
+/// SDK at `=0.5.2` does not expose per-speaker subscription failures:
+///
+///   - `watch_property_with_subscription::<P>` swallows
+///     `ensure_service_subscribed` errors with `tracing::warn!` and
+///     returns `Ok(...)`. See
+///     `sonos-sdk-state-0.5.2/src/state.rs:610-633`.
+///   - `ensure_service_subscribed` itself only fails if the broker's
+///     command channel is closed; it returns `Ok` and queues a
+///     `Subscribe` command for an async worker even when the target
+///     device is unreachable. See
+///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:381-410`.
+///   - `is_service_subscribed` is a ref-count check (true iff a
+///     `Subscribe` command was *queued*), not a "device responded to
+///     SUBSCRIBE" probe. See
+///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:497-502`.
+///
+/// The previous version of this fn carried `if let Err(e) = manager
+/// .watch_property_with_subscription::<P>(...)` branches emitting
+/// `ChangeEvent::SubscriptionError`; those branches were essentially
+/// unreachable. They're gone. Honoring the spec's "in-band per-speaker
+/// failure surfacing" contract requires either (a) an SDK feature we
+/// don't have, or (b) a wire-side timeout-driven sweep we haven't
+/// designed yet — tracked as v0.5 follow-up; until then a silent
+/// failure manifests as the speaker's Volume/Mute/Playback events
+/// simply never arriving (and the UI shows the last-known value).
 fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
     use sonos_state::{CurrentTrack, Mute, PlaybackState, Volume};
 
