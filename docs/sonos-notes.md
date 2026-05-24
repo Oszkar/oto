@@ -293,7 +293,7 @@ If a future Path-B-style implementation is built, renewal is the implementer's r
 let em = Arc::new(SonosEventManager::new()?);
 let manager = StateManager::builder().with_event_manager(em.clone()).build()?;
 manager.add_devices(devices)?;
-manager.initialize(topology);
+manager.initialize(topology);  // ← NON-OPTIONAL; see warning below.
 let cached_volume: Option<Volume> =
     manager.watch_property_with_subscription::<Volume>(&speaker_id)?;
 
@@ -301,6 +301,8 @@ let cached_volume: Option<Volume> =
 manager.register_watch(&speaker_id, Volume::KEY);
 em.ensure_service_subscribed(speaker_ip, Volume::SERVICE)?;
 ```
+
+**`manager.initialize(topology)` is non-negotiable** even for solo speakers. The SDK's `resolve_subscription_target` for AVTransport routes subscriptions to the **coordinator** of each speaker's group; without an initialized topology, the routing falls back silently and AVTransport SUBSCRIBE is never sent. RenderingControl (Volume / Mute) works because it's per-speaker and doesn't need coordinator routing — which makes the failure mode particularly nasty: half the events work, the other half silently never arrive. v0.4 Slice 3's first hardware test failure ([PR #45 follow-up](https://github.com/Oszkar/oto/pulls?q=is%3Apr+initialize-topology+merged%3A%3E2026-05-23)) was exactly this: operator play/pause produced zero `ChangeEvent::Playback` because the implementer skipped this line. Construct the `Topology` from the discover snapshot's `speakers` + `groups`; see `oto-wire::events::build_sdk_topology` for the canonical reconstruction.
 
 ### SDK `.get()` and `get_property` are cache reads, not fetches
 

@@ -139,6 +139,23 @@ impl EventPump {
             .add_devices(devices)
             .map_err(|e| WireError::Backend(format!("StateManager add_devices failed: {e}")))?;
 
+        // Install topology BEFORE registering watches. Without this,
+        // the SDK's `resolve_subscription_target` for AVTransport
+        // can't route subscriptions to coordinators — the watch is
+        // registered but no UPnP SUBSCRIBE is sent, no NOTIFYs
+        // arrive, no `PlaybackState` / `CurrentTrack` events ever
+        // fire (RenderingControl works without topology because it's
+        // a per-speaker subscription). This was Slice 3's first
+        // hardware-test failure (PR #45 follow-up): operator
+        // play/pause produced zero `ChangeEvent::Playback` on real
+        // hardware because the SDK never subscribed to AVTransport
+        // on the coordinator. sonos-notes § Event model documents
+        // the required `manager.initialize(topology)` call as part
+        // of the canonical builder pattern; the original Slice 3
+        // build missed it.
+        let topology = build_sdk_topology(&inputs);
+        manager.initialize(topology);
+
         // Register per-(speaker × property) watches. The SDK's first
         // NOTIFY per subscription seeds the cache (sonos-notes § "the
         // initial SUBSCRIBE NOTIFY *is* the seed probe").
@@ -212,6 +229,80 @@ impl Drop for EventPump {
             let _ = handle.join();
         }
     }
+}
+
+/// Build the `sonos_state::Topology` payload required by
+/// `manager.initialize(...)`. The SDK uses this to populate its
+/// internal speaker + group store; `resolve_subscription_target`
+/// then routes AVTransport subscriptions to coordinators correctly.
+///
+/// We reconstruct from `PumpInputs` rather than threading the raw
+/// `DiscoverySnapshot` into events.rs — that would couple this module
+/// to the wire's discovery internals. The maps in `PumpInputs` carry
+/// everything needed: `speaker_ips` (id + ip), `speaker_names`
+/// (display name; falls back to id), `coord_to_group` (groups), and
+/// `speaker_to_coord` (inverted below to compute members per group).
+///
+/// Defaults for fields not exposed via `PumpInputs`: `port = 1400`
+/// (Sonos's hardcoded UPnP port), `model_name = ""` (unknown
+/// pre-discovery — Sonos ZGT doesn't carry it; `oto-core` has the
+/// same gap, tracked as v0.5 model-repopulate work), `software_version
+/// = "unknown"` (mirrors the SDK's own default in event_worker.rs:437),
+/// `boot_seq = 0` (group-management seqs are v0.5 territory),
+/// `satellites = vec![]` (bonded-satellite handling is v0.5).
+fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
+    use sonos_state::model::{Speaker as SdkSpeaker, SpeakerInfo};
+    use sonos_state::property::{GroupInfo, Topology};
+
+    let speakers: Vec<SpeakerInfo> = inputs
+        .speaker_ips
+        .iter()
+        .map(|(sid, ip)| {
+            let name = inputs
+                .speaker_names
+                .get(sid)
+                .cloned()
+                .unwrap_or_else(|| sid.as_str().to_string());
+            SdkSpeaker {
+                id: sonos_state::SpeakerId::new(sid.as_str()),
+                name: name.clone(),
+                room_name: name,
+                ip_address: *ip,
+                port: 1400,
+                model_name: String::new(),
+                software_version: "unknown".to_string(),
+                boot_seq: 0,
+                satellites: vec![],
+            }
+        })
+        .collect();
+
+    // Invert speaker_to_coord to get members per group. For solo
+    // speakers this trivially yields one-member groups; for grouped
+    // speakers it yields the full membership list (load-bearing for
+    // multi-speaker setups where the SDK needs to know every group
+    // member, not just the coordinator).
+    let mut members_by_group: HashMap<GroupId, Vec<sonos_state::SpeakerId>> = HashMap::new();
+    for (speaker, coord) in &inputs.speaker_to_coord {
+        if let Some(gid) = inputs.coord_to_group.get(coord) {
+            members_by_group
+                .entry(gid.clone())
+                .or_default()
+                .push(sonos_state::SpeakerId::new(speaker.as_str()));
+        }
+    }
+
+    let groups: Vec<GroupInfo> = inputs
+        .coord_to_group
+        .iter()
+        .map(|(coord, gid)| GroupInfo {
+            id: sonos_state::GroupId::new(gid.as_str()),
+            coordinator_id: sonos_state::SpeakerId::new(coord.as_str()),
+            member_ids: members_by_group.get(gid).cloned().unwrap_or_default(),
+        })
+        .collect();
+
+    Topology::new(speakers, groups)
 }
 
 /// Register every per-(speaker × property) watch via the SDK's

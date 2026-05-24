@@ -1234,6 +1234,7 @@ dependencies = [
  "sonos-sdk-event-manager",
  "sonos-sdk-state",
  "sonos-sdk-stream",
+ "tracing-subscriber",
 ]
 
 [[package]]
