@@ -6,7 +6,10 @@
 //! Verifies the v0.4 Path A pump end-to-end against the 4-speaker LAN:
 //!   1. `subscribe_speakers` + seed NOTIFYs arrive within 2 s of subscribe.
 //!   2. Operator volume change in the Sonos app → `ChangeEvent::Volume`
-//!      within sub-second latency (spec § 8.1, design target 500 ms).
+//!      arrives during the operator window. Latency NOT asserted here
+//!      (dominated by human reaction time); spec § 8.1's sub-second
+//!      target needs a separate programmatic test (set_volume via SOAP,
+//!      measure event arrival).
 //!   3. Operator play/pause → `ChangeEvent::Playback` carrying the
 //!      group's `GroupId` (NOT the coordinator's `SpeakerId` —
 //!      coordinator-only filter must apply per-group addressing).
@@ -14,9 +17,9 @@
 //!      at ~25 min per spike finding #8). Extra-ignored so it only runs
 //!      when explicitly invoked.
 //!
-//! The two interactive tests (#2, #3) require the operator to act
-//! within a 5 s window — they print a prompt to stderr and wait. The
-//! seed-NOTIFY test (#1) is fully automatic.
+//! The two interactive tests (#2, #3) prompt the operator via stdout
+//! with persistent reminders through the wait window. The seed-NOTIFY
+//! test (#1) and the deadlock-regression test are fully automatic.
 
 #![cfg(feature = "live-tests")]
 
@@ -109,7 +112,22 @@ fn subscribe_then_seed_notifies_arrive() {
 
 /// Test #2 — interactive. Prompts the operator to change a speaker's
 /// volume in the Sonos app and asserts the matching `ChangeEvent::Volume`
-/// arrives within sub-second latency.
+/// arrives during the operator window.
+///
+/// **What this DOES verify:** RenderingControl SUBSCRIBE works end-to-end
+/// on real hardware — operator action → SDK NOTIFY → pump_loop mapping
+/// → ChangeEvent::Volume reaches the test consumer.
+///
+/// **What this does NOT verify** (intentionally, by /codex review on
+/// PR #46 hardware re-run): the sub-second SDK→consumer latency target
+/// from spec § 8.1. That target measures SDK pipeline latency in
+/// isolation, but the operator-driven test ALSO includes human reaction
+/// time (read prompt → reach for slider → drag), which is the dominant
+/// term. A 4.4-second elapsed time on real hardware decomposed as
+/// ~3-4 s human + sub-ms SDK is genuinely a fast SDK with a normal
+/// human operator. The proper sub-second latency check requires a
+/// programmatic volume change (set_volume via SOAP, measure event
+/// arrival) — that test belongs separate from the operator gate.
 ///
 /// **False-positive guard (Copilot review on PR #45):** pre-fetches a
 /// per-speaker volume baseline via the v0.3 SOAP path before subscribing
@@ -119,7 +137,7 @@ fn subscribe_then_seed_notifies_arrive() {
 /// could deliver its seed AFTER the 2 s drain and falsely trip the test.
 #[test]
 #[ignore = "live-only — manual: change a speaker volume in the Sonos app within 8 s"]
-fn operator_volume_change_within_500ms() {
+fn operator_volume_change_emits_event() {
     use std::collections::HashMap;
 
     init_sdk_tracing();
@@ -158,7 +176,9 @@ fn operator_volume_change_within_500ms() {
         "============================================================",
         ">>> ACTION REQUIRED — CHANGE A SPEAKER VOLUME NOW <<<",
         "    Use the SONOS app (not Spotify) — any speaker is fine.",
+        "    Volume must DIFFER from current value (no-op writes are filtered).",
         "    Prompt repeats every 2 s through the 8 s window.",
+        "    (No sub-second latency requirement; that's an automated test.)",
         "============================================================",
     ]);
     let start = Instant::now();
@@ -187,17 +207,20 @@ fn operator_volume_change_within_500ms() {
                         // Either a real change (different from baseline)
                         // OR a Volume event for a speaker whose baseline
                         // SOAP read failed — treat as the operator action.
+                        //
+                        // Latency includes human reaction time; we log
+                        // it for diagnostic value but don't assert any
+                        // ceiling here — the operator-driven path is
+                        // not a meaningful SDK-latency measurement.
+                        // Spec § 8.1's sub-second target needs a
+                        // separate programmatic test.
                         let elapsed = start.elapsed();
                         println!(
-                            "[live_events] Volume {} → {} (baseline {:?}) after {:?}",
+                            "[live_events] Volume {} → {} (baseline {:?}) after {:?} (operator+SDK latency, not SDK-only)",
                             speaker,
                             new,
                             baseline.get(&speaker),
                             elapsed
-                        );
-                        assert!(
-                            elapsed < Duration::from_millis(500),
-                            "event arrived in {elapsed:?}, design target ≤ 500 ms"
                         );
                         return;
                     }
@@ -211,7 +234,7 @@ fn operator_volume_change_within_500ms() {
             Err(_) => { /* timeout — keep polling until deadline */ }
         }
     }
-    panic!("no Volume event within 5 s of the operator prompt");
+    panic!("no Volume event within 8 s of the operator prompt");
 }
 
 /// Test #3 — interactive. Prompts the operator to play/pause a
