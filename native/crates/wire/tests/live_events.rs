@@ -21,10 +21,32 @@
 #![cfg(feature = "live-tests")]
 
 use std::collections::HashSet;
+use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
 use oto_core::{ChangeEvent, GroupId, SpeakerId, Wire};
 use oto_wire::SonosWire;
+
+/// Print + flush an interactive prompt to **stdout** (not stderr) so it
+/// actually shows up under `cargo nextest run --nocapture`. Empirically
+/// (Slice 3 hardware test, PR #46): the captured stdout `println!`
+/// output appears in the test runner's failure dump, but `eprintln!`
+/// stderr lines are dropped. Use this helper for any operator prompt
+/// so the user can actually see what they're being asked to do.
+///
+/// Repeated calls during the wait window are the reliable way to make
+/// interactive tests robust on real hardware — the SDK can produce
+/// other output (tracing-level logging behind a transitive subscriber)
+/// that can bury a single prompt.
+fn flush_prompt(lines: &[&str]) {
+    let mut out = io::stdout().lock();
+    let _ = writeln!(out);
+    for line in lines {
+        let _ = writeln!(out, "{line}");
+    }
+    let _ = writeln!(out);
+    let _ = out.flush();
+}
 
 /// Test #1 — fully automatic. Subscribe and assert the SDK's first
 /// SUBSCRIBE NOTIFY seeds Volume on ≥ 2 of the 4 speakers within 2 s.
@@ -104,12 +126,24 @@ fn operator_volume_change_within_500ms() {
         let _ = rx.recv_timeout(Duration::from_millis(100));
     }
 
-    eprintln!();
-    eprintln!(">>> CHANGE A SPEAKER VOLUME IN THE SONOS APP NOW (5 s window) <<<");
-    eprintln!();
+    flush_prompt(&[
+        "============================================================",
+        ">>> ACTION REQUIRED — CHANGE A SPEAKER VOLUME NOW <<<",
+        "    (any speaker; we measure event arrival latency)",
+        "    Prompt repeats every 1 s through the 5 s window.",
+        "============================================================",
+    ]);
     let start = Instant::now();
     let deadline = start + Duration::from_secs(5);
+    let mut next_reminder = start + Duration::from_secs(1);
     while Instant::now() < deadline {
+        if Instant::now() >= next_reminder {
+            let remaining = deadline.saturating_duration_since(Instant::now()).as_secs();
+            flush_prompt(&[&format!(
+                ">>> ACT NOW — {remaining} s remaining — CHANGE A VOLUME <<<"
+            )]);
+            next_reminder = Instant::now() + Duration::from_secs(1);
+        }
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(ChangeEvent::Volume { speaker, volume }) => {
                 let new = volume.get();
@@ -213,15 +247,27 @@ fn operator_play_pause_emits_per_group_event() {
         let _ = rx.recv_timeout(Duration::from_millis(100));
     }
 
-    eprintln!();
-    eprintln!(">>> PLAY or PAUSE a group in the Sonos app NOW (10 s window) <<<");
-    eprintln!("    (prefer a multi-speaker group if available; we verify the");
-    eprintln!("     event carries GroupId, not the coordinator's SpeakerId)");
-    eprintln!();
+    let banner = [
+        "============================================================",
+        ">>> ACTION REQUIRED — PLAY or PAUSE a group NOW <<<",
+        "    (prefer a multi-speaker group if available; we verify",
+        "     the event carries GroupId, not the coordinator's SpeakerId)",
+        "    Prompt repeats every 2 s through the 10 s window.",
+        "============================================================",
+    ];
+    flush_prompt(&banner);
 
     let start = Instant::now();
     let deadline = start + Duration::from_secs(10);
+    let mut next_reminder = start + Duration::from_secs(2);
     while Instant::now() < deadline {
+        if Instant::now() >= next_reminder {
+            let remaining = deadline.saturating_duration_since(Instant::now()).as_secs();
+            flush_prompt(&[&format!(
+                ">>> ACT NOW — {remaining} s remaining — PLAY or PAUSE a group <<<"
+            )]);
+            next_reminder = Instant::now() + Duration::from_secs(2);
+        }
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(ChangeEvent::Playback { group, state }) => {
                 match baseline.get(&group) {
