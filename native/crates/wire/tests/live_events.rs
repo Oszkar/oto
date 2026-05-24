@@ -22,6 +22,7 @@
 
 use std::collections::HashSet;
 use std::io::{self, Write};
+use std::sync::Once;
 use std::time::{Duration, Instant};
 
 use oto_core::{ChangeEvent, GroupId, SpeakerId, Wire};
@@ -46,6 +47,32 @@ fn flush_prompt(lines: &[&str]) {
     }
     let _ = writeln!(out);
     let _ = out.flush();
+}
+
+/// Install a tracing subscriber so SDK-internal logs (subscribe attempts,
+/// broker registration, polling cycles) print to stderr. Only called by
+/// the interactive tests where the diagnostic noise is the point —
+/// `subscribe_then_seed_notifies_arrive` keeps its tight output for the
+/// automatic assertion.
+///
+/// Honors `RUST_LOG` if set; defaults to a useful Sonos-SDK filter so
+/// the test gives diagnostic value without an env-var setup step.
+/// `try_init` so multiple test invocations in the same process don't
+/// panic — the global subscriber is one-shot per process.
+fn init_sdk_tracing() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let default_filter = "warn,sonos_event_manager=debug,sonos_state=debug,\
+                              sonos_stream=debug,sonos_callback_server=debug,\
+                              oto_wire=debug";
+        let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_filter));
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(io::stderr)
+            .with_target(true)
+            .try_init();
+    });
 }
 
 /// Test #1 — fully automatic. Subscribe and assert the SDK's first
@@ -91,10 +118,11 @@ fn subscribe_then_seed_notifies_arrive() {
 /// existing volume — without the baseline check, a slow-to-seed speaker
 /// could deliver its seed AFTER the 2 s drain and falsely trip the test.
 #[test]
-#[ignore = "live-only — manual: change a speaker volume in the Sonos app within 5 s"]
+#[ignore = "live-only — manual: change a speaker volume in the Sonos app within 8 s"]
 fn operator_volume_change_within_500ms() {
     use std::collections::HashMap;
 
+    init_sdk_tracing();
     let wire = SonosWire::new();
     let snap = wire.discover().expect("discovery ok");
 
@@ -129,13 +157,13 @@ fn operator_volume_change_within_500ms() {
     flush_prompt(&[
         "============================================================",
         ">>> ACTION REQUIRED — CHANGE A SPEAKER VOLUME NOW <<<",
-        "    (any speaker; we measure event arrival latency)",
-        "    Prompt repeats every 1 s through the 5 s window.",
+        "    Use the SONOS app (not Spotify) — any speaker is fine.",
+        "    Prompt repeats every 2 s through the 8 s window.",
         "============================================================",
     ]);
     let start = Instant::now();
-    let deadline = start + Duration::from_secs(5);
-    let mut next_reminder = start + Duration::from_secs(1);
+    let deadline = start + Duration::from_secs(8);
+    let mut next_reminder = start + Duration::from_secs(2);
     while Instant::now() < deadline {
         if Instant::now() >= next_reminder {
             let remaining = deadline.saturating_duration_since(Instant::now()).as_secs();
@@ -200,11 +228,12 @@ fn operator_volume_change_within_500ms() {
 /// baseline check, a slow-to-seed group could deliver its seed AFTER
 /// the 2 s drain and falsely trip the test.
 #[test]
-#[ignore = "live-only — manual: play or pause a group in the Sonos app within 10 s"]
+#[ignore = "live-only — manual: play or pause a group in the Sonos app within 15 s"]
 fn operator_play_pause_emits_per_group_event() {
     use oto_core::PlaybackState;
     use std::collections::HashMap;
 
+    init_sdk_tracing();
     let wire = SonosWire::new();
     let snap = wire.discover().expect("discovery ok");
     println!(
@@ -250,23 +279,24 @@ fn operator_play_pause_emits_per_group_event() {
     let banner = [
         "============================================================",
         ">>> ACTION REQUIRED — PLAY or PAUSE a group NOW <<<",
-        "    (prefer a multi-speaker group if available; we verify",
-        "     the event carries GroupId, not the coordinator's SpeakerId)",
-        "    Prompt repeats every 2 s through the 10 s window.",
+        "    Use the SONOS app (not Spotify Connect) — this eliminates",
+        "    Spotify-control as a variable. Prefer a multi-speaker group.",
+        "    We verify the event carries GroupId, not SpeakerId.",
+        "    Prompt repeats every 3 s through the 15 s window.",
         "============================================================",
     ];
     flush_prompt(&banner);
 
     let start = Instant::now();
-    let deadline = start + Duration::from_secs(10);
-    let mut next_reminder = start + Duration::from_secs(2);
+    let deadline = start + Duration::from_secs(15);
+    let mut next_reminder = start + Duration::from_secs(3);
     while Instant::now() < deadline {
         if Instant::now() >= next_reminder {
             let remaining = deadline.saturating_duration_since(Instant::now()).as_secs();
             flush_prompt(&[&format!(
                 ">>> ACT NOW — {remaining} s remaining — PLAY or PAUSE a group <<<"
             )]);
-            next_reminder = Instant::now() + Duration::from_secs(2);
+            next_reminder = Instant::now() + Duration::from_secs(3);
         }
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(ChangeEvent::Playback { group, state }) => {

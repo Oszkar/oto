@@ -50,3 +50,14 @@ sonos-sdk-state = { workspace = true }
 sonos-sdk-event-manager = { workspace = true }
 sonos-sdk-stream = { workspace = true }
 sonos-sdk-callback-server = { workspace = true }
+
+[dev-dependencies]
+# Surfaces SDK tracing logs to stderr during interactive hardware tests
+# so we can diagnose subscription / polling failures. Test-only; the
+# production wire deliberately has no tracing subscriber configured
+# (per oto-wire conventions in AGENTS.md — `tracing` may be used for
+# log emission but a subscriber configuration is the app's choice).
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "fmt",
+    "env-filter",
+] }
