@@ -136,7 +136,7 @@ fn subscribe_then_seed_notifies_arrive() {
 /// existing volume — without the baseline check, a slow-to-seed speaker
 /// could deliver its seed AFTER the 2 s drain and falsely trip the test.
 #[test]
-#[ignore = "live-only — manual: change a speaker volume in the Sonos app within 8 s"]
+#[ignore = "live-only — manual: change a speaker volume in the Sonos app within 15 s"]
 fn operator_volume_change_emits_event() {
     use std::collections::HashMap;
 
@@ -177,20 +177,20 @@ fn operator_volume_change_emits_event() {
         ">>> ACTION REQUIRED — CHANGE A SPEAKER VOLUME NOW <<<",
         "    Use the SONOS app (not Spotify) — any speaker is fine.",
         "    Volume must DIFFER from current value (no-op writes are filtered).",
-        "    Prompt repeats every 2 s through the 8 s window.",
+        "    Prompt repeats every 3 s through the 15 s window.",
         "    (No sub-second latency requirement; that's an automated test.)",
         "============================================================",
     ]);
     let start = Instant::now();
-    let deadline = start + Duration::from_secs(8);
-    let mut next_reminder = start + Duration::from_secs(2);
+    let deadline = start + Duration::from_secs(15);
+    let mut next_reminder = start + Duration::from_secs(3);
     while Instant::now() < deadline {
         if Instant::now() >= next_reminder {
             let remaining = deadline.saturating_duration_since(Instant::now()).as_secs();
             flush_prompt(&[&format!(
                 ">>> ACT NOW — {remaining} s remaining — CHANGE A VOLUME <<<"
             )]);
-            next_reminder = Instant::now() + Duration::from_secs(1);
+            next_reminder = Instant::now() + Duration::from_secs(3);
         }
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(ChangeEvent::Volume { speaker, volume }) => {
@@ -234,7 +234,7 @@ fn operator_volume_change_emits_event() {
             Err(_) => { /* timeout — keep polling until deadline */ }
         }
     }
-    panic!("no Volume event within 8 s of the operator prompt");
+    panic!("no Volume event within 15 s of the operator prompt");
 }
 
 /// Test #3 — interactive. Prompts the operator to play/pause a
@@ -364,7 +364,7 @@ fn operator_play_pause_emits_per_group_event() {
             Err(_) => { /* timeout — keep polling */ }
         }
     }
-    panic!("no Playback event within 10 s of the operator prompt");
+    panic!("no Playback event within 15 s of the operator prompt");
 }
 
 /// Test #4 — fully automatic. Calls `discover()` + `subscribe_speakers()`
