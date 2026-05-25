@@ -18,21 +18,31 @@
 //! avoid any intra-process ordering dependency.
 
 use oto_app::discover_with;
+use oto_app::test_helpers::process_pending_events;
 use oto_core::WireError;
 use oto_mock::MockWire;
 use oto_native::api::{CommandError, PlaybackStateDto};
 use oto_native::map::{to_command_error, to_speaker_state_dto};
+use std::time::Duration;
+
+/// Slice 4: cache-backed `speaker_state` needs the consumer loop
+/// driven between mutations and reads. 50 ms is well above any
+/// realistic MockWire emit-to-drain delay.
+const DRAIN_WINDOW: Duration = Duration::from_millis(50);
 
 #[test]
 fn playback_commands_and_state_cross_the_dto_map() {
     // ── 1. Discover against MockWire ─────────────────────────────────────────
     let snap = discover_with(|| Box::new(MockWire::default())).expect("mock discovery succeeds");
     assert_eq!(snap.speakers.len(), 3, "fixture has 3 speakers");
+    // Drain seeds so the post-discover cache reads see anything.
+    process_pending_events(DRAIN_WINDOW);
 
     // ── 2. set_volume → speaker_state → to_speaker_state_dto ─────────────────
     let kitchen = oto_core::SpeakerId::new("RINCON_KITCHEN");
     oto_app::set_volume(&kitchen, oto_core::Volume::new(72).unwrap())
         .expect("set_volume succeeds on mock");
+    process_pending_events(DRAIN_WINDOW);
 
     let raw_state = oto_app::speaker_state(&kitchen).expect("speaker_state succeeds on mock");
     assert_eq!(raw_state.volume, Some(oto_core::Volume::new(72).unwrap()));
@@ -54,6 +64,7 @@ fn playback_commands_and_state_cross_the_dto_map() {
     // ── 3. pause → transport DTO state ───────────────────────────────────────
     let kitchen_group = oto_core::GroupId::new("RINCON_KITCHEN:1");
     oto_app::pause(&kitchen_group).expect("pause succeeds on mock");
+    process_pending_events(DRAIN_WINDOW);
 
     let paused_state =
         oto_app::speaker_state(&kitchen).expect("speaker_state after pause succeeds");

@@ -9,11 +9,19 @@
 //! A real Sonos LAN run is the user-run hardware smoke in
 //! `native/crates/wire/tests/live_playback.rs`.
 
+use oto_app::test_helpers::process_pending_events;
 use oto_app::{discover_with, next, pause, play, previous, set_mute, set_volume, speaker_state};
 use oto_core::{GroupId, PlaybackState, SpeakerId, Volume, WireError};
 use oto_mock::MockWire;
 use oto_native::api::PlaybackStateDto;
 use oto_native::map::to_speaker_state_dto;
+use std::time::Duration;
+
+/// Slice 4: `speaker_state` reads from the StateManager cache instead
+/// of the wire, so command-then-read round-trips need the consumer
+/// loop to run between the mutation and the read. 50 ms is plenty for
+/// MockWire (synchronous auto-emit).
+const DRAIN_WINDOW: Duration = Duration::from_millis(50);
 
 /// Comprehensive command→state round-trip — the PR B acceptance bar.
 ///
@@ -39,9 +47,17 @@ fn playback_command_state_round_trips() {
         discover_with(|| Box::new(MockWire::default())).expect("mock discovery must succeed");
     assert_eq!(snap.speakers.len(), 3, "fixture must have 3 speakers");
     assert_eq!(snap.groups.len(), 2, "fixture must have 2 groups");
+    // Slice 4: drain subscribe_speakers seeds into the cache. Without
+    // this, the post-discover reads below see all-None state because
+    // the MockWire's auto-emitted seed Volume/Mute/Playback events are
+    // still in the channel.
+    process_pending_events(DRAIN_WINDOW);
 
     // ── (a) set_volume round-trip ─────────────────────────────────────────────
+    // MockWire::set_volume auto-emits a Volume event; draining applies
+    // it to the cache; speaker_state reads from the cache.
     set_volume(&kitchen, Volume::new(63).expect("63 in range")).expect("set_volume must succeed");
+    process_pending_events(DRAIN_WINDOW);
     let state_a = speaker_state(&kitchen).expect("speaker_state must succeed after set_volume");
     assert_eq!(
         state_a.volume,
@@ -51,6 +67,7 @@ fn playback_command_state_round_trips() {
 
     // ── (b) set_mute round-trip ───────────────────────────────────────────────
     set_mute(&office, true).expect("set_mute must succeed");
+    process_pending_events(DRAIN_WINDOW);
     let state_b = speaker_state(&office).expect("speaker_state must succeed after set_mute");
     assert_eq!(
         state_b.muted,
@@ -60,6 +77,7 @@ fn playback_command_state_round_trips() {
 
     // ── (c) play → Playing ────────────────────────────────────────────────────
     play(&kitchen_group).expect("play must succeed");
+    process_pending_events(DRAIN_WINDOW);
     let state_c = speaker_state(&kitchen).expect("speaker_state must succeed after play");
     assert_eq!(
         state_c
@@ -72,6 +90,7 @@ fn playback_command_state_round_trips() {
 
     // ── (d) pause → Paused ───────────────────────────────────────────────────
     pause(&kitchen_group).expect("pause must succeed");
+    process_pending_events(DRAIN_WINDOW);
     let state_d = speaker_state(&kitchen).expect("speaker_state must succeed after pause");
     assert_eq!(
         state_d
@@ -87,6 +106,9 @@ fn playback_command_state_round_trips() {
     previous(&office_group).expect("(e) previous must return Ok for a known group");
 
     // ── (f) unknown id → WireError::NotFound ─────────────────────────────────
+    // Slice 4: the topology check inside oto_app::speaker_state
+    // preserves the v0.3 error contract — an unknown id maps to
+    // NotFound, not to a silent all-None SpeakerState.
     let err_f = speaker_state(&ghost).expect_err("(f) unknown id must return Err");
     assert!(
         matches!(err_f, WireError::NotFound(_)),
@@ -96,6 +118,7 @@ fn playback_command_state_round_trips() {
     // ── (g) D2: grouped non-coordinator reports coordinator's transport ────────
     // Play on the kitchen group (coordinator = Kitchen; Dining is a member).
     play(&kitchen_group).expect("(g) play must succeed for D2 assertion");
+    process_pending_events(DRAIN_WINDOW);
     let dining = SpeakerId::new("RINCON_DINING");
     let raw_g = speaker_state(&dining).expect("(g) speaker_state must succeed for Dining");
     let dto_g = to_speaker_state_dto(raw_g);
