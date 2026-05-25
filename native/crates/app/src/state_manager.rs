@@ -18,7 +18,10 @@ use std::{
     },
 };
 
-use oto_core::{ChangeEvent, GroupId, PlaybackState, SpeakerId, Track, TransportState, Volume};
+use oto_core::{
+    ChangeEvent, DiscoverySnapshot, GroupId, PlaybackState, SpeakerId, SpeakerState, Track,
+    TransportState, Volume,
+};
 
 /// Per-speaker cached property values. v0.4 — Volume + Mute landed in
 /// Task 2. Playback / Track live on the group cache below.
@@ -39,9 +42,24 @@ pub(crate) struct GroupCache {
     pub track: Option<Track>,
 }
 
+/// Speaker→group mapping installed by `install_topology` from each
+/// `discover_with` snapshot. Reads in `speaker_state` use it to resolve
+/// a speaker's transport from its group's cache. One map (not the full
+/// snapshot) is the only thing speaker_state needs; keeping the
+/// allocation small.
+#[derive(Default)]
+struct TopologyMaps {
+    speaker_to_group: HashMap<SpeakerId, GroupId>,
+}
+
 pub struct StateManager {
     speakers: RwLock<HashMap<SpeakerId, SpeakerCache>>,
     groups: RwLock<HashMap<GroupId, GroupCache>>,
+    /// Speaker→group resolution used by Slice 4's cache-backed
+    /// `speaker_state`. Refreshed by `install_topology` on every
+    /// successful `discover_with`; cleared by `bump_and_clear` so a
+    /// failed install never leaves stale topology with fresh caches.
+    topology: RwLock<TopologyMaps>,
     /// Generation counter — bumped by `discover_with` on every wire
     /// replacement so the previous consumer loop (still draining the
     /// OLD wire's `Receiver`) can no-op its `apply_event_at_generation`
@@ -54,6 +72,7 @@ impl Default for StateManager {
         Self {
             speakers: RwLock::new(HashMap::new()),
             groups: RwLock::new(HashMap::new()),
+            topology: RwLock::new(TopologyMaps::default()),
             generation: AtomicU64::new(0),
         }
     }
@@ -202,6 +221,71 @@ impl StateManager {
             .and_then(|c| c.track.clone())
     }
 
+    /// True if the speaker is in the current topology. Used by
+    /// `oto_app::speaker_state` to preserve the v0.3 "unknown id →
+    /// NotFound" error contract without making the cache itself aware
+    /// of which ids are "real". The cache is honest-partial; topology
+    /// is the source of truth for membership.
+    pub fn is_known_speaker(&self, speaker: &SpeakerId) -> bool {
+        self.topology
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .speaker_to_group
+            .contains_key(speaker)
+    }
+
+    /// Install the speaker→group mapping from `snapshot`. Called by
+    /// `discover_with` right after `bump_and_clear`, so the topology
+    /// always matches the wire whose seeds are about to repopulate the
+    /// caches. Replaces any prior topology entirely — no diff/merge.
+    pub fn install_topology(&self, snapshot: &DiscoverySnapshot) {
+        let mut maps = TopologyMaps::default();
+        for g in &snapshot.groups {
+            for m in &g.members {
+                maps.speaker_to_group.insert(m.clone(), g.id.clone());
+            }
+        }
+        *self.topology.write().unwrap_or_else(|p| p.into_inner()) = maps;
+    }
+
+    /// Read the cached state for `speaker`. Honest partial — fields
+    /// for which no event has arrived yet (cold-start window, or the
+    /// property never changed since subscribe) are `None`. Transport
+    /// resolves via speaker → group lookup using the topology installed
+    /// by `install_topology`; if no topology is installed or the
+    /// speaker isn't a member of any known group, `transport` is `None`.
+    pub fn speaker_state(&self, speaker: &SpeakerId) -> SpeakerState {
+        let (volume, muted) = self
+            .speakers
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(speaker)
+            .map(|c| (c.volume, c.muted))
+            .unwrap_or((None, None));
+
+        let group = self
+            .topology
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .speaker_to_group
+            .get(speaker)
+            .cloned();
+
+        let transport = group.and_then(|g| {
+            self.groups
+                .read()
+                .unwrap_or_else(|p| p.into_inner())
+                .get(&g)
+                .and_then(|c| c.transport.clone())
+        });
+
+        SpeakerState {
+            volume,
+            muted,
+            transport,
+        }
+    }
+
     /// Current generation counter — captured by
     /// `subscribe_change_events` once per consumer loop. Reads use
     /// `Acquire` to pair with the `Release` store in `bump_and_clear`.
@@ -235,7 +319,12 @@ impl StateManager {
         // Order: bump first (Release), then clear. The Acquire-load
         // in `apply_event_at_generation` will see the bumped value
         // first, fail its gen check, and skip the write entirely —
-        // so it can't observe the half-cleared map mid-clear.
+        // so it can't observe the half-cleared map mid-clear. Topology
+        // is wiped along with the caches so a `discover_with` that
+        // gets as far as bump_and_clear but doesn't reach the
+        // `install_topology` step (impossible today, but defensive
+        // against future re-orderings) can't leave stale topology
+        // attached to a fresh wire's seeds.
         self.generation.fetch_add(1, Ordering::Release);
         self.speakers
             .write()
@@ -245,11 +334,12 @@ impl StateManager {
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
+        *self.topology.write().unwrap_or_else(|p| p.into_inner()) = TopologyMaps::default();
     }
 
-    /// Clear both caches WITHOUT bumping the generation. Test-only
-    /// affordance for `clear_slot()` — production code paths must use
-    /// `bump_and_clear`.
+    /// Clear both caches AND topology WITHOUT bumping the generation.
+    /// Test-only affordance for `clear_slot()` — production code paths
+    /// must use `bump_and_clear`.
     #[cfg(test)]
     pub(crate) fn clear(&self) {
         self.speakers
@@ -260,12 +350,42 @@ impl StateManager {
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
+        *self.topology.write().unwrap_or_else(|p| p.into_inner()) = TopologyMaps::default();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oto_core::{GroupIdentity, SpeakerIdentity};
+    use std::net::{IpAddr, Ipv4Addr};
+
+    fn fake_snapshot_two_speaker_group() -> DiscoverySnapshot {
+        let kitchen = SpeakerId::new("RINCON_K");
+        let dining = SpeakerId::new("RINCON_D");
+        let group = GroupId::new("RINCON_K:0");
+        DiscoverySnapshot {
+            speakers: vec![
+                SpeakerIdentity {
+                    id: kitchen.clone(),
+                    room_name: "Kitchen".into(),
+                    model: None,
+                    ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+                },
+                SpeakerIdentity {
+                    id: dining.clone(),
+                    room_name: "Dining".into(),
+                    model: None,
+                    ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)),
+                },
+            ],
+            groups: vec![GroupIdentity {
+                id: group.clone(),
+                coordinator: kitchen.clone(),
+                members: vec![kitchen, dining],
+            }],
+        }
+    }
 
     #[test]
     fn apply_volume_event_populates_cache() {
@@ -522,5 +642,142 @@ mod tests {
             },
         );
         assert_eq!(sm.volume_of(&k), Some(Volume::new(70).unwrap()));
+    }
+
+    // ── Slice 4 cache-backed speaker_state ───────────────────────────────
+
+    #[test]
+    fn speaker_state_returns_all_none_when_no_events_seen() {
+        let sm = StateManager::new();
+        let st = sm.speaker_state(&SpeakerId::new("RINCON_X"));
+        assert!(st.volume.is_none());
+        assert!(st.muted.is_none());
+        assert!(
+            st.transport.is_none(),
+            "no topology installed → no group → no transport"
+        );
+    }
+
+    #[test]
+    fn speaker_state_returns_volume_and_mute_without_topology() {
+        // Per-speaker fields don't need topology — only `transport` does.
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+        sm.apply_event(&ChangeEvent::Volume {
+            speaker: k.clone(),
+            volume: Volume::new(42).unwrap(),
+        });
+        sm.apply_event(&ChangeEvent::Mute {
+            speaker: k.clone(),
+            muted: true,
+        });
+        let st = sm.speaker_state(&k);
+        assert_eq!(st.volume, Some(Volume::new(42).unwrap()));
+        assert_eq!(st.muted, Some(true));
+        assert!(st.transport.is_none(), "no topology → still no transport");
+    }
+
+    #[test]
+    fn speaker_state_resolves_transport_via_group_topology() {
+        let sm = StateManager::new();
+        let snap = fake_snapshot_two_speaker_group();
+        sm.install_topology(&snap);
+
+        // Apply Playback to the group; both members should see it.
+        let g = GroupId::new("RINCON_K:0");
+        sm.apply_event(&ChangeEvent::Playback {
+            group: g.clone(),
+            state: PlaybackState::Playing,
+        });
+
+        let kitchen = sm.speaker_state(&SpeakerId::new("RINCON_K"));
+        let dining = sm.speaker_state(&SpeakerId::new("RINCON_D"));
+        assert_eq!(
+            kitchen.transport.as_ref().map(|t| t.state),
+            Some(PlaybackState::Playing),
+            "coordinator member sees the group's transport"
+        );
+        assert_eq!(
+            dining.transport.as_ref().map(|t| t.state),
+            Some(PlaybackState::Playing),
+            "non-coordinator member also sees the group's transport"
+        );
+    }
+
+    #[test]
+    fn install_topology_replaces_prior_topology() {
+        let sm = StateManager::new();
+        sm.install_topology(&fake_snapshot_two_speaker_group());
+
+        // Now install a fresh snapshot that drops the dining speaker.
+        let kitchen = SpeakerId::new("RINCON_K");
+        let solo_group = GroupId::new("RINCON_K:1");
+        let snap2 = DiscoverySnapshot {
+            speakers: vec![SpeakerIdentity {
+                id: kitchen.clone(),
+                room_name: "Kitchen".into(),
+                model: None,
+                ip: IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
+            }],
+            groups: vec![GroupIdentity {
+                id: solo_group.clone(),
+                coordinator: kitchen.clone(),
+                members: vec![kitchen.clone()],
+            }],
+        };
+        sm.install_topology(&snap2);
+
+        // Apply Playback to the NEW group id; kitchen should resolve via it.
+        sm.apply_event(&ChangeEvent::Playback {
+            group: solo_group.clone(),
+            state: PlaybackState::Paused,
+        });
+        let st = sm.speaker_state(&kitchen);
+        assert_eq!(
+            st.transport.as_ref().map(|t| t.state),
+            Some(PlaybackState::Paused)
+        );
+
+        // Dining should resolve to nothing — it's no longer in any group.
+        let st2 = sm.speaker_state(&SpeakerId::new("RINCON_D"));
+        assert!(
+            st2.transport.is_none(),
+            "speaker removed from topology has no transport"
+        );
+    }
+
+    #[test]
+    fn bump_and_clear_also_clears_topology() {
+        let sm = StateManager::new();
+        sm.install_topology(&fake_snapshot_two_speaker_group());
+
+        // Sanity: topology is in place.
+        sm.apply_event(&ChangeEvent::Playback {
+            group: GroupId::new("RINCON_K:0"),
+            state: PlaybackState::Playing,
+        });
+        assert!(sm
+            .speaker_state(&SpeakerId::new("RINCON_K"))
+            .transport
+            .is_some());
+
+        sm.bump_and_clear();
+
+        // Re-apply a Playback at the same group id (gen is fresh, so it
+        // sticks in the groups cache). Without topology, the speaker can
+        // no longer resolve to the group.
+        let new_gen = sm.current_generation();
+        sm.apply_event_at_generation(
+            new_gen,
+            &ChangeEvent::Playback {
+                group: GroupId::new("RINCON_K:0"),
+                state: PlaybackState::Playing,
+            },
+        );
+        let st = sm.speaker_state(&SpeakerId::new("RINCON_K"));
+        assert!(
+            st.transport.is_none(),
+            "bump_and_clear must wipe topology so a fresh install is required"
+        );
     }
 }
