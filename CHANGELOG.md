@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-05-25
+> v0.4 work is feature-complete and lands here as the v0.4 changelog. The `## [Unreleased]` header is renamed to `## [0.4.0] - YYYY-MM-DD` (with a fresh empty `## [Unreleased]` added above it, and matching reference links updated at the bottom of the file) in the follow-up `chore(release): v0.4.0` PR per [RELEASING.md](RELEASING.md) step 3 — that's the canonical release-cut point.
 
 ### Added
 
@@ -26,7 +26,7 @@ v0.4 — Live property events. Reactive state via GENA: Rust → Dart event stre
 - **`speaker_state` is now a cache read, not a SOAP read** — implementation only. FRB DTO (`SpeakerStateDto`) and the public `Wire` signature are unchanged.
 - **`oto-app::discover_with`** now auto-invokes `wire.subscribe_speakers()` before installing the new wire, so a Dart consumer that calls `subscribe_change_events` sees seed events without driving subscription itself. Also bumps the `StateManager` generation, clears caches, and installs fresh topology before the slot swap.
 - **`docs/ARCHITECTURE.md`** — added event-flow sequence diagram and StateManager state-ownership section; `Wire` trait listing grown with the v0.4 methods; "Watch-after-fetch event suppression" moved from open constraint to resolved (sidestepped by using `.watch()` itself as the seed probe).
-- **`docs/ROADMAP.md`** — v0.4 row moved to `released`; v0.5 row sharpened with concrete v0.4 carryovers (in-band SubscriptionError surfacing, lock-granularity revisit).
+- **`docs/ROADMAP.md`** — v0.4 section rewritten around what shipped (concrete subsystems landed, decisions captured); v0.5 row sharpened with concrete v0.4 carryovers (in-band SubscriptionError surfacing, lock-granularity revisit). Row status flip from `next` → `released` lands together with the version bump in the follow-up release PR.
 
 ### Fixed (post-v0.3 review batch, shipped between v0.3 and v0.4)
 

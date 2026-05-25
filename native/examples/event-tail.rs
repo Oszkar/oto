@@ -15,8 +15,14 @@
 //! Output format (one line per event):
 //!   [<elapsed_s>] <Variant> <id> → <value>
 //!
-//! Diagnostic stderr lines are prefixed `[event-tail]` so they stand
-//! out from the event stream itself.
+//! Streams:
+//!   - **stdout** — Volume / Mute / Playback / Track events.
+//!   - **stderr** — SubscriptionError / SubscriptionRecovered events
+//!     (failure-flavored, routed to stderr so they're visible even
+//!     when stdout is redirected to a file) AND diagnostic startup /
+//!     idle messages. Event lines on either stream share the same
+//!     `[<elapsed_s>] <Variant>` shape; diagnostic lines are
+//!     prefixed `[event-tail]` to distinguish them from event lines.
 
 use std::time::{Duration, Instant};
 
