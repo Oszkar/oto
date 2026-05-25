@@ -11,16 +11,17 @@ flowchart TD
     UI["Flutter UI<br/>ConsumerWidgets"]
     RP["Riverpod providers<br/>app/lib/src/state/"]
     FRB["FRB bridge<br/>native/src/api.rs"]
-    APP["oto-app<br/>translation + lifecycle"]
+    APP["oto-app<br/>routing + StateManager cache"]
     CORE["oto-core<br/>domain types"]
     WIRE{{"Wire trait"}}
     WIREIMPL["oto-wire<br/>own SSDP + sonos-api + events"]
     MOCK["oto-mock<br/>deterministic fakes"]
-    SDK["sonos-api / SDK reactive layer<br/>SOAP + events"]
+    SDK["sonos-api / SDK reactive layer<br/>SOAP + GENA events"]
     NET(("Sonos speakers<br/>on the LAN"))
 
     UI --> RP
     RP -->|"Future commands"| FRB
+    RP -->|"Stream subscription (v0.4)"| FRB
     FRB --> APP
     APP --> CORE
     APP --> WIRE
@@ -28,7 +29,13 @@ flowchart TD
     WIRE -.impl.-> MOCK
     WIREIMPL --> SDK
     SDK <--> NET
+    NET -.GENA NOTIFY.-> SDK
+    SDK -.events.-> WIREIMPL
+    WIREIMPL -.ChangeEvent.-> APP
+    APP -.ChangeEvent.-> FRB
 ```
+
+Solid arrows are command-direction (UI → FRB → … → speakers); dashed arrows are event-direction (speakers → … → UI). v0.4 added the event path: GENA NOTIFY → SDK reactive layer → `oto-wire` pump thread → `oto-app` StateManager cache + FRB stream → Dart `ChangeEventDto` stream.
 
 ## Crates
 
@@ -44,13 +51,15 @@ The Dart side is Flutter + Riverpod 3 (codegen). Providers live in `app/lib/src/
 
 ## State ownership
 
-State lives in Rust, not Dart. Each `speaker_state` call today is a one-shot SOAP read; the impl will swap to an event-fed cache in v0.4, with the `Wire` signature unchanged (see [ROADMAP § v0.4](ROADMAP.md#v04--live-property-events)).
+State lives in Rust, not Dart. v0.4 swapped `speaker_state` from a per-call SOAP read to a read against the `StateManager` cache in `oto-app`. The cache is event-fed: `oto-wire`'s pump thread converts GENA NOTIFYs (and SDK-internal polling for the few properties Sonos doesn't NOTIFY) into `ChangeEvent`s, the FRB consumer loop applies each to the cache, and `speaker_state` reads from there. The `Wire::speaker_state` trait method is preserved for hardware-baseline tests and `MockWire`'s own unit tests but is no longer dispatched in production.
 
 Consequences:
 
 - State survives Flutter hot reload / UI restart.
 - A non-Flutter client (e.g. a CLI) could reuse the same core unchanged.
 - State mutations happen where network events are handled (Rust), avoiding cross-FFI consistency bugs.
+- **`speaker_state` is honest-partial during cold-start.** Fields for which no event has arrived yet are `None`; the SDK's initial SUBSCRIBE NOTIFY seeds the common case within ~1 s. An unknown speaker id still returns `WireError::NotFound` (topology is the source of truth for "is this id real?").
+- **The cache is per-process and ephemeral** — cleared on every `discover_with` via a generation token, so a wire replacement can't leave stale state visible to the new wire's seeds.
 
 ## Command flow
 
@@ -62,11 +71,11 @@ Consequences:
 
 **Group addressing.** `discover()` reads `GetZoneGroupState` from any responding speaker and builds the group→coordinator / speaker→coordinator caches; `GroupId` resolution uses those caches. `Wire` signatures are stable across the v0.2 group-of-one → v0.3 real-topology change (the seam was designed for this).
 
-**`speaker_state` addressing (D2).** Reads volume/mute at the speaker's own address; reads transport (`GetTransportInfo` / `GetPositionInfo`) at the group coordinator's address, resolved via the `speaker_to_coordinator` cache. A solo speaker is its own coordinator, so the behavior degrades cleanly.
+**`speaker_state` addressing (D2).** Volume/mute are per-speaker (cached from `Volume` / `Mute` events); transport is per-group (cached from `Playback` / `Track` events at the group coordinator). The cache stores transport per `GroupId`; the read resolves speaker → group via the `StateManager`'s topology map (installed on every `discover_with`) → group transport cache. A solo speaker is its own coordinator, so the resolution degrades cleanly.
 
 **Topology refresh is one-shot.** Caches are populated only by `discover()`. App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`; a stale `GroupId` returns `WireError::NotFound`. Live topology-change events are v0.5 (v0.4 covers property events only — volume / mute / transport / track).
 
-**State-read shape (`speaker_state`).** `SpeakerState { volume: Option<Volume>, muted: Option<bool>, transport: Option<TransportState> }`. `Option<T>` fields are honest partial failure — a snapshot does ~4 SOAP calls and any may fail independently. The shape was chosen because (a) it mirrors the proven `discover → snapshot → FutureProvider` pattern, (b) it's the smallest `Wire` seam, and (c) the signature survives the v0.4 fetch→event-cache swap unchanged.
+**State-read shape (`speaker_state`).** `SpeakerState { volume: Option<Volume>, muted: Option<bool>, transport: Option<TransportState> }`. The signature is identical to v0.2/v0.3, but v0.4 swapped the backing source from SOAP-per-call to the `StateManager` event cache. `Option<T>` fields are now honest partial *cold-start*: a property is `None` until its first event lands in the cache (in practice, within the SUBSCRIBE NOTIFY seed phase ~1 s after `discover()`).
 
 ```mermaid
 sequenceDiagram
@@ -112,8 +121,18 @@ pub trait Wire {
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError>;
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
 
-    // One-shot snapshot read.
+    // One-shot snapshot read. Kept for the v0.3 contract + MockWire
+    // unit tests + hardware-baseline reads in live_events tests.
+    // Production paths route through the StateManager cache instead
+    // (oto-app::speaker_state), so this method is not dispatched at
+    // runtime in release builds.
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError>;
+
+    // v0.4 — register the property-event pump for the speakers in
+    // the latest snapshot. One-shot per wire; events flow into the
+    // receiver returned by `take_event_stream`.
+    fn subscribe_speakers(&self) -> Result<(), WireError>;
+    fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<ChangeEvent>>;
 }
 ```
 
@@ -123,6 +142,26 @@ pub trait Wire {
 
 **Playback control.** `oto-wire` holds an interior-mutable id→addr / group→coordinator / speaker→coordinator cache (populated by `discover()`). Commands issue direct `sonos_api::SonosClient::execute_enhanced(ip, op)` SOAP calls. `quick-xml` is used for DIDL-Lite track-metadata parsing.
 
+**Live events (v0.4).** `oto-wire` runs a dedicated pump thread per active wire (`crates/wire/src/events.rs`). The pump wraps the upstream SDK's `StateManager` + `SonosEventManager` + `EventBroker` stack (`sonos-sdk-state` / `sonos-sdk-event-manager` / `sonos-sdk-stream` / `sonos-sdk-callback-server`, all pinned `=0.5.2`), registers a per-property `watch_property_with_subscription` for every known speaker, and converts each upstream property change into an `oto_core::ChangeEvent` that it sends down an unbounded `std::sync::mpsc` channel. The pump thread terminates cleanly when the wire is dropped via an `Arc<AtomicBool>` stop flag (the SDK's `StateManager::Clone` fans out independent senders, so dropping a clone does not close the channel — the stop flag is load-bearing).
+
+```mermaid
+sequenceDiagram
+    participant K as Sonos speaker
+    participant SDK as SDK reactive layer<br/>(state + event-manager + stream)
+    participant WP as oto-wire pump thread
+    participant AP as oto-app FRB consumer<br/>(api.rs)
+    participant SM as StateManager cache
+    participant U as Flutter UI
+
+    K-->>SDK: GENA NOTIFY
+    SDK-->>WP: property change event
+    WP-->>AP: ChangeEvent (mpsc)
+    AP->>SM: apply_event_at_generation
+    AP-->>U: ChangeEventDto (Stream)
+```
+
+The Dart `subscribeChangeEventsProvider` (a Riverpod `StreamProvider`) depends on `discoveryProvider`, so a re-discovery deterministically tears down the OLD wire (sender drops → FRB consumer's `recv()` returns `Err` → stream completes) and the Dart layer rebuilds the consumer against the NEW wire. A generation counter on `StateManager` makes stale-OLD-wire applies after a mid-stream `discover_with` no-op against the freshly-cleared cache.
+
 ## Scope
 
 - **Targets:** Android (API 35+, 64-bit) and Windows. Other platforms compile but are untested.
@@ -131,4 +170,6 @@ pub trait Wire {
 
 ## Known constraints
 
-- **Watch-after-fetch event suppression (v0.4-relevant).** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value (documented upstream as by-design). The natural fetch-then-subscribe pattern will silently miss the first event. v0.4 avoids that pattern: `.watch()` itself is the reachability/seed probe, and the initial SUBSCRIBE NOTIFY populates the cache. Detail lives in [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing) and [ROADMAP § v0.4](ROADMAP.md#v04--live-property-events).
+- **Watch-after-fetch event suppression (resolved in v0.4).** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value. v0.4 sidesteps this by using `.watch()` itself as the reachability/seed probe — the initial SUBSCRIBE NOTIFY populates the cache and any code path that wants a current value reads from `StateManager` (which the pump thread fills). The fetch-then-subscribe pattern is now an anti-pattern in `oto-wire`; the production wire only calls `watch_property_with_subscription`. Detail: [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing).
+- **`manager.initialize(topology)` is non-optional** for AVTransport routing. Without it, `add_devices` + `register_watches` succeed without error but per-group Playback/Track NOTIFYs route to the wrong worker and silently disappear. `oto-wire`'s pump always calls `initialize(topology)` between `add_devices` and `register_watches`. The SDK's `StateManager::Clone` fans out independent `mpsc::Sender`s — dropping a clone does not close the channel; the pump's `Drop` uses an `Arc<AtomicBool>` stop flag + `recv_timeout` polling so it can shut down without depending on sender-close semantics.
+- **Android `MulticastLock` is still v0.5.** SSDP multicast on the Android *release* build needs a held `WifiManager.MulticastLock` (perms are declared in the manifest); debug builds happen to work because the developer build flow keeps the radio active. v0.4 GENA events are **unicast TCP** and work without the lock, but v0.5's topology events will need it for the SSDP-driven topology re-probe.

@@ -304,6 +304,15 @@ em.ensure_service_subscribed(speaker_ip, Volume::SERVICE)?;
 
 **`manager.initialize(topology)` is non-negotiable** even for solo speakers. The SDK's `resolve_subscription_target` for AVTransport routes subscriptions to the **coordinator** of each speaker's group; without an initialized topology, the routing falls back silently and AVTransport SUBSCRIBE is never sent. RenderingControl (Volume / Mute) works because it's per-speaker and doesn't need coordinator routing — which makes the failure mode particularly nasty: half the events work, the other half silently never arrive. v0.4 Slice 3's first hardware test failure ([PR #45 follow-up](https://github.com/Oszkar/oto/pulls?q=is%3Apr+initialize-topology+merged%3A%3E2026-05-23)) was exactly this: operator play/pause produced zero `ChangeEvent::Playback` because the implementer skipped this line. Construct the `Topology` from the discover snapshot's `speakers` + `groups`; see `oto-wire::events::build_sdk_topology` for the canonical reconstruction.
 
+### SDK gotcha: `StateManager::Clone` fans out independent senders
+
+Non-obvious SDK detail with no upstream README. `StateManager` implements `Clone`, and cloning produces a manager whose event channel uses an **independent** `mpsc::Sender` — not a shared `Arc<Sender>`. Two consequences:
+
+1. **Dropping a clone does not close the channel.** The channel only closes when *every* outstanding clone is dropped. This makes "sender-close as shutdown signal" impossible for any pump thread that holds its own clone of the manager.
+2. **Pump-thread shutdown must be out-of-band.** v0.4's pump in `oto-wire::events` uses `Arc<AtomicBool>` + `recv_timeout(POLL_INTERVAL)` so a parent-side `Drop` can flip the flag and the pump exits at the next poll boundary. The first Slice 3 design held a "keepalive" manager clone and expected dropping it to close the pump's channel — that broke the second `discover_with` in a row (the pump thread was self-deadlocked, waiting on its own sender clone to close).
+
+Verified in the SDK source around `state.rs:855` at the time of v0.4 implementation. If the SDK pin moves off `=0.5.2`, re-verify this invariant — `Clone` semantics aren't part of the SDK's public contract.
+
 ### SDK `.get()` and `get_property` are cache reads, not fetches
 
 `manager.get_property::<P>(&speaker_id) -> Option<P>` reads the in-memory cache only. Returns `None` until a NOTIFY populates the property. There is **no public `.fetch()` method** for one-shot SOAP-driven cache priming on `sonos-sdk-state` — the only ways to populate the cache are `.watch()` (subscribe and wait for the first NOTIFY) or a direct `sonos-api` SOAP call (`oto-wire`'s existing v0.3 path for one-shot reads).

@@ -92,6 +92,11 @@ openssl = { version = "0.10", features = ["vendored"] }
 
 [dev-dependencies]
 oto-app = { workspace = true }
+# Dev-only: `examples/event-tail.rs` needs direct access to `SonosWire`.
+# The library cdylib stays oto-app-only (oto-wire is a transitive dep
+# through oto-app, never named in the FRB surface — keeps the
+# "wire-is-an-internal-boundary" invariant from AGENTS.md §4).
+oto-wire = { workspace = true }
 
 [lints]
 workspace = true

@@ -6,19 +6,44 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-### Fixed
+## [0.4.0] - 2026-05-25
 
-Post-v0.3 review batch (second tranche). Discovery robustness + doc drift cleanup.
+### Added
+
+v0.4 — Live property events. Reactive state via GENA: Rust → Dart event stream with no oto-owned polling. Property events only (volume, mute, transport state, current track) — topology change events and group form/break stay v0.5.
+
+- **`oto-core` events surface:** `ChangeEvent { Volume, Mute, Playback, Track, SubscriptionError, SubscriptionRecovered }` — per-speaker for Volume/Mute, per-group for Playback/Track. `Wire` trait grown with `subscribe_speakers(&self) -> Result<(), WireError>` + `take_event_stream(&self) -> Option<Receiver<ChangeEvent>>`. New `WireError::NoSpeakersDiscovered` + `WireError::AlreadySubscribed` variants. `Wire::speaker_state` signature unchanged across the v0.4 swap — designed in v0.2 for this.
+- **`oto-app` StateManager:** event-fed per-speaker (Volume / Mute) + per-group (Playback / Track) cache, populated by `apply_event_at_generation` from the FRB-worker consumer loop. Generation token (`AtomicU64`) lets `discover_with` bump + clear before installing the new wire, making stale-OLD-consumer writes a no-op against the freshly-seeded cache (race-closed under-lock per /copilot review on PR #44). Topology map installed per-discover so cache-backed `speaker_state` resolves speaker → group → group cache.
+- **`oto-app::speaker_state` swap (Slice 4):** reads `StateManager` cache, not the wire. Preserves the v0.3 error contract — unknown id (not in topology) still returns `WireError::NotFound`. Honest-partial for cold-start: fields with no event seen yet are `None`. `Wire::speaker_state` trait method retained for hardware-baseline reads (`live_events` tests) and `MockWire` unit tests; no longer dispatched in production.
+- **`oto-wire` pump thread:** one OS thread per active wire, wrapping the SDK reactive stack (`sonos-sdk-state` / `sonos-sdk-event-manager` / `sonos-sdk-stream` / `sonos-sdk-callback-server`, all pinned `=0.5.2`). Per-property `watch_property_with_subscription` for every known speaker; coordinator-only AVTransport filter so Playback/Track events carry a `GroupId`. `manager.initialize(topology)` is non-optional for AVTransport routing — captured in [`docs/sonos-notes.md § Ergonomic footgun`](docs/sonos-notes.md#ergonomic-footgun-bare-statemanagernew). Drop-safe via `Arc<AtomicBool>` stop flag + `recv_timeout` polling: the SDK's `StateManager::Clone` fans out independent senders, so sender-close is not a viable shutdown signal.
+- **`oto_native` FRB stream surface:** `subscribe_change_events(sink: StreamSink<ChangeEventDto>)` — one unified stream per app instance, completes cleanly on wire replacement (cancel detection via `sink.add(...).is_err()` per FRB pre-check § 3). Dart `subscribeChangeEventsProvider` (Riverpod `StreamProvider`, `@Riverpod(keepAlive: true)`) depends on `discoveryProvider` and auto-rebuilds against the new wire.
+- **`oto-mock` MockWire affordances:** seed-on-subscribe + auto-emit on mutation + `push_event` for adversarial tests; one consumer per wire. `discovered: AtomicBool` lifecycle gate.
+- **Hardware-gated live tests** (`native/crates/wire/tests/live_events.rs`, feature `live-tests`): seed NOTIFYs, operator volume change, per-group play/pause, double-discover deadlock regression, 28-min renewal cycle observation. Renewal verified at ~25.6 min on real hardware (matches the spike's measurement).
+- **`native/examples/event-tail.rs`** — dogfood binary that subscribes to the event stream and prints changes. Long-running runs feed the v0.5 reactive-vs-NOTIFY revisit; not a user-facing CLI.
+
+### Changed
+
+- **`speaker_state` is now a cache read, not a SOAP read** — implementation only. FRB DTO (`SpeakerStateDto`) and the public `Wire` signature are unchanged.
+- **`oto-app::discover_with`** now auto-invokes `wire.subscribe_speakers()` before installing the new wire, so a Dart consumer that calls `subscribe_change_events` sees seed events without driving subscription itself. Also bumps the `StateManager` generation, clears caches, and installs fresh topology before the slot swap.
+- **`docs/ARCHITECTURE.md`** — added event-flow sequence diagram and StateManager state-ownership section; `Wire` trait listing grown with the v0.4 methods; "Watch-after-fetch event suppression" moved from open constraint to resolved (sidestepped by using `.watch()` itself as the seed probe).
+- **`docs/ROADMAP.md`** — v0.4 row moved to `released`; v0.5 row sharpened with concrete v0.4 carryovers (in-band SubscriptionError surfacing, lock-granularity revisit).
+
+### Fixed (post-v0.3 review batch, shipped between v0.3 and v0.4)
 
 - **SSDP starvation under many quiet sockets:** `collect_until` now multiplexes on `mio::Poll`, so the Phase-2 wait is collective. The previous per-socket 250 ms read timeout could let 12+ quiet adapters (the multi-NIC Windows worst case: VPN/Hyper-V/WSL/Docker vEthernet enumerated ahead of the LAN) consume the full 3 s bounded window before reaching a responder. Adds a regression test with 13 quiet sockets ahead of the responder. `mio` was already a transitive dep; promoted to a direct one.
 - **All-NIC-fail diagnostic:** when every usable IPv4 interface fails bind/send/register, `discover_locations` now returns `WireError::Network` with the last underlying cause instead of `Ok(vec![])`. The old path mapped that to `NoDevicesFound`, which falsely implied an empty LAN when the real cause was a local socket-stack failure.
 - **Concurrent `discover_with` race:** added a `DISCOVER_LOCK` in `oto-app` that serialises overlapping discoveries end-to-end (make + `wire.discover()` + slot replacement). The slot lock is unchanged; playback commands are still independent of discovery duration. Prevents a slower-but-older `discover_with` from last-writer-wins overwriting a faster newer one.
 
-### Changed
+### Doc / housekeeping
 
 - `app/integration_test/simple_test.dart`: retargeted from the removed v0.1 `greet` scaffold onto the current placeholder `HomePage`. New `just test-integration` recipe (mirrored in `Makefile`) for the manual bridge smoke — not gated by CI yet (Flutter `integration_test` needs a display target).
 - README's `flutter_rust_bridge_codegen` install command pinned to `2.12.0` (matches CI / `native/Cargo.toml` / `CONTRIBUTING.md`'s alignment mandate).
-- Stale `v0.4` UI references swept to `v0.5` (UI = v0.5, events = v0.4) across `app/lib/main.dart`, `app/lib/src/state/playback.dart`, `app/test/playback_provider_test.dart`. `api.rs::discover` doc updated — the snapshot is no longer "identity-only" since v0.3 added groups + coordinators. Generated source refreshed via `just gen`.
+- Stale `v0.4` UI references swept to `v0.5` (UI = v0.5, events = v0.4) across `app/lib/main.dart`, `app/lib/src/state/playback.dart`, `app/test/playback_provider_test.dart`. `api.rs::discover` doc updated — the snapshot is no longer "identity-only" since v0.3 added groups + coordinators.
+
+### Known issues
+
+- **Per-speaker subscription failures are not surfaced.** SDK at `=0.5.2` swallows them with a `tracing::warn!`. A speaker that becomes unreachable mid-session manifests as the property silently failing to update; production has no in-band signal to the UI. v0.4 carries `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` on the trait so the contract is forward-compatible, but the variants are never emitted today. Tracked for v0.5.
+- **`speaker_state` cold-start window:** the first ~1 s after `discover()` returns honest-partial state with most fields `None` while the SDK's SUBSCRIBE NOTIFYs seed the cache. Production UX consideration only; the Dart layer already handles `Option<T>` field nulls.
 
 ## [0.3.0] - 2026-05-20
 
