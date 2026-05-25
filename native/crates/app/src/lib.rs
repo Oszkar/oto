@@ -296,7 +296,7 @@ pub mod test_helpers {
 
     use oto_core::ChangeEvent;
 
-    use crate::{apply_event_at_generation, current_generation, state_manager, take_event_stream};
+    use crate::{apply_event_at_generation, current_generation, take_event_stream};
 
     /// Process-static holder for the held wire's event receiver during
     /// tests. The receiver is one-shot per wire, but a test may drain
@@ -322,10 +322,22 @@ pub mod test_helpers {
     /// (synchronous auto-emit on every command) a 50 ms budget is
     /// plenty.
     ///
-    /// Auto-refreshes the receiver when the held wire is replaced.
+    /// Auto-refreshes the receiver when the held wire is replaced. The
+    /// captured generation is re-read after a `Disconnected` (i.e.
+    /// whenever a fresh receiver is taken) so that NEW-wire events
+    /// land at the NEW generation — without this, a wire replacement
+    /// mid-drain would silently no-op every subsequent apply against
+    /// the stale (pre-bump) generation.
     pub fn process_pending_events(timeout: std::time::Duration) -> usize {
         let deadline = std::time::Instant::now() + timeout;
-        let gen = current_generation();
+        // `gen` is re-read whenever we refresh the receiver (see the
+        // `Disconnected` arm). For OLD-wire events buffered before a
+        // gen bump, the captured OLD gen is correct — the apply will
+        // succeed if gen still matches, or no-op if `bump_and_clear`
+        // already ran (matching production semantics). For NEW-wire
+        // events arriving after a refresh, the refreshed gen ensures
+        // they reach the cache.
+        let mut gen = current_generation();
         let mut count = 0;
         loop {
             if std::time::Instant::now() >= deadline {
@@ -370,15 +382,17 @@ pub mod test_helpers {
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     // Wire was replaced — drop this rx, leave the
                     // slot empty so the next iteration re-takes from
-                    // the new wire.
+                    // the new wire. Re-read the generation so the
+                    // NEW receiver's events apply at the NEW gen
+                    // (matching what the production NEW consumer in
+                    // `api.rs::subscribe_change_events` captures when
+                    // it's spawned against the replacement wire).
                     drop(rx);
                     // (slot is already None because we `.take()`d above.)
+                    gen = current_generation();
                 }
             }
         }
-        // Cache invariant: drained events have all been applied. Any
-        // post-drain `speaker_state` read sees the latest cache.
-        let _ = state_manager(); // suppress unused-import warning if any
         count
     }
 
