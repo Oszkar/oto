@@ -1,0 +1,175 @@
+=== active dogfood start: 05/26/2026 12:41:29 ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.84s
+     Running `target\debug\examples\event-tail.exe`
+[event-tail] discovering …
+[event-tail] discovered 2 speakers in 2 groups
+[event-tail]   speaker RINCON_542A1B9463A801400 (Living Room)
+[event-tail]   speaker RINCON_7828CAE858CA01400 (Kitchen)
+[event-tail]   group   RINCON_542A1B9463A801400:3426502567 coord=RINCON_542A1B9463A801400 members=1
+[event-tail]   group   RINCON_542A1B9463A801400:3426502566 coord=RINCON_7828CAE858CA01400 members=1
+[event-tail] subscribed; printing events. Ctrl-C to exit.
+[    0s] Volume   RINCON_7828CAE858CA01400  → 10
+[    0s] Mute     RINCON_7828CAE858CA01400  → false
+[    0s] Playback RINCON_542A1B9463A801400:3426502566  → Paused
+[    0s] Track    RINCON_542A1B9463A801400:3426502566  →   ((no artist))
+[    2s] Volume   RINCON_542A1B9463A801400  → 15
+[    2s] Mute     RINCON_542A1B9463A801400  → false
+[    2s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[    2s] Track    RINCON_542A1B9463A801400:3426502567  → Unforgettable (Godsmack)
+[   15s] Volume   RINCON_542A1B9463A801400  → 14
+[   15s] Volume   RINCON_542A1B9463A801400  → 7
+[   19s] Volume   RINCON_542A1B9463A801400  → 8
+[   19s] Volume   RINCON_542A1B9463A801400  → 13
+[   25s] Volume   RINCON_542A1B9463A801400  → 14
+[   26s] Volume   RINCON_542A1B9463A801400  → 0
+[   28s] Volume   RINCON_542A1B9463A801400  → 1
+[   28s] Volume   RINCON_542A1B9463A801400  → 5
+[   33s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[   35s] Track    RINCON_542A1B9463A801400:3426502566  → (no title) ((no artist))
+[   35s] Track    RINCON_542A1B9463A801400:3426502567  → Unforgettable (Godsmack)
+[   35s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[   35s] Track    RINCON_542A1B9463A801400:3426502567  → Unforgettable (Godsmack)
+[   37s] Track    RINCON_542A1B9463A801400:3426502567  → Unforgettable (Godsmack)
+[   39s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[   41s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[   58s] Playback RINCON_542A1B9463A801400:3426502566  → Playing
+[   58s] Track    RINCON_542A1B9463A801400:3426502566  → (no title) ((no artist))
+[   69s] Volume   RINCON_7828CAE858CA01400  → 11
+[   69s] Volume   RINCON_7828CAE858CA01400  → 12
+[   75s] Volume   RINCON_542A1B9463A801400  → 7
+[   75s] Volume   RINCON_7828CAE858CA01400  → 13
+[   79s] Volume   RINCON_7828CAE858CA01400  → 15
+[   79s] Volume   RINCON_542A1B9463A801400  → 9
+[   79s] Volume   RINCON_7828CAE858CA01400  → 20
+[   79s] Volume   RINCON_542A1B9463A801400  → 14
+[   81s] Volume   RINCON_7828CAE858CA01400  → 19
+[   81s] Volume   RINCON_542A1B9463A801400  → 13
+[   81s] Volume   RINCON_7828CAE858CA01400  → 12
+[   81s] Volume   RINCON_542A1B9463A801400  → 5
+[   82s] Volume   RINCON_7828CAE858CA01400  → 10
+[   82s] Volume   RINCON_542A1B9463A801400  → 4
+[   98s] Playback RINCON_542A1B9463A801400:3426502566  → Stopped
+[   98s] Track    RINCON_542A1B9463A801400:3426502566  → perfect-fart.mp3?authSig=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5Zjc5ZTY1OWM5NmY0MzQ0OGEwYmU4YzVhNDc2NWQ0MyIsInBhdGgiOiIvbWVkaWEvbG9jYWwvcGVyZmVjdC1mYXJ0Lm1wMyIsInBhcmFtcyI6W10sImlhdCI6MTc3MTkzNTg5OCwiZXhwIjoxNzcyMDIyMjk4fQ.JUp6LYxq0NA9lLTJb_TNv3zLM4qCe7Ln-xxzEnHAUcI ((no artist))
+[  106s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  106s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  106s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  107s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  107s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  107s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  107s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  107s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  108s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  108s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  108s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  108s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  109s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  109s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  109s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  110s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  110s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  110s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  110s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  111s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  111s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  111s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  111s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  111s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  111s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  111s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  112s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  112s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  112s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  113s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  113s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  113s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  114s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  114s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  114s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  114s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  115s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  115s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  115s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  115s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  115s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  115s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  116s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  116s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  118s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  118s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  118s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  119s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  119s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  119s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  119s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  120s] Playback RINCON_542A1B9463A801400:3426502567  → Paused
+[  121s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  121s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[  121s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  123s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  131s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  131s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[event-tail] 191s idle …
+[  220s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  221s] Track    RINCON_542A1B9463A801400:3426502567  → Come Undone (My Darkest Days)
+[  246s] Track    RINCON_542A1B9463A801400:3426502567  → This Is The Time (Ballast) (NOTHING MORE)
+[  248s] Track    RINCON_542A1B9463A801400:3426502567  → This Is The Time (Ballast) (NOTHING MORE)
+[event-tail] 308s idle …
+[event-tail] 368s idle …
+[event-tail] 428s idle …
+[  443s] Track    RINCON_542A1B9463A801400:3426502567  → This Is The Time (Ballast) (NOTHING MORE)
+[  444s] Track    RINCON_542A1B9463A801400:3426502567  → This Is The Time (Ballast) (NOTHING MORE)
+[  466s] Track    RINCON_542A1B9463A801400:3426502567  → Life is Beautiful (Sixx:A.M.)
+[  468s] Track    RINCON_542A1B9463A801400:3426502567  → Life is Beautiful (Sixx:A.M.)
+[event-tail] 528s idle …
+[event-tail] 588s idle …
+[event-tail] 648s idle …
+[  662s] Track    RINCON_542A1B9463A801400:3426502567  → Life is Beautiful (Sixx:A.M.)
+[  664s] Track    RINCON_542A1B9463A801400:3426502567  → Life is Beautiful (Sixx:A.M.)
+[  681s] Track    RINCON_542A1B9463A801400:3426502567  → Every Part Of Me (Godsmack)
+[  682s] Track    RINCON_542A1B9463A801400:3426502567  → Every Part Of Me (Godsmack)
+[event-tail] 742s idle …
+[event-tail] 802s idle …
+[  857s] Track    RINCON_542A1B9463A801400:3426502567  → Every Part Of Me (Godsmack)
+[  858s] Track    RINCON_542A1B9463A801400:3426502567  → Every Part Of Me (Godsmack)
+[  881s] Track    RINCON_542A1B9463A801400:3426502567  → I Don't Care - US Version (Apocalyptica)
+[  882s] Track    RINCON_542A1B9463A801400:3426502567  → I Don't Care - US Version (Apocalyptica)
+[event-tail] 942s idle …
+[event-tail] 1002s idle …
+[event-tail] 1062s idle …
+[ 1078s] Track    RINCON_542A1B9463A801400:3426502567  → I Don't Care - US Version (Apocalyptica)
+[ 1079s] Track    RINCON_542A1B9463A801400:3426502567  → I Don't Care - US Version (Apocalyptica)
+[ 1103s] Track    RINCON_542A1B9463A801400:3426502567  → Something Different (Godsmack)
+[ 1103s] Track    RINCON_542A1B9463A801400:3426502567  → Something Different (Godsmack)
+[event-tail] 1163s idle …
+[event-tail] 1223s idle …
+[event-tail] 1283s idle …
+[event-tail] 1343s idle …
+[ 1358s] Track    RINCON_542A1B9463A801400:3426502567  → Something Different (Godsmack)
+[ 1359s] Track    RINCON_542A1B9463A801400:3426502567  → Something Different (Godsmack)
+[ 1385s] Track    RINCON_542A1B9463A801400:3426502567  → Hail to the King (Avenged Sevenfold)
+[ 1385s] Track    RINCON_542A1B9463A801400:3426502567  → Hail to the King (Avenged Sevenfold)
+[ 1386s] Track    RINCON_542A1B9463A801400:3426502567  → Hail to the King (Avenged Sevenfold)
+[ 1388s] Track    RINCON_542A1B9463A801400:3426502567  → Hail to the King (Avenged Sevenfold)
+[event-tail] 1448s idle …
+✅ Renewed subscription for 10.83.0.103 RenderingControl
+✅ Renewed subscription for 10.83.0.103 AVTransport
+✅ Renewed subscription for 10.83.0.105 AVTransport
+✅ Renewed subscription for 10.83.0.105 RenderingControl
+[event-tail] 1508s idle …
+[event-tail] 1568s idle …
+[event-tail] 1628s idle …
+[ 1664s] Track    RINCON_542A1B9463A801400:3426502567  → Hail to the King (Avenged Sevenfold)
+[ 1665s] Track    RINCON_542A1B9463A801400:3426502567  → Hail to the King (Avenged Sevenfold)
+[ 1691s] Track    RINCON_542A1B9463A801400:3426502567  → Bulletproof (Godsmack)
+[ 1691s] Track    RINCON_542A1B9463A801400:3426502567  → Bulletproof (Godsmack)
+[event-tail] 1752s idle …
+[event-tail] 1812s idle …
+[ 1842s] Track    RINCON_542A1B9463A801400:3426502567  → Bulletproof (Godsmack)
+[ 1842s] Track    RINCON_542A1B9463A801400:3426502567  → Bulletproof (Godsmack)
+[ 1868s] Track    RINCON_542A1B9463A801400:3426502567  → Stardust (Gemini Syndrome)
+[ 1869s] Track    RINCON_542A1B9463A801400:3426502567  → Stardust (Gemini Syndrome)
+[event-tail] 1929s idle …
+[event-tail] 1989s idle …
+[event-tail] 2049s idle …
+[ 2072s] Track    RINCON_542A1B9463A801400:3426502567  → Stardust (Gemini Syndrome)
+[ 2073s] Track    RINCON_542A1B9463A801400:3426502567  → Stardust (Gemini Syndrome)
