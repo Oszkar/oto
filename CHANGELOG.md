@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-> v0.4 work is feature-complete and lands here as the v0.4 changelog. The `## [Unreleased]` header is renamed to `## [0.4.0] - YYYY-MM-DD` (with a fresh empty `## [Unreleased]` added above it, and matching reference links updated at the bottom of the file) in the follow-up `chore(release): v0.4.0` PR per [RELEASING.md](RELEASING.md) step 3 — that's the canonical release-cut point.
+## [0.4.0] - 2026-05-26
 
 ### Added
 
@@ -81,7 +81,7 @@ v0.2 — Playback control + one-shot state read. Proven end-to-end through the R
 - `WireError::Network` and `WireError::Backend` `Display` strings generalised (no longer "discovery …" prefix — these variants now occur on commands and state reads too).
 - `greet` demo removed: `api.rs` `greet` fn, `oto_core::greeting`, `app/lib/main.dart` greeting wiring, `app/lib/src/state/greeting.dart` (+ `.g.dart`), and the original smoke test scaffold.
 
-Known v0.2 limitations: group-of-one only — real multi-room ZoneGroupTopology (coordinator election, topology-change events, bonded speakers) is v0.3; live event streams (reactive state without polling) are v0.3; Android **release** discovery still needs a `WifiManager.MulticastLock` (`TODO(v0.4)`).
+Known v0.2 limitations: group-of-one only — real multi-room ZoneGroupTopology (coordinator election, topology-change events, bonded speakers) is v0.3; live event streams (reactive state without polling) are v0.3; Android **release** discovery still needs a `WifiManager.MulticastLock` (`TODO(v0.5)`).
 
 ## [0.1.0] - 2026-05-17
 
@@ -98,9 +98,10 @@ v0.1 — Foundation + LAN discovery. Identity-only discovery proven end-to-end t
 - `docs/ARCHITECTURE.md` — system design (layers, state ownership, command/event flow, open questions) — the discovery spike findings, and the discover-command design + implementation plans.
 - Project infrastructure: versioning/release process (`RELEASING.md`), this changelog, CI (generated-source freshness, lint, tests), Android debug-build workflow, and the `AGENTS.md` operational contract.
 
-Known v0.1 limitations: discovery is identity-only (bonded surrounds/stereo pairs appear as standalone players — real ZoneGroupTopology is v0.3); verified on Windows — Android **release** discovery needs a `WifiManager.MulticastLock` (`TODO(v0.4)`).
+Known v0.1 limitations: discovery is identity-only (bonded surrounds/stereo pairs appear as standalone players — real ZoneGroupTopology is v0.3); verified on Windows — Android **release** discovery needs a `WifiManager.MulticastLock` (`TODO(v0.5)`).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Oszkar/oto/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Oszkar/oto/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Oszkar/oto/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Oszkar/oto/releases/tag/v0.1.0

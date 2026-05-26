@@ -12,12 +12,12 @@ ignore = [
     # no security impact). It is a transitive dependency of sonos-api: the full
     # path is paste → sonos-api → oto-wire. No upgrade path while sonos-api is
     # pinned =0.5.2.
-    # TODO(v0.4): re-evaluate if the sonos-api pin is changed.
+    # TODO(v0.5): re-evaluate if the sonos-api pin is changed.
     { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api (paste → sonos-api → oto-wire); no upgrade path on pinned sonos-api =0.5.2" },
     # `rustls-pemfile` v1: superseded by v2; used transitively via
     # sonos-api → sonos-sdk-discovery → reqwest 0.11. No upgrade path on
     # pinned sonos-api =0.5.2.
-    # TODO(v0.4): re-evaluate if sonos-api pin is changed.
+    # TODO(v0.5): re-evaluate if sonos-api pin is changed.
     { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-api → sonos-sdk-discovery → reqwest 0.11; no upgrade path on pinned sonos-api =0.5.2" },
 ]
 

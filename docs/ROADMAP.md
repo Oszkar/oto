@@ -9,18 +9,16 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.1.0 | released | Foundation + LAN identity-only discovery |
 | v0.2.0 | released | Playback control + one-shot state read (group-of-one) |
 | v0.3.0 | released | Real ZoneGroupTopology grouping — multi-room, coordinator election, bonded satellites folded |
-| v0.4   | feature-complete; tag pending hardware acceptance | Live **property** events (GENA) — Rust → Dart event stream for volume / mute / transport / track |
+| v0.4.0 | released | Live **property** events (GENA) — Rust → Dart event stream for volume / mute / transport / track |
 | v0.5   | next | **Hardening before UI** — topology events, group form/break, Android `MulticastLock`, model repopulate |
 | v0.6   | future | The designed Flutter UI |
 | v1.0   | future | Stable — externally tested, packaged |
 
-v0.1, v0.2, and v0.3 are verified on Windows; v0.4 is feature-complete on `main` and verified by the Slice 3 hardware-gated `live_events` tests (renewal cycle observed at ~25.6 min). The v0.4 release tag follows the hardware-acceptance gate (spec § 8). Android **release** discovery is non-functional pending a held `WifiManager.MulticastLock` — see [v0.5](#v05--hardening-before-ui). v0.4 GENA events are unicast TCP and work on the Android **debug** APK as-is.
+v0.1, v0.2, v0.3 and v0.4 are verified on Windows. Hardware acceptance for v0.4 — 16/17 criteria pass; § 8.17 (Android debug APK) deferred with documented rationale; full evidence at [docs/superpowers/specs/2026-05-25-v0.4-release-evidence/](superpowers/specs/2026-05-25-v0.4-release-evidence/). Android **release** discovery is non-functional pending a held `WifiManager.MulticastLock` — see [v0.5](#v05--hardening-before-ui). v0.4 GENA events are unicast TCP and work on the Android **debug** APK as-is.
 
-## v0.4 — Live property events
+## v0.4 — Live property events (released)
 
 Reactive state via GENA: Rust → Dart event stream, no oto-owned polling. **Property events only** — volume, mute, transport state, current track. The chosen upstream reactive layer maintains GENA subscriptions and also polls internally for the few properties Sonos doesn't NOTIFY; v0.4 does not add a second oto polling loop. Topology change events and group form/break stay v0.5 (see below).
-
-Status: feature-complete on `main` after PRs #42–#48; release tag follows once the hardware-acceptance gate (spec § 8) is verified end-to-end on the 4-speaker LAN. The "Shipped" subsection below describes what's in `main`, not what's tagged.
 
 ### Shipped
 
