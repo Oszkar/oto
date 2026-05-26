@@ -26,6 +26,23 @@
 //!   Revisit if v0.4 event-pump threads contend on the same lock; at that
 //!   point a command channel or per-device granularity may be warranted.
 //!
+//! - **`StateManager` `RwLock`s (per-speaker / per-group / topology)** —
+//!   added in v0.4 (Slices 1–4). Independent of `SLOT`. The FRB-worker
+//!   consumer loop in `api.rs::subscribe_change_events` takes one of
+//!   these write locks per `ChangeEvent` applied (short hold — one
+//!   variant dispatch + one HashMap insert); the cache-backed
+//!   `speaker_state` takes read locks. Production runs through v0.4
+//!   dogfooding (spec § 8.7–§ 8.9) showed no observable contention
+//!   between event-apply writes and command-time `SLOT` holds. The
+//!   reasoning: event throughput is bounded by Sonos's GENA cadence
+//!   (~120 events/min for a 4-speaker household at the spike's
+//!   baseline), and `SLOT` writes happen only on user commands —
+//!   different time scales, different access patterns. Lock-granularity
+//!   audit per spec § 5.4 lands here: no narrowing needed for v0.4. The
+//!   v0.5 topology-events stream lands on the same channel and the
+//!   same apply_event path; revisit only if event volume + command
+//!   volume produce visible latency.
+//!
 //! - **`DISCOVER_LOCK` (`Mutex<()>`)** is held for the duration of one
 //!   `discover_with` call — across `make()`, `wire.discover()`, and the
 //!   slot replacement. It serialises *discoveries against each other*

@@ -1,0 +1,40 @@
+=== wifi-drop test start: 05/26/2026 13:47:04 ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running `target\debug\examples\event-tail.exe`
+[event-tail] discovering …
+[event-tail] discovered 2 speakers in 2 groups
+[event-tail]   speaker RINCON_542A1B9463A801400 (Living Room)
+[event-tail]   speaker RINCON_7828CAE858CA01400 (Kitchen)
+[event-tail]   group   RINCON_542A1B9463A801400:3426502567 coord=RINCON_542A1B9463A801400 members=1
+[event-tail]   group   RINCON_7828CAE858CA01400:386373680 coord=RINCON_7828CAE858CA01400 members=1
+[event-tail] subscribed; printing events. Ctrl-C to exit.
+[    0s] Volume   RINCON_542A1B9463A801400  → 14
+[    0s] Mute     RINCON_542A1B9463A801400  → false
+[    0s] Volume   RINCON_7828CAE858CA01400  → 10
+[    0s] Mute     RINCON_7828CAE858CA01400  → false
+[    0s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[    0s] Track    RINCON_542A1B9463A801400:3426502567  → Sorry (Buckcherry)
+[    3s] Playback RINCON_7828CAE858CA01400:386373680  → Stopped
+[    3s] Track    RINCON_7828CAE858CA01400:386373680  → perfect-fart.mp3?authSig=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5Zjc5ZTY1OWM5NmY0MzQ0OGEwYmU4YzVhNDc2NWQ0MyIsInBhdGgiOiIvbWVkaWEvbG9jYWwvcGVyZmVjdC1mYXJ0Lm1wMyIsInBhcmFtcyI6W10sImlhdCI6MTc3MTkzNTg5OCwiZXhwIjoxNzcyMDIyMjk4fQ.JUp6LYxq0NA9lLTJb_TNv3zLM4qCe7Ln-xxzEnHAUcI ((no artist))
+[event-tail] 63s idle …
+[   75s] Track    RINCON_542A1B9463A801400:3426502567  → Sorry (Buckcherry)
+[   87s] Track    RINCON_542A1B9463A801400:3426502567  → Sorry (Buckcherry)
+[   88s] Track    RINCON_542A1B9463A801400:3426502567  → Sorry (Buckcherry)
+=== wifi-drop recovery: 05/26/2026 13:53:19 ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `target\debug\examples\event-tail.exe`
+[event-tail] discovering …
+[event-tail] discovered 2 speakers in 2 groups
+[event-tail]   speaker RINCON_542A1B9463A801400 (Living Room)
+[event-tail]   speaker RINCON_7828CAE858CA01400 (Kitchen)
+[event-tail]   group   RINCON_542A1B9463A801400:3426502567 coord=RINCON_542A1B9463A801400 members=1
+[event-tail]   group   RINCON_7828CAE858CA01400:386373680 coord=RINCON_7828CAE858CA01400 members=1
+[event-tail] subscribed; printing events. Ctrl-C to exit.
+[    0s] Volume   RINCON_7828CAE858CA01400  → 10
+[    0s] Mute     RINCON_7828CAE858CA01400  → false
+[    3s] Playback RINCON_7828CAE858CA01400:386373680  → Stopped
+[    3s] Track    RINCON_7828CAE858CA01400:386373680  → perfect-fart.mp3?authSig=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI5Zjc5ZTY1OWM5NmY0MzQ0OGEwYmU4YzVhNDc2NWQ0MyIsInBhdGgiOiIvbWVkaWEvbG9jYWwvcGVyZmVjdC1mYXJ0Lm1wMyIsInBhcmFtcyI6W10sImlhdCI6MTc3MTkzNTg5OCwiZXhwIjoxNzcyMDIyMjk4fQ.JUp6LYxq0NA9lLTJb_TNv3zLM4qCe7Ln-xxzEnHAUcI ((no artist))
+[    3s] Volume   RINCON_542A1B9463A801400  → 14
+[    3s] Mute     RINCON_542A1B9463A801400  → false
+[    3s] Playback RINCON_542A1B9463A801400:3426502567  → Playing
+[    3s] Track    RINCON_542A1B9463A801400:3426502567  → Cryin' Like A Bitch!! (Godsmack)

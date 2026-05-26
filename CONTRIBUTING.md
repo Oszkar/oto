@@ -15,6 +15,18 @@ just test       # cargo nextest + flutter test
 
 Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook pre-commit hook (`just install-hooks`) catches stale generated source locally; CI's `Generated source freshness` job catches it server-side.
 
+## Android cross-compile prerequisites (Windows host)
+
+If you build the Android APK (`just build-apk`) on Windows, the `openssl-sys` vendored build needs a **Unix-aware Perl with the standard module set**. The Android NDK ships no system OpenSSL, so the workspace's `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }` flips the build to compile OpenSSL from source — and OpenSSL's `Configure` script is Perl-driven.
+
+**Wrong choices** (each fails in its own way):
+- **Strawberry Perl** (MSWin32 build) — fails with "doesn't produce Unix-like paths". OpenSSL's Linux config wants forward slashes.
+- **Git for Windows' bundled msys perl** — right path semantics, but a minimal install. Missing standard modules like `Locale::Maketext::Simple` that OpenSSL's `Configure` indirectly loads via `IPC::Cmd`.
+
+**Working choice:** install **msys2** (`winget install MSYS2.MSYS2`), then either run the build from an msys2 shell or prepend `C:\msys64\usr\bin` to PATH so `cargo` finds msys2's full Perl distribution. msys2's `perl` has the complete standard library.
+
+This is a one-time host setup, unrelated to Rust toolchain or Flutter SDK. Document any new build-target prereqs here as they surface.
+
 ## Version pin policy
 
 Toolchain and tooling versions are pinned in multiple files. Dependabot covers most of them; a few require coordinated manual updates.

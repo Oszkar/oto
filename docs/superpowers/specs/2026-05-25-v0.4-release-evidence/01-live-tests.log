@@ -1,0 +1,281 @@
+   Compiling oto-wire v0.3.0 (E:\Programming\oto\native\crates\wire)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.16s
+────────────
+ Nextest run ID 1a427024-1a80-4735-8093-b13e0b7001ab with nextest profile: default
+    Starting 4 tests across 1 binary (1 test skipped)
+       START [         ] (1/4) oto-wire::live_events double_discover_does_not_hang
+
+running 1 test
+[live_events] double_discover: first wire dropped at 3.5303628s
+[live_events] double_discover: both wires constructed + dropped in 7.0426503s
+test double_discover_does_not_hang ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 7.04s
+
+        PASS [   7.052s] (1/4) oto-wire::live_events double_discover_does_not_hang
+       START [         ] (2/4) oto-wire::live_events operator_play_pause_emits_per_group_event
+
+running 1 test
+[live_events] discovered 2 speakers in 2 groups
+[live_events]   group RINCON_542A1B9463A801400:3426502567 coord=RINCON_542A1B9463A801400 members=1
+[live_events]   group RINCON_542A1B9463A801400:3426502566 coord=RINCON_7828CAE858CA01400 members=1
+[live_events] captured 2 baseline group transports via SOAP
+2026-05-26T03:03:04.756972Z  INFO sonos_state::state: StateManager event worker started
+2026-05-26T03:03:04.756999Z  INFO sonos_state::event_worker: State event worker started, waiting for events...
+2026-05-26T03:03:04.757019Z  INFO sonos_state::state: StateManager created (sync-first mode)
+2026-05-26T03:03:04.757066Z DEBUG sonos_state::state: Added speaker RINCON_542A1B9463A801400 at IP 10.83.0.103 to ip_to_speaker map
+2026-05-26T03:03:04.757090Z DEBUG sonos_state::state: Added speaker RINCON_7828CAE858CA01400 at IP 10.83.0.105 to ip_to_speaker map
+2026-05-26T03:03:04.757125Z  INFO sonos_stream::broker: Initializing EventBroker config=BrokerConfig { callback_port_range: (3400, 3500), event_timeout: 30s, polling_activation_delay: 5s, base_polling_interval: 5s, max_polling_interval: 30s, subscription_timeout: 1800s, event_buffer_size: 1000, max_concurrent_polls: 50, enable_proactive_firewall_detection: true, firewall_event_wait_timeout: 15s, enable_firewall_caching: true, max_cached_device_states: 100, max_registrations: 1000, adaptive_polling: true, renewal_threshold: 300s, force_polling_mode: false }
+2026-05-26T03:03:04.757176Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:RenderingControl: 0 -> 1
+2026-05-26T03:03:04.757198Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:RenderingControl: 1 -> 2
+2026-05-26T03:03:04.757208Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:AVTransport: 0 -> 1
+2026-05-26T03:03:04.757221Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:AVTransport: 1 -> 2
+2026-05-26T03:03:04.757232Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:RenderingControl: 0 -> 1
+2026-05-26T03:03:04.757242Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:RenderingControl: 1 -> 2
+2026-05-26T03:03:04.757251Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:AVTransport: 0 -> 1
+2026-05-26T03:03:04.757263Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:AVTransport: 1 -> 2
+2026-05-26T03:03:04.757985Z  INFO sonos_stream::broker: Firewall detection coordinator enabled timeout=15s
+2026-05-26T03:03:04.758046Z DEBUG sonos_stream::broker: Starting background processing tasks
+2026-05-26T03:03:04.758086Z DEBUG sonos_stream::broker: Background processing tasks started
+2026-05-26T03:03:04.758098Z  INFO sonos_stream::broker: EventBroker initialized successfully
+2026-05-26T03:03:04.758115Z  INFO sonos_event_manager::worker: Event worker started
+2026-05-26T03:03:04.758140Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.103:RenderingControl
+2026-05-26T03:03:04.758157Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.103 service=RenderingControl
+2026-05-26T03:03:04.758198Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-1
+2026-05-26T03:03:04.758222Z DEBUG sonos_stream::broker: First subscription for device, triggering firewall detection speaker_ip=10.83.0.103
+2026-05-26T03:03:04.765566Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000597
+2026-05-26T03:03:04.765622Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000597
+2026-05-26T03:03:04.765653Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-1 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:04.765672Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.103:RenderingControl with ID reg-1
+2026-05-26T03:03:04.765689Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.103:AVTransport
+2026-05-26T03:03:04.765695Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.103 service=AVTransport
+2026-05-26T03:03:04.765711Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-2
+2026-05-26T03:03:04.772737Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000598
+2026-05-26T03:03:04.772772Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000598
+2026-05-26T03:03:04.772788Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-2 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:04.772803Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.103:AVTransport with ID reg-2
+2026-05-26T03:03:04.772815Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.105:RenderingControl
+2026-05-26T03:03:04.772821Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.105 service=RenderingControl
+2026-05-26T03:03:04.772834Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-3
+2026-05-26T03:03:04.772845Z DEBUG sonos_stream::broker: First subscription for device, triggering firewall detection speaker_ip=10.83.0.105
+2026-05-26T03:03:04.780371Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000575
+2026-05-26T03:03:04.780410Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000575
+2026-05-26T03:03:04.780432Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-3 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:04.780458Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.105:RenderingControl with ID reg-3
+2026-05-26T03:03:04.780479Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.105:AVTransport
+2026-05-26T03:03:04.780490Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.105 service=AVTransport
+2026-05-26T03:03:04.780526Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-4
+2026-05-26T03:03:04.786994Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000576
+2026-05-26T03:03:04.787042Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000576
+2026-05-26T03:03:04.787073Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-4 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:04.787096Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.105:AVTransport with ID reg-4
+2026-05-26T03:03:04.787174Z  INFO sonos_stream::events::processor: Starting UPnP event processing using sonos-api framework
+2026-05-26T03:03:04.787207Z  INFO sonos_stream::broker: Starting polling request processing
+2026-05-26T03:03:04.787223Z  INFO sonos_stream::broker: Starting subscription renewal monitoring
+2026-05-26T03:03:04.788113Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=1 subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000597
+2026-05-26T03:03:04.788529Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.103 service=RenderingControl event_source=UPnPNotification { subscription_id: "uuid:RINCON_542A1B9463A801400_sub0000000597" }
+2026-05-26T03:03:04.788613Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=2 subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000575
+2026-05-26T03:03:04.788831Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.105 service=RenderingControl event_source=UPnPNotification { subscription_id: "uuid:RINCON_7828CAE858CA01400_sub0000000575" }
+2026-05-26T03:03:04.788926Z DEBUG sonos_state::event_worker: Received event from 10.83.0.103 for service RenderingControl
+2026-05-26T03:03:04.788950Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:04.788971Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.103 to speaker_id RINCON_542A1B9463A801400
+2026-05-26T03:03:04.788989Z DEBUG sonos_state::event_worker: Decoded 5 property changes from event
+2026-05-26T03:03:04.789000Z DEBUG sonos_state::event_worker: Applying change: Volume(Volume(8))
+2026-05-26T03:03:04.789025Z DEBUG sonos_state::event_worker: Property volume changed for RINCON_542A1B9463A801400, emitting event
+2026-05-26T03:03:04.789049Z DEBUG sonos_state::event_worker: Applying change: Mute(Mute(false))
+2026-05-26T03:03:04.789065Z DEBUG sonos_state::event_worker: Property mute changed for RINCON_542A1B9463A801400, emitting event
+2026-05-26T03:03:04.789080Z DEBUG sonos_state::event_worker: Applying change: Bass(Bass(6))
+2026-05-26T03:03:04.789091Z DEBUG sonos_state::event_worker: Applying change: Treble(Treble(1))
+2026-05-26T03:03:04.789102Z DEBUG sonos_state::event_worker: Applying change: Loudness(Loudness(false))
+2026-05-26T03:03:04.789120Z DEBUG sonos_state::event_worker: Received event from 10.83.0.105 for service RenderingControl
+2026-05-26T03:03:04.789130Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:04.789140Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.105 to speaker_id RINCON_7828CAE858CA01400
+2026-05-26T03:03:04.789150Z DEBUG sonos_state::event_worker: Decoded 5 property changes from event
+2026-05-26T03:03:04.789156Z DEBUG sonos_state::event_worker: Applying change: Volume(Volume(10))
+2026-05-26T03:03:04.789169Z DEBUG sonos_state::event_worker: Property volume changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:04.789182Z DEBUG sonos_state::event_worker: Applying change: Mute(Mute(false))
+2026-05-26T03:03:04.789192Z DEBUG sonos_state::event_worker: Property mute changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:04.789202Z DEBUG sonos_state::event_worker: Applying change: Bass(Bass(0))
+2026-05-26T03:03:04.789212Z DEBUG sonos_state::event_worker: Applying change: Treble(Treble(0))
+2026-05-26T03:03:04.789223Z DEBUG sonos_state::event_worker: Applying change: Loudness(Loudness(true))
+2026-05-26T03:03:04.796135Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=3 subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000576
+2026-05-26T03:03:04.796861Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.105 service=AVTransport event_source=UPnPNotification { subscription_id: "uuid:RINCON_7828CAE858CA01400_sub0000000576" }
+2026-05-26T03:03:04.796957Z DEBUG sonos_state::event_worker: Received event from 10.83.0.105 for service AVTransport
+2026-05-26T03:03:04.796986Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:04.797002Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.105 to speaker_id RINCON_7828CAE858CA01400
+2026-05-26T03:03:04.797049Z DEBUG sonos_state::event_worker: Decoded 3 property changes from event
+2026-05-26T03:03:04.797060Z DEBUG sonos_state::event_worker: Applying change: PlaybackState(Paused)
+2026-05-26T03:03:04.797079Z DEBUG sonos_state::event_worker: Property playback_state changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:04.797097Z DEBUG sonos_state::event_worker: Applying change: Position(Position { position_ms: 0, duration_ms: 0 })
+2026-05-26T03:03:04.797124Z DEBUG sonos_state::event_worker: Applying change: CurrentTrack(CurrentTrack { title: Some(" "), artist: None, album: None, album_art_uri: None, uri: Some("x-sonos-vli:RINCON_7828CAE858CA01400:2,spotify:d1727f500c91df372b9aef105856d4d2") })
+2026-05-26T03:03:04.797158Z DEBUG sonos_state::event_worker: Property current_track changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:04.805160Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=4 subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000598
+2026-05-26T03:03:04.805938Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.103 service=AVTransport event_source=UPnPNotification { subscription_id: "uuid:RINCON_542A1B9463A801400_sub0000000598" }
+2026-05-26T03:03:04.806029Z DEBUG sonos_state::event_worker: Received event from 10.83.0.103 for service AVTransport
+2026-05-26T03:03:04.806053Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:04.806067Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.103 to speaker_id RINCON_542A1B9463A801400
+2026-05-26T03:03:04.806111Z DEBUG sonos_state::event_worker: Decoded 3 property changes from event
+2026-05-26T03:03:04.806119Z DEBUG sonos_state::event_worker: Applying change: PlaybackState(Paused)
+2026-05-26T03:03:04.806135Z DEBUG sonos_state::event_worker: Property playback_state changed for RINCON_542A1B9463A801400, emitting event
+2026-05-26T03:03:04.806151Z DEBUG sonos_state::event_worker: Applying change: Position(Position { position_ms: 0, duration_ms: 208000 })
+2026-05-26T03:03:04.806165Z DEBUG sonos_state::event_worker: Applying change: CurrentTrack(CurrentTrack { title: Some("Unforgettable"), artist: Some("Godsmack"), album: Some("When Legends Rise"), album_art_uri: Some("https://i.scdn.co/image/ab67616d0000b273760605e88288999f4db3d96d"), uri: Some("x-sonos-spotify:spotify:track:2UYOhzl7osGbm77ysozmfT?sid=12&flags=0&sn=4") })
+2026-05-26T03:03:04.806188Z DEBUG sonos_state::event_worker: Property current_track changed for RINCON_542A1B9463A801400, emitting event
+
+============================================================
+>>> ACTION REQUIRED — TOGGLE play/pause on a group NOW <<<
+    Use the SONOS app (not Spotify Connect).
+    Current group states (TRANSITION at least one of them):
+      RINCON_542A1B9463A801400:3426502567 = Paused (members=1)
+      RINCON_542A1B9463A801400:3426502566 = Paused (members=1)
+      e.g. if Playing → tap Pause; if Paused → tap Play.
+    Prompt repeats every 3 s through the 15 s window.
+    Polled refresh of unchanged state ALSO counts as pass —
+    the test checks per-group addressing, not state delta.
+============================================================
+
+2026-05-26T03:03:09.284531Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=5 subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000598
+2026-05-26T03:03:09.285282Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.103 service=AVTransport event_source=UPnPNotification { subscription_id: "uuid:RINCON_542A1B9463A801400_sub0000000598" }
+2026-05-26T03:03:09.285359Z DEBUG sonos_state::event_worker: Received event from 10.83.0.103 for service AVTransport
+2026-05-26T03:03:09.285381Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:09.285395Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.103 to speaker_id RINCON_542A1B9463A801400
+2026-05-26T03:03:09.285431Z DEBUG sonos_state::event_worker: Decoded 3 property changes from event
+2026-05-26T03:03:09.285440Z DEBUG sonos_state::event_worker: Applying change: PlaybackState(Playing)
+2026-05-26T03:03:09.285454Z DEBUG sonos_state::event_worker: Property playback_state changed for RINCON_542A1B9463A801400, emitting event
+2026-05-26T03:03:09.285468Z DEBUG sonos_state::event_worker: Applying change: Position(Position { position_ms: 0, duration_ms: 208000 })
+2026-05-26T03:03:09.285478Z DEBUG sonos_state::event_worker: Applying change: CurrentTrack(CurrentTrack { title: Some("Unforgettable"), artist: Some("Godsmack"), album: Some("When Legends Rise"), album_art_uri: Some("https://i.scdn.co/image/ab67616d0000b273760605e88288999f4db3d96d"), uri: Some("x-sonos-spotify:spotify:track:2UYOhzl7osGbm77ysozmfT?sid=12&flags=0&sn=4") })
+[live_events] Playback RINCON_542A1B9463A801400:3426502567 → Playing (baseline Some(Paused), transitioned) after 2.5233867s
+test operator_play_pause_emits_per_group_event ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 7.89s
+
+        PASS [   7.903s] (2/4) oto-wire::live_events operator_play_pause_emits_per_group_event
+       START [         ] (3/4) oto-wire::live_events operator_volume_change_emits_event
+
+running 1 test
+[live_events] captured 2 baseline volumes via SOAP
+2026-05-26T03:03:12.670994Z  INFO sonos_state::state: StateManager event worker started
+2026-05-26T03:03:12.671021Z  INFO sonos_state::event_worker: State event worker started, waiting for events...
+2026-05-26T03:03:12.671034Z  INFO sonos_state::state: StateManager created (sync-first mode)
+2026-05-26T03:03:12.671084Z DEBUG sonos_state::state: Added speaker RINCON_542A1B9463A801400 at IP 10.83.0.103 to ip_to_speaker map
+2026-05-26T03:03:12.671109Z DEBUG sonos_state::state: Added speaker RINCON_7828CAE858CA01400 at IP 10.83.0.105 to ip_to_speaker map
+2026-05-26T03:03:12.671161Z  INFO sonos_stream::broker: Initializing EventBroker config=BrokerConfig { callback_port_range: (3400, 3500), event_timeout: 30s, polling_activation_delay: 5s, base_polling_interval: 5s, max_polling_interval: 30s, subscription_timeout: 1800s, event_buffer_size: 1000, max_concurrent_polls: 50, enable_proactive_firewall_detection: true, firewall_event_wait_timeout: 15s, enable_firewall_caching: true, max_cached_device_states: 100, max_registrations: 1000, adaptive_polling: true, renewal_threshold: 300s, force_polling_mode: false }
+2026-05-26T03:03:12.671199Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:RenderingControl: 0 -> 1
+2026-05-26T03:03:12.671224Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:RenderingControl: 1 -> 2
+2026-05-26T03:03:12.671235Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:AVTransport: 0 -> 1
+2026-05-26T03:03:12.671250Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.103:AVTransport: 1 -> 2
+2026-05-26T03:03:12.671259Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:RenderingControl: 0 -> 1
+2026-05-26T03:03:12.671270Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:RenderingControl: 1 -> 2
+2026-05-26T03:03:12.671279Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:AVTransport: 0 -> 1
+2026-05-26T03:03:12.671293Z DEBUG sonos_event_manager::manager: Service reference count for 10.83.0.105:AVTransport: 1 -> 2
+2026-05-26T03:03:12.671930Z  INFO sonos_stream::broker: Firewall detection coordinator enabled timeout=15s
+2026-05-26T03:03:12.671981Z DEBUG sonos_stream::broker: Starting background processing tasks
+2026-05-26T03:03:12.672017Z DEBUG sonos_stream::broker: Background processing tasks started
+2026-05-26T03:03:12.672029Z  INFO sonos_stream::broker: EventBroker initialized successfully
+2026-05-26T03:03:12.672045Z  INFO sonos_event_manager::worker: Event worker started
+2026-05-26T03:03:12.672071Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.103:RenderingControl
+2026-05-26T03:03:12.672085Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.103 service=RenderingControl
+2026-05-26T03:03:12.672123Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-1
+2026-05-26T03:03:12.672143Z DEBUG sonos_stream::broker: First subscription for device, triggering firewall detection speaker_ip=10.83.0.103
+2026-05-26T03:03:12.686447Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000599
+2026-05-26T03:03:12.686503Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000599
+2026-05-26T03:03:12.686529Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-1 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:12.686547Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.103:RenderingControl with ID reg-1
+2026-05-26T03:03:12.686560Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.103:AVTransport
+2026-05-26T03:03:12.686569Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.103 service=AVTransport
+2026-05-26T03:03:12.686585Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-2
+2026-05-26T03:03:12.692595Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000600
+2026-05-26T03:03:12.692643Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000600
+2026-05-26T03:03:12.692666Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-2 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:12.692691Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.103:AVTransport with ID reg-2
+2026-05-26T03:03:12.692712Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.105:RenderingControl
+2026-05-26T03:03:12.692725Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.105 service=RenderingControl
+2026-05-26T03:03:12.692747Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-3
+2026-05-26T03:03:12.692766Z DEBUG sonos_stream::broker: First subscription for device, triggering firewall detection speaker_ip=10.83.0.105
+2026-05-26T03:03:12.703875Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000577
+2026-05-26T03:03:12.703915Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000577
+2026-05-26T03:03:12.703933Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-3 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:12.703949Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.105:RenderingControl with ID reg-3
+2026-05-26T03:03:12.703962Z DEBUG sonos_event_manager::worker: Worker: Subscribing to 10.83.0.105:AVTransport
+2026-05-26T03:03:12.703971Z DEBUG sonos_stream::broker: Registering speaker service speaker_ip=10.83.0.105 service=AVTransport
+2026-05-26T03:03:12.703992Z DEBUG sonos_stream::broker: Registration already exists registration_id=reg-4
+2026-05-26T03:03:12.715784Z DEBUG sonos_stream::broker: Created UPnP subscription subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000578
+2026-05-26T03:03:12.715825Z DEBUG sonos_stream::broker: Registered subscription with EventRouter subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000578
+2026-05-26T03:03:12.715844Z DEBUG sonos_stream::broker: Registration completed registration_id=reg-4 firewall_status=Unknown polling_reason=None was_duplicate=true
+2026-05-26T03:03:12.715863Z DEBUG sonos_event_manager::worker: Registered speaker service 10.83.0.105:AVTransport with ID reg-4
+2026-05-26T03:03:12.715937Z  INFO sonos_stream::events::processor: Starting UPnP event processing using sonos-api framework
+2026-05-26T03:03:12.715958Z  INFO sonos_stream::broker: Starting polling request processing
+2026-05-26T03:03:12.715973Z  INFO sonos_stream::broker: Starting subscription renewal monitoring
+2026-05-26T03:03:12.716629Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=1 subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000577
+2026-05-26T03:03:12.716946Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.105 service=RenderingControl event_source=UPnPNotification { subscription_id: "uuid:RINCON_7828CAE858CA01400_sub0000000577" }
+2026-05-26T03:03:12.717043Z DEBUG sonos_state::event_worker: Received event from 10.83.0.105 for service RenderingControl
+2026-05-26T03:03:12.717072Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:12.717089Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.105 to speaker_id RINCON_7828CAE858CA01400
+2026-05-26T03:03:12.717106Z DEBUG sonos_state::event_worker: Decoded 5 property changes from event
+2026-05-26T03:03:12.717113Z DEBUG sonos_state::event_worker: Applying change: Volume(Volume(10))
+2026-05-26T03:03:12.717131Z DEBUG sonos_state::event_worker: Property volume changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:12.717147Z DEBUG sonos_state::event_worker: Applying change: Mute(Mute(false))
+2026-05-26T03:03:12.717156Z DEBUG sonos_state::event_worker: Property mute changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:12.717165Z DEBUG sonos_state::event_worker: Applying change: Bass(Bass(0))
+2026-05-26T03:03:12.717173Z DEBUG sonos_state::event_worker: Applying change: Treble(Treble(0))
+2026-05-26T03:03:12.717183Z DEBUG sonos_state::event_worker: Applying change: Loudness(Loudness(true))
+2026-05-26T03:03:12.731395Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=2 subscription_id=uuid:RINCON_7828CAE858CA01400_sub0000000578
+2026-05-26T03:03:12.732205Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.105 service=AVTransport event_source=UPnPNotification { subscription_id: "uuid:RINCON_7828CAE858CA01400_sub0000000578" }
+2026-05-26T03:03:12.732296Z DEBUG sonos_state::event_worker: Received event from 10.83.0.105 for service AVTransport
+2026-05-26T03:03:12.732319Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:12.732333Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.105 to speaker_id RINCON_7828CAE858CA01400
+2026-05-26T03:03:12.732375Z DEBUG sonos_state::event_worker: Decoded 3 property changes from event
+2026-05-26T03:03:12.732400Z DEBUG sonos_state::event_worker: Applying change: PlaybackState(Paused)
+2026-05-26T03:03:12.732413Z DEBUG sonos_state::event_worker: Property playback_state changed for RINCON_7828CAE858CA01400, emitting event
+2026-05-26T03:03:12.732427Z DEBUG sonos_state::event_worker: Applying change: Position(Position { position_ms: 0, duration_ms: 0 })
+2026-05-26T03:03:12.732440Z DEBUG sonos_state::event_worker: Applying change: CurrentTrack(CurrentTrack { title: Some(" "), artist: None, album: None, album_art_uri: None, uri: Some("x-sonos-vli:RINCON_7828CAE858CA01400:2,spotify:d1727f500c91df372b9aef105856d4d2") })
+2026-05-26T03:03:12.732466Z DEBUG sonos_state::event_worker: Property current_track changed for RINCON_7828CAE858CA01400, emitting event
+
+============================================================
+>>> ACTION REQUIRED — CHANGE A SPEAKER VOLUME NOW <<<
+    Use the SONOS app (not Spotify) — any speaker is fine.
+    Volume must DIFFER from current value (no-op writes are filtered).
+    Prompt repeats every 3 s through the 15 s window.
+    (No sub-second latency requirement; that's an automated test.)
+============================================================
+
+
+>>> ACT NOW — 11 s remaining — CHANGE A VOLUME <<<
+
+
+>>> ACT NOW — 8 s remaining — CHANGE A VOLUME <<<
+
+
+>>> ACT NOW — 5 s remaining — CHANGE A VOLUME <<<
+
+2026-05-26T03:03:24.531718Z DEBUG sonos_stream::events::processor: Processing UPnP event event_count=3 subscription_id=uuid:RINCON_542A1B9463A801400_sub0000000599
+2026-05-26T03:03:24.532107Z DEBUG sonos_stream::events::processor: Routing event to EventIterator channel speaker_ip=10.83.0.103 service=RenderingControl event_source=UPnPNotification { subscription_id: "uuid:RINCON_542A1B9463A801400_sub0000000599" }
+2026-05-26T03:03:24.532196Z DEBUG sonos_state::event_worker: Received event from 10.83.0.103 for service RenderingControl
+2026-05-26T03:03:24.532222Z DEBUG sonos_state::event_worker: ip_to_speaker map has 2 entries: [10.83.0.103, 10.83.0.105]
+2026-05-26T03:03:24.532235Z DEBUG sonos_state::event_worker: Mapped IP 10.83.0.103 to speaker_id RINCON_542A1B9463A801400
+2026-05-26T03:03:24.532249Z DEBUG sonos_state::event_worker: Decoded 5 property changes from event
+2026-05-26T03:03:24.532256Z DEBUG sonos_state::event_worker: Applying change: Volume(Volume(18))
+2026-05-26T03:03:24.532272Z DEBUG sonos_state::event_worker: Property volume changed for RINCON_542A1B9463A801400, emitting event
+2026-05-26T03:03:24.532287Z DEBUG sonos_state::event_worker: Applying change: Mute(Mute(false))
+2026-05-26T03:03:24.532297Z DEBUG sonos_state::event_worker: Property mute changed for RINCON_542A1B9463A801400, emitting event
+2026-05-26T03:03:24.532303Z DEBUG sonos_state::event_worker: Applying change: Bass(Bass(6))
+2026-05-26T03:03:24.532312Z DEBUG sonos_state::event_worker: Applying change: Treble(Treble(1))
+[live_events] Volume RINCON_542A1B9463A801400 → 18 (baseline Some(8)) after 9.8422435s (operator+SDK latency, not SDK-only)
+2026-05-26T03:03:24.532328Z DEBUG sonos_state::event_worker: Applying change: Loudness(Loudness(false))
+test operator_volume_change_emits_event ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.24s
+
+        PASS [  15.249s] (3/4) oto-wire::live_events operator_volume_change_emits_event
+       START [         ] (4/4) oto-wire::live_events subscribe_then_seed_notifies_arrive
+
+running 1 test
+[live_events] discovered 2 speakers — expecting ≥ 1 to seed Volume within 5 s
+[live_events] saw seed Volume for 1/2 speakers: {SpeakerId("RINCON_7828CAE858CA01400")}
+[live_events] (quiet — no seed Volume within 5 s): [SpeakerId("RINCON_542A1B9463A801400")]
+test subscribe_then_seed_notifies_arrive ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 8.33s
+
+        PASS [   8.335s] (4/4) oto-wire::live_events subscribe_then_seed_notifies_arrive
+────────────
+     Summary [  38.540s] 4 tests run: 4 passed, 1 skipped
