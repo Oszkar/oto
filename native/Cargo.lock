@@ -1228,7 +1228,7 @@ dependencies = [
  "if-addrs",
  "mio",
  "oto-core",
- "quick-xml",
+ "quick-xml 0.40.1",
  "sonos-api",
  "sonos-sdk-callback-server",
  "sonos-sdk-event-manager",
@@ -1356,6 +1356,15 @@ checksum = "1004a344b30a54e2ee58d66a71b32d2db2feb0a31f9a2d302bf0536f15de2a33"
 dependencies = [
  "memchr",
  "serde",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.40.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -1747,7 +1756,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ca946ba9339f4bf52c30335aa5576be4f283c2868996944cb1a0ac097ae75cd"
 dependencies = [
  "paste",
- "quick-xml",
+ "quick-xml 0.31.0",
  "serde",
  "sonos-sdk-discovery",
  "sonos-sdk-soap-client",
@@ -1779,7 +1788,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04f6330ba89d5cc5143122772f23a9fb5d63ded8f2d67bf52fc49564673ffbab"
 dependencies = [
- "quick-xml",
+ "quick-xml 0.31.0",
  "reqwest",
  "serde",
 ]
@@ -1845,7 +1854,7 @@ dependencies = [
  "crossbeam",
  "dashmap",
  "futures",
- "quick-xml",
+ "quick-xml 0.31.0",
  "reqwest",
  "serde",
  "serde_json",

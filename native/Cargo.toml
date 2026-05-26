@@ -47,7 +47,7 @@ sonos-sdk-callback-server = "=0.5.2"
 # XML parser used by oto-wire's DIDL-Lite track-metadata parser
 # (parse_track_didl in control.rs). Already in the locked graph via
 # sonos-api — unify, don't bump.
-quick-xml = "=0.31.0"
+quick-xml = "=0.40.1"
 
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.
