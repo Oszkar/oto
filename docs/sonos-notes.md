@@ -278,9 +278,35 @@ When a Sonos client (the official app or oto) issues a group-volume change, the 
 
 ### Subscription renewal
 
-Path A (`sonos-event-manager` + `sonos-stream`) handles GENA renewal automatically per the `renewal_threshold` setting above — observed firing 4 renewals (one per speaker × service) at ~25 min into a 27 min run. No intervention required.
+Path A (`sonos-event-manager` + `sonos-stream`) handles GENA renewal automatically per the `renewal_threshold` setting above — observed firing 4 renewals (one per speaker × service) at ~25 min into a 27 min run. Re-verified in v0.4 release acceptance: renewals at 24.6 min in idle dogfood and 24.75 min in active dogfood (music continued playing through the active-session renewal — no event-stream interruption). No intervention required.
 
 If a future Path-B-style implementation is built, renewal is the implementer's responsibility — UPnP `SUBSCRIBE` returns a `TIMEOUT` (default 1800 s in our spike) and a follow-up `SUBSCRIBE` with the same `SID` header before expiry. Without renewal, all subscriptions silently expire after the timeout.
+
+### Per-speaker seed NOTIFY behavior is non-uniform
+
+Not every subscribed RenderingControl/AVTransport service emits an initial NOTIFY on every fresh `SUBSCRIBE`. Empirically (v0.4 release acceptance, 2026-05-26, against an Era 100 + Beam LAN): the Era 100 reliably did NOT send its initial RC NOTIFY on three back-to-back test runs in the same process. The Beam, on the same LAN at the same time, did. Once the operator drove a real Volume change, Era's RC subscription started emitting normally.
+
+The most likely cause is an SDK-internal subscription-cooldown / dedupe on the speaker side when subscribe-unsubscribe-subscribe cycles happen quickly (tests dropping `SonosWire` then immediately creating another). The behavior is not reproducible from the SDK or wire-side code; it's a real speaker-firmware quirk that varies by model.
+
+**Implications for v0.4 (and any v0.5 design):**
+
+- **Don't assume "every subscribed service emits seed within X seconds"** in tests or production. The cache-`None` state during cold-start can persist past the SUBSCRIBE round-trip for some speakers.
+- **`speaker_state` returning honest-partial (`None` for properties not yet seen) is load-bearing**, not a transitional state — for some speakers, a property's first observable event might come only when something actually changes.
+- The `live_events::subscribe_then_seed_notifies_arrive` test asserts ≥ 1 seed across all discovered speakers within 5 s (was ≥ 2 of 4) for exactly this reason; multi-speaker coverage is verified by the active operator tests.
+
+### Short connectivity outages recover organically
+
+Surprised us during the v0.4 § 8.10 acceptance: disabling the host's Ethernet adapter for ~20–30 s and re-enabling it caused existing GENA subscriptions to RESUME delivering events without needing a fresh `discover()`. The recovery is the combined effect of:
+
+- Sonos's UPnP retry on the NOTIFY delivery path — the speaker keeps trying for a while when the callback TCP fails
+- `sonos-stream`'s polling layer kicking back in after the NIC comes back, which catches any state that drifted during the outage
+
+This is much better behavior than the spec § 8.10 framing assumed ("recover or fail-loud"). Two caveats:
+
+- **Short outages only.** The UPnP `SUBSCRIBE TIMEOUT` is 1800 s; if the outage exceeds that (~30 min), the subscription is genuinely dead and the speaker stops retrying.
+- **Silent stale state is still possible** — if a Volume change happens during the disconnect and the retry queue drops it, the cache holds the prior value. This is the v0.5 in-band SubscriptionError surfacing target.
+
+Useful real-world data for the v0.5 reactive-vs-NOTIFY revisit: for typical home WiFi disruptions (router reboot, NIC sleep), the SDK + polling combo self-heals without oto needing to do anything.
 
 ### Ergonomic footgun: bare `StateManager::new()`
 
