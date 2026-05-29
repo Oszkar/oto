@@ -1,7 +1,14 @@
 //! Own multi-interface SSDP. sonos-sdk's discovery bound 0.0.0.0 and
 //! failed on multi-NIC hosts (spike findings / tatimblin/sonos-sdk#76),
-//! which is why oto-wire runs its own SSDP — we enumerate interfaces and
-//! bind each explicitly.
+//! which is why oto-wire runs its own SSDP — we enumerate interfaces,
+//! bind each explicitly, AND pin each socket's outgoing multicast
+//! interface (`IP_MULTICAST_IF` via `set_multicast_if_v4`). Binding to a
+//! NIC's unicast address alone does NOT select the egress interface for a
+//! multicast datagram — the OS picks that from its multicast routing
+//! table (typically one default NIC), so without the pin every per-NIC
+//! M-SEARCH can leave the same adapter and speakers reachable only via
+//! another NIC never hear the query. The `examples/ssdp_multicast_if_probe`
+//! A/B diagnostic demonstrates this on a real multi-NIC LAN.
 //!
 //! Discovery is two-phase: first send an M-SEARCH on *every* usable
 //! interface, then receive across *all* of them inside a single bounded
@@ -15,11 +22,12 @@
 //! reach the responder.
 
 use std::collections::BTreeSet;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
 use mio::net::UdpSocket;
 use mio::{Events, Interest, Poll, Token};
+use socket2::{Domain, Protocol, Socket, Type};
 
 use oto_core::WireError;
 
@@ -50,18 +58,40 @@ fn location_of(payload: &str) -> Option<String> {
 /// `if_addrs::get_if_addrs()` returns `io::Result<Vec<Interface>>`; each
 /// `Interface` exposes `.ip() -> IpAddr`, `.is_loopback()`, and
 /// `.is_link_local()` directly (verified against `if-addrs` 0.15 source).
-fn usable_ipv4() -> Result<Vec<IpAddr>, WireError> {
+fn usable_ipv4() -> Result<Vec<Ipv4Addr>, WireError> {
     let ifaces = if_addrs::get_if_addrs()
         .map_err(|e| WireError::Network(format!("if_addrs::get_if_addrs: {e}")))?;
     let addrs = ifaces
         .into_iter()
         .filter(|i| !i.is_loopback() && !i.is_link_local())
         .filter_map(|i| match i.ip() {
-            addr @ IpAddr::V4(_) => Some(addr),
+            IpAddr::V4(v4) => Some(v4),
             IpAddr::V6(_) => None,
         })
         .collect();
     Ok(addrs)
+}
+
+/// Build one non-blocking IPv4 UDP socket bound to `ip:0` with its
+/// outgoing multicast interface pinned to `ip` (`IP_MULTICAST_IF`).
+///
+/// Pinning the egress interface is the actual multi-NIC fix
+/// ([`tatimblin/sonos-sdk#76`]): binding to a NIC's unicast address does
+/// NOT, on its own, decide which interface a multicast datagram leaves by
+/// — the OS chooses that from its multicast routing table (usually one
+/// default NIC). Without the pin, every per-NIC M-SEARCH can egress the
+/// same adapter and a speaker reachable only via a different NIC is never
+/// queried. `std::net` exposes no setter for this, hence `socket2`.
+///
+/// [`tatimblin/sonos-sdk#76`]: https://github.com/tatimblin/sonos-sdk/issues/76
+fn bind_multicast_sender(ip: Ipv4Addr) -> std::io::Result<UdpSocket> {
+    let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+    sock.set_nonblocking(true)?;
+    sock.set_multicast_if_v4(&ip)?;
+    sock.bind(&SocketAddr::new(IpAddr::V4(ip), 0).into())?;
+    // socket2::Socket → std::net::UdpSocket → mio::net::UdpSocket. The
+    // socket is already non-blocking, which `from_std` requires.
+    Ok(UdpSocket::from_std(sock.into()))
 }
 
 /// Receive SSDP replies across ALL sockets until `deadline`, collecting
@@ -129,12 +159,13 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
 /// discovery on a host that enumerates a WSL/Hyper-V/VPN vEthernet first):
 ///
 /// - **Phase 1 (send-all, non-blocking):** bind one non-blocking UDP
-///   socket per usable interface, register it with the shared `Poll`, and
-///   send a ZonePlayer M-SEARCH on each. Interfaces that cannot be bound
-///   or cannot egress multicast are skipped; only the case where *every*
-///   interface fails is fatal — surfaced as `WireError::Network` with the
-///   last underlying cause so a local stack/socket failure is not
-///   misreported as `NoDevicesFound`.
+///   socket per usable interface with its multicast egress interface
+///   pinned to that NIC (see `bind_multicast_sender`), register it with
+///   the shared `Poll`, and send a ZonePlayer M-SEARCH on each. Interfaces
+///   that cannot be set up or cannot egress multicast are skipped; only
+///   the case where *every* interface fails is fatal — surfaced as
+///   `WireError::Network` with the last underlying cause so a local
+///   stack/socket failure is not misreported as `NoDevicesFound`.
 /// - **Phase 2 (recv-all, collective):** wait on all sockets via
 ///   `mio::Poll` until the deadline. Every readable socket is drained on
 ///   each wakeup, so a quiet socket cannot consume the wait budget.
@@ -167,11 +198,10 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
 
     // Phase 1 — bind + register + send on ALL usable interfaces.
     for ip in ifaces {
-        let bind_addr = SocketAddr::new(ip, 0);
-        let mut sock = match UdpSocket::bind(bind_addr) {
+        let mut sock = match bind_multicast_sender(ip) {
             Ok(s) => s,
             Err(e) => {
-                last_err = Some(format!("bind {ip}: {e}"));
+                last_err = Some(format!("socket {ip}: {e}"));
                 continue;
             }
         };
