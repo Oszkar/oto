@@ -1,8 +1,14 @@
 version: 2
 updates:
-  # GitHub Actions referenced in .github/workflows/*. Covers the pinned
-  # `dtolnay/rust-toolchain@1.94.0` — Dependabot will PR newer Rust versions
-  # as the action publishes them.
+  # GitHub Actions referenced in .github/workflows/*.
+  #
+  # `dtolnay/rust-toolchain` is IGNORED: it pre-publishes a branch for
+  # every FUTURE Rust version (1.97 … 1.100 …) ahead of release, so
+  # Dependabot picks the highest (`@1.100.0`) — which rustup can't install
+  # because the latest real stable is far lower → every Rust CI job fails
+  # (closed PR #12). The Rust MSRV is a deliberate floor, bumped MANUALLY
+  # alongside rust-toolchain.toml + Cargo.toml per CONTRIBUTING.md, so
+  # auto-PRs for it are pure noise.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -12,6 +18,8 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "dtolnay/rust-toolchain"
 
   # Rust workspace.
   - package-ecosystem: cargo
@@ -23,6 +31,20 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+    ignore:
+      # quick-xml is exact-pinned (=0.31.0) to share ONE version with
+      # sonos-api / the sonos-sdk-* family ("unify, don't bump", see
+      # workspace Cargo.toml). Bumping it (→0.40) breaks the DIDL parser
+      # in control.rs AND splits the graph into two quick-xml versions.
+      # Track sonos-api — bump only when it does (closed PR #57).
+      - dependency-name: "quick-xml"
+      # socket2 is held at 0.5 to share ONE version with hyper's
+      # transitive 0.5.x (reqwest <- sonos-api); a 0.6 bump duplicates it.
+      # Patch updates within 0.5 still flow; the 0.6 minor jump is ignored.
+      - dependency-name: "socket2"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
 
   # Flutter app dependencies.
   - package-ecosystem: pub
