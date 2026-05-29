@@ -3,9 +3,9 @@ import 'dart:io';
 
 const generatedPathspecs = [
   'app/lib/src/rust',
+  // FRB emits a single combined Rust file in this project (no io/web split);
+  // the Dart-side frb_generated.{io,web}.dart are covered by 'app/lib/src/rust'.
   'native/src/frb_generated.rs',
-  'native/src/frb_generated.io.rs',
-  'native/src/frb_generated.web.rs',
   ':(glob)**/*.g.dart',
   ':(glob)**/*.freezed.dart',
 ];

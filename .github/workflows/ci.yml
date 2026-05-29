@@ -64,6 +64,13 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # Compile-only guard for the hardware-gated live tests so they can't
+      # bit-rot under a Wire/ChangeEvent refactor. This never RUNS them:
+      # clippy doesn't execute tests, and there's no `--run-ignored`, so
+      # the LAN is never touched in CI.
+      - name: cargo clippy (live-tests, compile-only)
+        run: cargo clippy -p oto-wire --features live-tests --tests -- -D warnings
+
       - name: cargo nextest
         run: cargo nextest run --workspace
 

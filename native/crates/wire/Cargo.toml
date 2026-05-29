@@ -48,6 +48,12 @@ quick-xml = { workspace = true }
 # one `mpsc::Sender<ChangeEvent>`.
 sonos-sdk-state = { workspace = true }
 sonos-sdk-event-manager = { workspace = true }
+# `stream` + `callback-server` are reached transitively (event-manager →
+# stream → callback-server); their types are not named directly in `src/`.
+# Declared explicitly anyway so the workspace `=0.5.2` pin actually binds
+# them (a `[workspace.dependencies]` entry only pins what a crate
+# references) — this holds the WHOLE reactive stack at the
+# hardware-validated 0.5.2. Not dead deps; do not drop.
 sonos-sdk-stream = { workspace = true }
 sonos-sdk-callback-server = { workspace = true }
 
