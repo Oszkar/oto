@@ -59,16 +59,11 @@ The FRB codegen version and FRB crate version **must** stay aligned, or generate
 
 ### Cargo/pub dependencies
 
-Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). Review minor/major bumps; patch updates auto-merge once CI passes (see below).
+Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). All bumps — patch, minor, and major — are reviewed and merged by hand; nothing auto-merges (pre-1.0 crates treat minor as breaking by SemVer convention, and the maintainer owns merges/tags/releases).
 
-## Auto-merge
+## Branch protection
 
-`.github/workflows/dependabot-auto-merge.yml` enables auto-merge for **patch-level** Dependabot PRs after CI passes. Minor and major bumps stay manual so a human can scan changelogs (pre-1.0 crates treat minor as breaking by SemVer convention).
-
-Prerequisites — these are repo settings, not files, so set them once in the GitHub UI:
-
-- **Settings → General → Pull Requests** → enable **Allow auto-merge**.
-- **Settings → Branches** → branch protection for `main` requiring the `ci` workflow checks to pass. Without this, auto-merge fires immediately with no gating.
+`main` is protected: a PR cannot merge until the `ci` workflow's checks pass — `Generated source freshness`, `Rust (lint + test)`, `Rust (supply-chain)`, `Android cross-compile (oto_native)`, and `Flutter (analyze + test)`. This gates manual merges (including Dependabot PRs) so nothing lands red. Configured under **Settings → Branches** (or via the `gh api .../branches/main/protection` call).
 
 ## Commit messages
 
