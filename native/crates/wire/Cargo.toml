@@ -42,7 +42,7 @@ socket2 = { workspace = true }
 # pass could consume the entire bounded window on timeouts and miss a
 # responder bound to a later socket. mio::Poll waits collectively, so a
 # quiet socket cannot consume any of the deadline. Win+Android+*nix.
-mio = { version = "1.0", features = ["net", "os-poll"] }
+mio = { version = "1.2", features = ["net", "os-poll"] }
 # DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
 # the locked graph via sonos-api (transitive) — unify, don't bump.
 quick-xml = { workspace = true }
