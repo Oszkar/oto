@@ -1229,6 +1229,7 @@ dependencies = [
  "mio",
  "oto-core",
  "quick-xml",
+ "socket2 0.5.10",
  "sonos-api",
  "sonos-sdk-callback-server",
  "sonos-sdk-event-manager",

@@ -30,6 +30,11 @@ sonos-api = { workspace = true }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
 if-addrs = "0.15"
+# Pins each SSDP socket's outgoing multicast interface (IP_MULTICAST_IF)
+# so a per-NIC M-SEARCH actually egresses that NIC instead of the OS
+# default multicast interface — the multi-NIC send-side fix in ssdp.rs
+# (tatimblin/sonos-sdk#76). std::net exposes no such API. Win+Android+*nix.
+socket2 = { workspace = true }
 # Non-blocking I/O multiplexing for the SSDP Phase-2 recv loop. The
 # previous stdlib design used per-socket blocking reads with a 250 ms
 # read timeout; on a host with many quiet sockets (VPN/Hyper-V/WSL

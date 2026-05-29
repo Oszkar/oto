@@ -49,6 +49,13 @@ sonos-sdk-callback-server = "=0.5.2"
 # sonos-api — unify, don't bump.
 quick-xml = "=0.31.0"
 
+# Raw socket options for SSDP — std::net has no API to pin a socket's
+# outgoing multicast interface (IP_MULTICAST_IF), which is the multi-NIC
+# fix in oto-wire/src/ssdp.rs (tatimblin/sonos-sdk#76). Already in the
+# locked graph (transitive via reqwest/hyper); promoted to a direct dep.
+# §7-approved (review follow-up). Contained to oto-wire.
+socket2 = "0.5"
+
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.
 [package]
