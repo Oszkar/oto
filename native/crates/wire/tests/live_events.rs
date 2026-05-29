@@ -289,6 +289,7 @@ fn operator_volume_change_emits_event() {
 ///   - the operator did nothing useful, AND
 ///   - `sonos-stream`'s base 5 s polling cadence emitted a re-NOTIFY of
 ///     the unchanged state during the operator window.
+///
 /// In both cases the only Playback event during the window matched
 /// baseline and was filtered, even though the subscription was alive
 /// and addressing was correct. The test asserts what we actually care
