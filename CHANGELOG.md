@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+Post-v0.4 code-review batch (shipping toward v0.5).
+
+### Fixed
+
+- **SSDP multicast egress interface ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).** `discover_locations` now pins each per-NIC socket's outgoing multicast interface with `socket2::set_multicast_if_v4` before sending the M-SEARCH. It previously bound per-NIC but left egress to the OS routing table, so on a multi-NIC host every M-SEARCH could leave the *default* interface — the `#76` failure class, and a drift from what `ARCHITECTURE` / `ROADMAP` / `sonos-notes` already described as done. Hardware-validated non-regressive on the 4-speaker LAN: the dev host's LAN NIC *is* the OS default multicast interface, so the bug stays dormant there ("single-NIC hosts work by accident"); the fix makes per-NIC egress deterministic for hosts where Sonos sits behind a non-default NIC. `socket2` promoted to a direct `oto-wire` dep; `native/crates/wire/examples/ssdp_multicast_if_probe.rs` added as the A/B diagnostic.
+
+### Housekeeping (review follow-ups)
+
+- **CI:** added a compile-only `clippy -p oto-wire --features live-tests --tests` step so the hardware-gated live tests can't bit-rot — it never *runs* them (no `--run-ignored`), so the LAN is untouched.
+- **`scripts/verify_generated.dart`:** dropped two non-existent `frb_generated.{io,web}.rs` pathspecs; fixed a stale provider-name doc comment (`subscribeChangeEventsProvider` → `changeEventsProvider`) and a `StateManager` clear-step comment.
+- **Dependency hygiene:** Dependabot now ignores `dtolnay/rust-toolchain` (it pre-publishes branches for unreleased future Rust versions, so Dependabot proposed a `@1.100.0` rustup can't install; the MSRV is a deliberate manual floor), `quick-xml` (track `sonos-api`'s `=0.31.0`), and `socket2` minor/major (stay on 0.5 to share hyper's transitive). Dropped the inert Dependabot auto-merge workflow; merges to `main` are manual, gated by the `ci` checks.
+
 ## [0.4.0] - 2026-05-26
 
 ### Added

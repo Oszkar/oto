@@ -74,6 +74,8 @@ Work items, not technical unknowns. Technical knowledge lives in [sonos-notes.md
 
 `oto-wire/src/ssdp.rs` is a near-drop-in better implementation of `sonos-sdk-discovery`'s `SsdpClient`. The fix is localized — enumerate interfaces, per-NIC bind, `set_multicast_if_v4` — and need not change the public `DiscoveryIterator` API.
 
+**Status:** the `set_multicast_if_v4` egress pin now actually exists in oto-wire (it was described here before it was implemented — closed that drift). Landed + hardware-validated non-regressive on the 4-speaker LAN; #76 stays dormant on the dev host (its LAN NIC is the OS default multicast interface), so the upstream value is for hosts where Sonos sits behind a non-default NIC. Remaining work is purely **offering** the localized fix upstream — adapting it onto upstream's `SsdpClient` shape (more than a copy-paste) and testing against their code.
+
 Offer as a PR against [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76). Acceptance is upside-only: oto-wire keeps its own SSDP either way (the [`oto-wire` boundary](ARCHITECTURE.md#crates) — only crate that touches the SDK), so there's no fork-maintenance burden if upstream declines.
 
 ### IPv6 SSDP coverage
