@@ -79,7 +79,7 @@ Future<void> devPushSubscriptionErrorOnMock({
 );
 
 /// Subscribe to the unified v0.4 change-event stream. One call per app
-/// instance; the Dart `subscribeChangeEventsProvider` is the consumer.
+/// instance; the Dart `changeEventsProvider` is the consumer.
 /// Stream completes (`onDone` fires) when `discover()` replaces the
 /// wire — the Dart provider depends on `discoveryProvider` and
 /// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`

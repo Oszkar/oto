@@ -306,8 +306,9 @@ impl StateManager {
     /// correct invariant: an event that lands at the new generation
     /// should be the only thing in the cache).
     ///
-    /// Not atomic across `bump → speakers.clear → groups.clear`. Safe by
-    /// construction: no consumer can observe an intermediate state.
+    /// Not atomic across `bump → speakers.clear → groups.clear →
+    /// topology.clear`. Safe by construction: no consumer can observe an
+    /// intermediate state.
     /// OLD consumers fail the gen check (the bump precedes both clears,
     /// so an OLD consumer always sees the new gen as soon as it sees
     /// any side effect) and skip without reading or writing. NEW
