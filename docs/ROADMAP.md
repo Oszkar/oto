@@ -10,11 +10,11 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.2.0 | released | Playback control + one-shot state read (group-of-one) |
 | v0.3.0 | released | Real ZoneGroupTopology grouping — multi-room, coordinator election, bonded satellites folded |
 | v0.4.0 | released | Live **property** events (GENA) — Rust → Dart event stream for volume / mute / transport / track |
-| v0.5   | next | **Hardening before UI** — topology events, group form/break, Android `MulticastLock`, model repopulate |
+| v0.5   | next | **Hardening before UI** — topology events, Android `MulticastLock`, model repopulate (group form/break → v0.5.1) |
 | v0.6   | future | The designed Flutter UI |
 | v1.0   | future | Stable — externally tested, packaged |
 
-v0.1, v0.2, v0.3 and v0.4 are verified on Windows. Hardware acceptance for v0.4 — 16/17 criteria pass; § 8.17 (Android debug APK) deferred with documented rationale; full evidence at [docs/superpowers/specs/2026-05-25-v0.4-release-evidence/](superpowers/specs/2026-05-25-v0.4-release-evidence/). Android **release** discovery is non-functional pending a held `WifiManager.MulticastLock` — see [v0.5](#v05--hardening-before-ui). v0.4 GENA events are unicast TCP and work on the Android **debug** APK as-is.
+v0.1, v0.2, v0.3 and v0.4 are verified on Windows. Hardware acceptance for v0.4 — 16/17 criteria pass; § 8.17 (Android debug APK) was deferred and is now **retired by v0.5 P0a** (2026-05-30): the debug APK discovers + streams `ChangeEvent`s on a real Pixel 7a (API 36) — evidence at [docs/superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md](superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md). v0.4 full evidence at [docs/superpowers/specs/2026-05-25-v0.4-release-evidence/](superpowers/specs/2026-05-25-v0.4-release-evidence/). Android **release** discovery remains non-functional pending a held `WifiManager.MulticastLock` (v0.5 S3) — P0a confirmed debug works without it.
 
 ## v0.4 — Live property events (released)
 
@@ -32,7 +32,7 @@ Reactive state via GENA: Rust → Dart event stream, no oto-owned polling. **Pro
 ### Out of scope (deferred to v0.5)
 
 - **Topology change events.** Live `ZoneGroupTopology` subscription. `discover()` remains the only topology source through v0.4; a stale `GroupId` still returns `WireError::NotFound`.
-- **Group form/break** commands. Same surface as topology events (`GroupManagement` / `ZoneGroupTopology`); land together in v0.5.
+- **Group form/break** commands. Same surface as topology events (`GroupManagement` / `ZoneGroupTopology`); re-scoped to **v0.5.1** (own spike + mutating-SOAP design — see v0.5 design § 1).
 - **In-band per-speaker SubscriptionError surfacing.** The SDK at `=0.5.2` does not expose per-speaker subscription failures (`watch_property_with_subscription` swallows them with a `tracing::warn!` and returns `Ok`). v0.4 carries the `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` variants on the trait surface so the contract is forward-compatible, but production never emits them. Address in v0.5 either via an SDK feature or a wire-side timeout-driven sweep.
 
 ### Decisions captured against the chosen path
@@ -46,7 +46,7 @@ Capability-layer items that land before the v0.6 UI milestone designs against th
 ### Adds (concrete v0.4 carryovers + originals)
 
 - **Topology change events** — live `ZoneGroupTopology` subscription. Resolves the freshness contract: regrouping in the Sonos app updates oto's view automatically, no re-`discover()` required. Subsumes the previous "cache-miss → re-fetch-once → retry self-heal" item; reconsider that only if topology events leave windows where misses still occur in practice. Flows on the same FRB `ChangeEvent` stream the v0.4 surface defines, additive trait shape (`subscribe_topology(&self) -> Result<(), WireError>` mirroring `subscribe_speakers`).
-- **Group form/break** commands — was deferred at the v0.3 boundary. Mutating SOAP (`GroupManagement` / `x-rincon:` `SetAVTransportURI`) was not de-risked by the v0.3 spike and gets its own spike + design when scheduled. The `Wire` trait grows additively; form/break mutates topology, then topology events surface the change.
+- **Group form/break** commands — **deferred to v0.5.1** (re-scoped in the v0.5 design, 2026-05-28). Mutating SOAP (`GroupManagement` / `x-rincon:` `SetAVTransportURI`) was not de-risked by the v0.3 spike and gets its own spike + design + milestone. The `Wire` trait grows additively; form/break mutates topology, then topology events surface the change. Not part of the v0.5 hardening scope below.
 - **In-band per-speaker subscription failure surfacing** (carryover from v0.4 Slice 3 review finding I1). The SDK at `=0.5.2` swallows per-speaker subscription failures internally; v0.4 carries `SubscriptionError` / `SubscriptionRecovered` on the trait surface but never emits them in production. v0.5 either pursues an SDK feature for per-speaker failure events or adds a wire-side timeout-driven sweep that notices stuck speakers and emits these events itself.
 - **Reactive-vs-NOTIFY revisit** — review the v0.4 pre-milestone spike decision with production data from v0.4 dogfooding (`event-tail.rs` traces). Re-pick if topology events expose new reliability evidence; otherwise leave as-is.
 - **Android `MulticastLock`** (`native/src/api.rs`, `TODO(v0.5)`). Android silently drops SSDP multicast without a held `WifiManager.MulticastLock`. The Android main manifest declares `INTERNET` + `CHANGE_WIFI_MULTICAST_STATE`, but the lock acquisition is platform code that's currently deferred. **Android release** discovery is non-functional until this lands; the debug APK works because Flutter tooling supplies `INTERNET`. v0.4 GENA events are unicast TCP and unaffected.
