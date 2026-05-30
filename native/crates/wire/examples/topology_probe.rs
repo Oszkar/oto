@@ -50,7 +50,9 @@ fn main() {
     // exactly, which is known-compiling against `=0.5.2`.
     use sonos_state::model::Speaker as SdkSpeaker;
     use sonos_state::property::{GroupInfo, Topology};
-    use sonos_state::{GroupId as SdkGroupId, GroupMembership, SpeakerId as SdkSpeakerId, StateManager};
+    use sonos_state::{
+        GroupId as SdkGroupId, GroupMembership, SpeakerId as SdkSpeakerId, StateManager,
+    };
 
     // The watchable-property key the SDK stamps on a topology-derived change
     // (mirrors `<GroupMembership as Property>::KEY`).
@@ -64,7 +66,10 @@ fn main() {
         snap.speakers.len(),
         snap.groups.len()
     );
-    assert!(!snap.speakers.is_empty(), "probe needs at least one speaker");
+    assert!(
+        !snap.speakers.is_empty(),
+        "probe needs at least one speaker"
+    );
 
     // 2. Build the SDK stack directly (mirrors src/events.rs::spawn). We do
     //    NOT use SonosWire's pump — it watches Volume/Mute/Playback/Track but
