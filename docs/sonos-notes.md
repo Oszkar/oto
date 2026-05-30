@@ -362,6 +362,28 @@ Migration cost A → B is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB
 
 **Out of scope for oto** (a side project bounded at v1.0). Recorded here so the work isn't lost: anyone who wants to build a Path-B Rust library (raw GENA + own change-detection, transparent debugging, smaller dep tree) can start from the v0.4 spike binary at the merged spike-findings commit. Add renewal logic, write the doubly-escaped `LastChange` XML parser, add a public API. The case for such a crate gets stronger if upstream `sonos-sdk-*` stops being maintained or if the documented weak spots actually bite users in production.
 
+### Topology change events — how regrouping surfaces (P0c finding, v0.5)
+
+Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe --features live-tests`, 2-speaker LAN, form-then-break in the Sonos app).
+
+**There is no `ZoneGroupTopology` *property* to watch.** `ZoneGroupTopology` is a `Service`, not a `SonosProperty` — the original v0.5 plan's `watch_property_with_subscription::<ZoneGroupTopology>` does not compile. Topology changes surface through the watchable property **`GroupMembership`**:
+
+- `GroupMembership`: `KEY = "group_membership"`, `SERVICE = Service::ZoneGroupTopology`, `SCOPE = Scope::Speaker` (`sonos-sdk-state-0.5.2/src/property.rs:419-462`).
+- ZGT NOTIFYs are handled on a **special path** in `event_worker.rs:49-61`: `decode_topology()` returns an empty `Vec<PropertyChange>` (`decoder.rs:277`); instead `apply_topology_changes()` rebuilds the store and, at its final step, emits `ChangeEvent::new(speaker_id, "group_membership", Service::ZoneGroupTopology)` for **each speaker whose membership changed AND is in the `watched` set** (`event_worker.rs:228-243`).
+- So the change arrives on `manager.iter()` as an ordinary `ChangeEvent { property_key: "group_membership", .. }`.
+
+**Implications for S1:**
+- Register `manager.watch_property_with_subscription::<GroupMembership>(&sid)` **per speaker** (it is `Scope::Speaker` — NOT per-coordinator like AVTransport).
+- Map `"group_membership" => ChangeEvent::TopologyChanged` in `map_upstream_event`.
+
+**Observed on the 2-speaker LAN:** **both** speakers fire (not one household-wide event), and a single regroup yields multiple `group_membership` events — so the Dart-side 250 ms trailing debounce + `refresh_topology()` re-pull (S1 Option 3) is load-bearing, not optional. NOTIFY→event latency was sub-second once regrouping. Payload is opaque/notification-only at this layer (we re-pull authoritative topology via `GetZoneGroupState` SOAP regardless), exactly what Option 3 assumes.
+
+**Seed NOTIFY on subscribe (load-bearing for S1).** The subscription emits one `group_membership` event **per speaker at startup, before any user action** — the same "the initial SUBSCRIBE NOTIFY *is* the seed" behaviour the property events have (see § Cold-start). In the P0c run, 2 of the observed events were these startup seeds (they arrived *after* the probe's 3 s drain window, so seed latency for `GroupMembership` can exceed 3 s — consistent with § "Per-speaker seed NOTIFY behavior is non-uniform"); the rest were the actual regroup.
+
+  **S1 consequence:** `subscribe_topology` runs inside `discover_with` right after `discover()`, so the seed fires a `group_membership` event almost immediately → the Dart debounce schedules one `refresh_topology()` ~250 ms after discovery. That re-pulls the topology we *just* fetched. It is **harmless** (idempotent — same topology, generation bump is a no-op against an unchanged store) but a wasted SOAP round-trip on every discovery. Options for S1: (a) accept the single redundant refresh (simplest); (b) have the Dart `TopologyController` ignore `group_membership` events for a short window after a discovery completes. Decide during S1 — leaning (a) per KISS unless the round-trip proves visible.
+
+**Fallback if this ever goes quiet:** the v0.4 stale-`GroupId` → `WireError::NotFound` contract still holds; the UI re-discovers on `NotFound`. Degraded UX, not broken.
+
 ## Concurrency
 
 `sonos-api` command calls are sync-first at oto's boundary; the v0.4 event stack may carry an upstream-managed async runtime internally.
