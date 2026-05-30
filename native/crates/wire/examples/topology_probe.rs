@@ -8,14 +8,13 @@
 //!
 //! Then, in the Sonos app, form a group and then break it. Watch stdout.
 //!
-//! Gated behind `live-tests` so it never compiles into normal builds (the
-//! binary is empty unless `--features live-tests`), matching the
-//! `ssdp_multicast_if_probe` example convention. It's an EXAMPLE (not a
+//! Gated behind `live-tests` so it never compiles into normal builds (without
+//! `--features live-tests` the binary prints a gating message and exits),
+//! matching the `ssdp_multicast_if_probe` example convention. It's an EXAMPLE (not a
 //! `tests/` integration test) so it can reach the crate's normal
 //! `[dependencies]` — `sonos_state` / `sonos_event_manager` — without any
-//! Cargo.toml change, and touches no production source. THROWAWAY: parked on
-//! branch `feat/v0.5-p0c-zgt-probe`; delete or fold into S1 when topology
-//! events are implemented.
+//! Cargo.toml change, and touches no production source. THROWAWAY: delete or
+//! fold into S1 when topology events are implemented.
 //!
 //! KEY FINDING (read from SDK source 2026-05-30; this probe verifies it on
 //! hardware): the v0.5 plan's original assumption was wrong. There is no

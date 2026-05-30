@@ -364,7 +364,7 @@ Migration cost A → B is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB
 
 ### Topology change events — how regrouping surfaces (P0c finding, v0.5)
 
-Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe --features live-tests`, parked on branch `feat/v0.5-p0c-zgt-probe`; 2-speaker LAN, form-then-break in the Sonos app).
+Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe --features live-tests`, 2-speaker LAN, form-then-break in the Sonos app).
 
 **There is no `ZoneGroupTopology` *property* to watch.** `ZoneGroupTopology` is a `Service`, not a `SonosProperty` — the original v0.5 plan's `watch_property_with_subscription::<ZoneGroupTopology>` does not compile. Topology changes surface through the watchable property **`GroupMembership`**:
 
