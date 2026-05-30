@@ -15,17 +15,18 @@ just test       # cargo nextest + flutter test
 
 Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook pre-commit hook (`just install-hooks`) catches stale generated source locally; CI's `Generated source freshness` job catches it server-side.
 
-## Android cross-compile prerequisites (Windows host)
+## Android cross-builds — build on Linux, macOS, or WSL
 
-If you build the Android APK (`just build-apk`) on Windows, the `openssl-sys` vendored build needs a **Unix-aware Perl with the standard module set**. The Android NDK ships no system OpenSSL, so the workspace's `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }` flips the build to compile OpenSSL from source — and OpenSSL's `Configure` script is Perl-driven.
+**Recommended: build the Android APK from Linux, macOS, or WSL.** The Android NDK ships no system OpenSSL, so the workspace's `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }` compiles OpenSSL from source, and OpenSSL's `Configure` is Perl-driven. Linux/macOS ship a complete Perl 5 by default, so `just build-apk` works out of the box; CI uses `ubuntu-latest` for the same reason. WSL counts as Linux here.
 
-**Wrong choices** (each fails in its own way):
-- **Strawberry Perl** (MSWin32 build) — fails with "doesn't produce Unix-like paths". OpenSSL's Linux config wants forward slashes.
-- **Git for Windows' bundled msys perl** — right path semantics, but a minimal install. Missing standard modules like `Locale::Maketext::Simple` that OpenSSL's `Configure` indirectly loads via `IPC::Cmd`.
+Validated 2026-05-30 on WSL2 (Ubuntu) → real Pixel 7a, debug APK, discovery + events end-to-end (see [docs/superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md](docs/superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md)). Toolchain there: Java 21, Android SDK platform 36 + build-tools 36, NDK auto-selected by Gradle via `flutter.ndkVersion` (install nothing manually — the first build pulls the exact NDK it wants). For a phone attached to Windows, bridge it into WSL with wireless adb (`adb tcpip 5555` on the host, `adb connect <phone-ip>:5555` inside WSL).
 
-**Working choice:** install **msys2** (`winget install MSYS2.MSYS2`), then either run the build from an msys2 shell or prepend `C:\msys64\usr\bin` to PATH so `cargo` finds msys2's full Perl distribution. msys2's `perl` has the complete standard library.
+**Windows-native cross-build is discouraged.** It works only with a Unix-aware Perl carrying the full standard module set, which is per-developer toolchain debt:
+- **Strawberry Perl** (MSWin32) — fails: "doesn't produce Unix-like paths" (OpenSSL's Linux config wants forward slashes).
+- **Git-for-Windows' bundled msys perl** — right path semantics, but minimal; missing standard modules like `Locale::Maketext::Simple` that `Configure` loads via `IPC::Cmd`.
+- **msys2** (`winget install MSYS2.MSYS2`, then prepend `C:\msys64\usr\bin` to PATH so `cargo` finds its full Perl) is the only Windows path that works — kept here for reference, but prefer WSL.
 
-This is a one-time host setup, unrelated to Rust toolchain or Flutter SDK. Document any new build-target prereqs here as they surface.
+Post-1.0 follow-up (per ROADMAP project-bound open items): a rustls migration via `[patch.crates-io]` would drop the vendored-OpenSSL/Perl requirement entirely. Document any new build-target prereqs here as they surface.
 
 ## Version pin policy
 

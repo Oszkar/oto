@@ -94,6 +94,13 @@ oto-mock = { workspace = true }
 # exists solely so the Android link succeeds. Not pulled on Windows
 # (native-tls uses SChannel there). Stays as long as sonos-api (pinned
 # =0.5.2) pulls reqwest/native-tls.
+#
+# BUILD HOST: build the Android APK on Linux/macOS/WSL — vendored OpenSSL
+# needs a full Perl 5 (Configure is Perl-driven), which those ship by
+# default; Windows-native needs msys2 Perl and is discouraged (see
+# CONTRIBUTING.md "Android cross-builds"). Validated on WSL→Pixel 7a
+# 2026-05-30. Post-1.0: a rustls [patch.crates-io] migration would drop
+# this vendored-OpenSSL/Perl dependency entirely (ROADMAP open items).
 [target.'cfg(target_os = "android")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
