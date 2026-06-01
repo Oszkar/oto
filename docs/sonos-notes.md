@@ -384,6 +384,27 @@ Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe -
 
 **Fallback if this ever goes quiet:** the v0.4 stale-`GroupId` → `WireError::NotFound` contract still holds; the UI re-discovers on `NotFound`. Degraded UX, not broken.
 
+### Reactive-vs-NOTIFY traces — P0b validation (v0.5)
+
+Production data collected 2026-06-01 via `cargo run -p oto_native --example event-tail --features oto-wire/live-tests` on the 2-speaker LAN. Two sessions:
+
+| Session | Duration | Renewals | Errors | Spurious events |
+|---|---|---|---|---|
+| Idle | ~50 min | 4/4 clean (~1475 s, ~82% of 1800 s TTL) | 0 | 0 |
+| Active | ~28 min | 4/4 clean (~1481 s, same timing) | 0 | 0 |
+
+**Decision: Path A (sonos-sdk-state) confirmed stable. No switch to Path B.**
+
+Active session exercised: play/pause on both speakers independently, 25 volume slider events (rapid-fire), 10+ track skips, Playback state transitions including `Transitioning`. Every action produced the expected event within ~1 s, correct speaker/group IDs, no cross-speaker bleed, no drops.
+
+**Findings for S1:**
+
+- **Double Track events.** Every track change emits 2 (sometimes more on rapid skipping) consecutive `(group_id, Track, same_title)` events within 0–2 s. The device fires an intermediate-metadata NOTIFY then the resolved-metadata NOTIFY; the SDK delivers both. S1's UI layer or `map_upstream_event` should apply last-wins dedup with a ~200 ms window on consecutive identical `(group_id, Track)` pairs. Expect the same pattern on `group_membership` (see P0c above).
+- **`Transitioning` Playback state.** Appears briefly on track skip and play-start. S1 can map it to a `Loading` variant or suppress; should not reach the UI as "unknown."
+- **Renewal timing.** Both sessions renewed at ~82% of 1800 s TTL (~1475–1481 s). Consistent and predictable.
+
+**Path B reconsideration point (updated).** The trigger was "topology events surface new reliability evidence." P0b traces show no reliability issues on the existing property event stream; the trigger condition is not met. Path B remains an off-ramp if v0.5 topology events surface new problems.
+
 ## Concurrency
 
 `sonos-api` command calls are sync-first at oto's boundary; the v0.4 event stack may carry an upstream-managed async runtime internally.
