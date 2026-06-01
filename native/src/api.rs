@@ -100,6 +100,9 @@ pub enum ChangeEventDto {
     SubscriptionRecovered {
         speaker_id: String,
     },
+    /// Household topology changed (speakers regrouped). Payload-less: the
+    /// Dart `TopologyController` calls `refreshTopology()` on receipt.
+    TopologyChanged,
 }
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
@@ -312,6 +315,12 @@ impl oto_core::Wire for MockWireArc {
     }
     fn subscribe_speakers(&self) -> Result<(), oto_core::WireError> {
         self.0.subscribe_speakers()
+    }
+    fn subscribe_topology(&self) -> Result<(), oto_core::WireError> {
+        self.0.subscribe_topology()
+    }
+    fn refresh_topology(&self) -> Result<oto_core::DiscoverySnapshot, oto_core::WireError> {
+        self.0.refresh_topology()
     }
     fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<oto_core::ChangeEvent>> {
         self.0.take_event_stream()

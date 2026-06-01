@@ -361,6 +361,31 @@ impl Wire for SonosWire {
         control::soap_speaker_state(&self.client, speaker_addr, transport_addr)
     }
 
+    fn subscribe_topology(&self) -> Result<(), WireError> {
+        // S1.1 skeleton — idempotent no-op until S1.2 wires in the SDK ZGT
+        // watch. `discover_with` calls this automatically; returning Ok(())
+        // keeps the lifecycle contract without a pump thread yet.
+        // TODO(v0.5): replace with real GroupMembership watch in S1.2.
+        let _ = self.snapshot_for_pump()?; // validate discover() ran first
+        Ok(())
+    }
+
+    fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+        // Pick any cached IP — all speakers report the complete household.
+        let ip = {
+            let guard = self.id_to_addr.lock().unwrap_or_else(|p| p.into_inner());
+            guard
+                .values()
+                .next()
+                .map(|addr| addr.ip().to_string())
+                .ok_or(WireError::NoSpeakersDiscovered)?
+        };
+        let groups = crate::control::fetch_zone_group_state(&self.client, &ip)?;
+        let snapshot = to_snapshot(groups);
+        self.populate_caches(&snapshot);
+        Ok(snapshot)
+    }
+
     fn subscribe_speakers(&self) -> Result<(), WireError> {
         // v0.4 Slice 3: wire up the sonos-sdk-state pump thread. One
         // shot per wire — repeated calls error with `AlreadySubscribed`.

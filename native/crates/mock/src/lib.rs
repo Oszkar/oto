@@ -38,6 +38,9 @@ struct Model {
     tx: Option<Sender<ChangeEvent>>,
     /// Receiver half — taken once via `take_event_stream`.
     rx: Option<Receiver<ChangeEvent>>,
+    /// `true` after `subscribe_topology` succeeds. Idempotent gate: subsequent
+    /// calls remain `Ok(())` regardless of this flag.
+    topology_subscribed: bool,
 }
 
 /// Volume every speaker is seeded at. Shared by `Model::seeded` and the
@@ -52,6 +55,7 @@ impl Model {
             member_to_coord: HashMap::new(),
             tx: None,
             rx: None,
+            topology_subscribed: false,
         }
     }
 
@@ -87,6 +91,7 @@ impl Model {
             member_to_coord,
             tx: None,
             rx: None,
+            topology_subscribed: false,
         }
     }
 }
@@ -201,6 +206,18 @@ impl MockWire {
         if let Some(tx) = &lock!(self).tx {
             let _ = tx.send(event);
         }
+    }
+
+    /// Convenience seam: push a `TopologyChanged` event as if a real
+    /// GENA NOTIFY arrived. No-op if no pump is active.
+    pub fn push_topology_change(&self) {
+        self.push_event(ChangeEvent::TopologyChanged);
+    }
+
+    /// Returns `true` if `subscribe_topology` has been called successfully.
+    /// Test-only introspection — confirms `discover_with` auto-subscribes.
+    pub fn topology_subscribed(&self) -> bool {
+        lock!(self).topology_subscribed
     }
 }
 
@@ -423,6 +440,21 @@ impl Wire for MockWire {
         guard.tx = Some(tx);
         guard.rx = Some(rx);
         Ok(())
+    }
+
+    fn subscribe_topology(&self) -> Result<(), WireError> {
+        if !self.discovered.load(Ordering::SeqCst) {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
+        // Idempotent: repeated calls after discovery are silent no-ops.
+        lock!(self).topology_subscribed = true;
+        Ok(())
+    }
+
+    fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+        // Return the same snapshot `discover()` would return. The mock
+        // has no post-discover mutation, so the clone is always "fresh".
+        self.outcome.clone()
     }
 
     fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
@@ -776,5 +808,59 @@ mod tests {
         w.subscribe_speakers().unwrap();
         assert!(w.take_event_stream().is_some());
         assert!(w.take_event_stream().is_none(), "second take returns None");
+    }
+
+    // ── v0.5 topology surface ─────────────────────────────────────────────
+
+    #[test]
+    fn subscribe_topology_errors_without_discover() {
+        let w = MockWire::default();
+        assert_eq!(w.subscribe_topology(), Err(WireError::NoSpeakersDiscovered));
+    }
+
+    #[test]
+    fn subscribe_topology_ok_after_discover() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        assert!(w.subscribe_topology().is_ok());
+        assert!(w.topology_subscribed(), "flag set after subscribe");
+    }
+
+    #[test]
+    fn subscribe_topology_is_idempotent() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        assert!(w.subscribe_topology().is_ok());
+        assert!(w.subscribe_topology().is_ok(), "second call must not error");
+    }
+
+    #[test]
+    fn refresh_topology_returns_fixture_snapshot() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        let snap = w.refresh_topology().unwrap();
+        assert_eq!(snap.speakers.len(), 3);
+        assert_eq!(snap.groups.len(), 2);
+    }
+
+    #[test]
+    fn refresh_topology_errors_on_failing_mock() {
+        let w = MockWire::failing(WireError::NoDevicesFound);
+        assert_eq!(w.refresh_topology(), Err(WireError::NoDevicesFound));
+    }
+
+    #[test]
+    fn push_topology_change_delivers_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        w.push_topology_change();
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100))
+                .unwrap(),
+            ChangeEvent::TopologyChanged
+        ));
     }
 }

@@ -108,5 +108,8 @@ fn print_event(t: u64, event: &ChangeEvent) {
         ChangeEvent::SubscriptionRecovered { speaker } => {
             eprintln!("[{t:>5}s] SubOK    {speaker}");
         }
+        ChangeEvent::TopologyChanged => {
+            println!("[{t:>5}s] Topology → changed (regroup)");
+        }
     }
 }

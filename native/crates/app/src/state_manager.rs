@@ -162,10 +162,13 @@ impl StateManager {
                     });
                 }
             }
-            // SubscriptionError / SubscriptionRecovered have no cache
-            // effect — they're surface events for the UI. Don't take
-            // any lock; the gen check is moot for non-mutating events.
-            ChangeEvent::SubscriptionError { .. } | ChangeEvent::SubscriptionRecovered { .. } => {}
+            // SubscriptionError / SubscriptionRecovered / TopologyChanged
+            // have no cache effect here — they're surface events. The Dart
+            // TopologyController handles TopologyChanged by calling
+            // refresh_topology(); the StateManager cache is flushed there.
+            ChangeEvent::SubscriptionError { .. }
+            | ChangeEvent::SubscriptionRecovered { .. }
+            | ChangeEvent::TopologyChanged => {}
         }
     }
 

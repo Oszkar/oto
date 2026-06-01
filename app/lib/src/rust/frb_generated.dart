@@ -568,6 +568,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return ChangeEventDto_SubscriptionRecovered(
           speakerId: dco_decode_String(raw[1]),
         );
+      case 6:
+        return ChangeEventDto_TopologyChanged();
       default:
         throw Exception("unreachable");
     }
@@ -877,6 +879,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 5:
         var var_speakerId = sse_decode_String(deserializer);
         return ChangeEventDto_SubscriptionRecovered(speakerId: var_speakerId);
+      case 6:
+        return ChangeEventDto_TopologyChanged();
       default:
         throw UnimplementedError('');
     }
@@ -1269,6 +1273,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case ChangeEventDto_SubscriptionRecovered(speakerId: final speakerId):
         sse_encode_i_32(5, serializer);
         sse_encode_String(speakerId, serializer);
+      case ChangeEventDto_TopologyChanged():
+        sse_encode_i_32(6, serializer);
     }
   }
 

@@ -539,6 +539,9 @@ impl SseDecode for crate::api::ChangeEventDto {
                     speaker_id: var_speakerId,
                 };
             }
+            6 => {
+                return crate::api::ChangeEventDto::TopologyChanged;
+            }
             _ => {
                 unimplemented!("");
             }
@@ -932,6 +935,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::ChangeEventDto {
             crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
                 [5.into_dart(), speaker_id.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::ChangeEventDto::TopologyChanged => [6.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -1191,6 +1195,9 @@ impl SseEncode for crate::api::ChangeEventDto {
             crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
                 <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(speaker_id, serializer);
+            }
+            crate::api::ChangeEventDto::TopologyChanged => {
+                <i32>::sse_encode(6, serializer);
             }
             _ => {
                 unimplemented!("");

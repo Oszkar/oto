@@ -139,8 +139,8 @@ fn to_playback_state_dto(state: PlaybackState) -> PlaybackStateDto {
 }
 
 /// `ChangeEvent` → `ChangeEventDto`. Volume's `u8` widens to `u32` for
-/// the bridge (matches `SpeakerStateDto`'s pattern). v0.5
-/// `TopologyChanged` will need an additional DTO variant.
+/// the bridge (matches `SpeakerStateDto`'s pattern). `TopologyChanged`
+/// (v0.5 S1) is payload-less on both sides.
 pub fn to_change_event_dto(event: ChangeEvent) -> ChangeEventDto {
     match event {
         ChangeEvent::Volume { speaker, volume } => ChangeEventDto::Volume {
@@ -166,6 +166,7 @@ pub fn to_change_event_dto(event: ChangeEvent) -> ChangeEventDto {
         ChangeEvent::SubscriptionRecovered { speaker } => ChangeEventDto::SubscriptionRecovered {
             speaker_id: speaker.to_string(),
         },
+        ChangeEvent::TopologyChanged => ChangeEventDto::TopologyChanged,
     }
 }
 
@@ -398,6 +399,15 @@ mod tests {
             }
             _ => panic!("expected Track DTO"),
         }
+    }
+
+    #[test]
+    fn change_event_topology_changed_maps() {
+        let ev = ChangeEvent::TopologyChanged;
+        assert!(matches!(
+            to_change_event_dto(ev),
+            ChangeEventDto::TopologyChanged
+        ));
     }
 
     #[test]

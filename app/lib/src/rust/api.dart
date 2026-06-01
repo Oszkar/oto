@@ -10,7 +10,7 @@ part 'api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `take_event_stream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
@@ -114,6 +114,11 @@ sealed class ChangeEventDto with _$ChangeEventDto {
   const factory ChangeEventDto.subscriptionRecovered({
     required String speakerId,
   }) = ChangeEventDto_SubscriptionRecovered;
+
+  /// Household topology changed (speakers regrouped). Payload-less: the
+  /// Dart `TopologyController` calls `refreshTopology()` on receipt.
+  const factory ChangeEventDto.topologyChanged() =
+      ChangeEventDto_TopologyChanged;
 }
 
 @freezed
