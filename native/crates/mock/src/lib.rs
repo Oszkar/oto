@@ -219,6 +219,34 @@ impl MockWire {
     pub fn topology_subscribed(&self) -> bool {
         lock!(self).topology_subscribed
     }
+
+    /// Shared `next`/`previous` body. On real Sonos a skip triggers an
+    /// AVTransport NOTIFY (track change, possibly a transitional state),
+    /// so the mock mirrors that by emitting a per-group `Playback` event
+    /// carrying the coordinator's current cached state — closing the
+    /// silent-no-op gap (v0.4 review follow-up). The skip itself doesn't
+    /// model a queue, so the state value is the current one (no fabricated
+    /// metadata); the point is that a skip is observable on the stream.
+    fn skip(&self, group: &GroupId) -> Result<(), WireError> {
+        let guard = lock!(self);
+        let coord = guard
+            .coords
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        let state = guard
+            .speakers
+            .get(&coord)
+            .and_then(|s| s.transport.as_ref().map(|t| t.state))
+            .unwrap_or(PlaybackState::Stopped);
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::Playback {
+                group: group.clone(),
+                state,
+            });
+        }
+        Ok(())
+    }
 }
 
 impl Wire for MockWire {
@@ -293,21 +321,11 @@ impl Wire for MockWire {
     }
 
     fn next(&self, group: &GroupId) -> Result<(), WireError> {
-        let guard = lock!(self);
-        guard
-            .coords
-            .get(group)
-            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
-        Ok(())
+        self.skip(group)
     }
 
     fn previous(&self, group: &GroupId) -> Result<(), WireError> {
-        let guard = lock!(self);
-        guard
-            .coords
-            .get(group)
-            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
-        Ok(())
+        self.skip(group)
     }
 
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
@@ -780,6 +798,44 @@ mod tests {
                 assert_eq!(state, PlaybackState::Paused);
             }
             other => panic!("expected Playback event from pause, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn next_emits_playback_event() {
+        // v0.4 review follow-up: a skip must be observable on the event
+        // stream (mirrors the real AVTransport NOTIFY), not a silent no-op.
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_KITCHEN:1");
+        w.next(&g).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Playback { group, .. } => assert_eq!(group, g),
+            other => panic!("expected Playback event from next, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn previous_emits_playback_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_OFFICE:0");
+        w.previous(&g).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Playback { group, .. } => assert_eq!(group, g),
+            other => panic!("expected Playback event from previous, got {other:?}"),
         }
     }
 

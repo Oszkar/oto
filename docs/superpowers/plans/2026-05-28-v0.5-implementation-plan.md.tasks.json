@@ -29,14 +29,14 @@
     {
       "id": 4,
       "subject": "Task 4: S1.2 — SonosWire production impl",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** Real SDK ZGT subscription in EventPump; emit ChangeEvent::TopologyChanged on NOTIFY. refresh_topology as GetZoneGroupState SOAP against cached IP.\n\n**Files:** native/crates/wire/src/events.rs, native/crates/wire/src/adapter.rs, native/crates/wire/tests/live_topology_events.rs (new, live-tests).\n\n**Acceptance Criteria:** subscribe_topology activates SDK ZGT watch; operator regroup → TopologyChanged within ~5s; refresh_topology issues GetZoneGroupState (no SSDP); returns fresh DiscoverySnapshot; Network error leaves caches unchanged; live test passes.\n\n**Verify:** `just check && just test && cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only live_topology_events`\n\n```json:metadata\n{\"files\": [\"native/crates/wire/src/events.rs\", \"native/crates/wire/src/adapter.rs\", \"native/crates/wire/tests/live_topology_events.rs\"], \"verifyCommand\": \"just check && just test && cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only live_topology_events\", \"acceptanceCriteria\": [\"subscribe_topology activates SDK ZGT watch\", \"Operator regroup → TopologyChanged within ~5s\", \"refresh_topology issues GetZoneGroupState SOAP, no SSDP\", \"refresh_topology returns fresh DiscoverySnapshot\", \"refresh_topology Network error leaves caches unchanged\", \"just check && just test green\", \"Live topology test passes\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: S1.3 — oto-app cache path + FRB consumer + Dart provider",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** Wire full topology refresh path through oto-app + FRB consumer + Dart TopologyController (250ms debounce).\n\n**Files:** native/crates/app/src/lib.rs, native/crates/app/src/state_manager.rs, native/src/api.rs, app/lib/src/state/topology.dart (new).\n\n**Acceptance Criteria:** oto_app::refresh_topology() locks DISCOVER_LOCK + bumps gen + clears group-keyed caches; discover_with auto-invokes subscribe_topology; FRB cmd exposed; consumer pass-through for TopologyChanged; Dart debouncer 250ms; per-speaker caches survive; group-keyed cleared; tests green.\n\n**Verify:** `just gen && just check && just test && (cd app && flutter test)`\n\n```json:metadata\n{\"files\": [\"native/crates/app/src/lib.rs\", \"native/crates/app/src/state_manager.rs\", \"native/src/api.rs\", \"app/lib/src/state/topology.dart\"], \"verifyCommand\": \"just gen && just check && just test && (cd app && flutter test)\", \"acceptanceCriteria\": [\"oto_app::refresh_topology() locks DISCOVER_LOCK, bumps gen, clears group-keyed caches\", \"discover_with calls subscribe_topology before subscribe_speakers\", \"FRB refresh_topology cmd exposed\", \"FRB consumer forwards TopologyChanged with no cache mutation\", \"Dart TopologyController debounces 250ms and re-pulls\", \"Per-speaker caches survive refresh; group-keyed caches cleared\", \"v0_4_events_test.dart asserts TopologyChanged delivery — FRB stream-loop coverage (v0.4 review follow-up)\", \"Unit + integration tests green\"]}\n```"
     },

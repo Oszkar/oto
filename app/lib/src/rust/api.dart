@@ -78,6 +78,15 @@ Future<void> devPushSubscriptionErrorOnMock({
   message: message,
 );
 
+/// DEV-ONLY: push a `TopologyChanged` event into the held MockWire's
+/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock`
+/// — the integration test uses it to drive the v0.5 topology-event path
+/// (FRB stream delivery of `ChangeEventDto::TopologyChanged`) without a LAN.
+/// Returns an error if `dev_discover_mock` hasn't run yet. In release builds
+/// the body is a no-op that returns `CommandError::Sonos`.
+Future<void> devPushTopologyChangeOnMock() =>
+    RustLib.instance.api.crateApiDevPushTopologyChangeOnMock();
+
 /// Subscribe to the unified v0.4 change-event stream. One call per app
 /// instance; the Dart `changeEventsProvider` is the consumer.
 /// Stream completes (`onDone` fires) when `discover()` replaces the
