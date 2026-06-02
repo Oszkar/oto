@@ -41,6 +41,11 @@ struct Model {
     /// `true` after `subscribe_topology` succeeds. Idempotent gate: subsequent
     /// calls remain `Ok(())` regardless of this flag.
     topology_subscribed: bool,
+    /// Per-speaker forced command error (v0.5 S2 test seam). When a speaker
+    /// (or a group's coordinator) has an entry, its commands return the
+    /// stored error instead of mutating/emitting — modelling an unreachable
+    /// device so oto-app's health tracking can be exercised.
+    command_errors: HashMap<SpeakerId, WireError>,
 }
 
 /// Volume every speaker is seeded at. Shared by `Model::seeded` and the
@@ -56,6 +61,7 @@ impl Model {
             tx: None,
             rx: None,
             topology_subscribed: false,
+            command_errors: HashMap::new(),
         }
     }
 
@@ -92,6 +98,7 @@ impl Model {
             tx: None,
             rx: None,
             topology_subscribed: false,
+            command_errors: HashMap::new(),
         }
     }
 }
@@ -214,6 +221,20 @@ impl MockWire {
         self.push_event(ChangeEvent::TopologyChanged);
     }
 
+    /// Force commands targeting `speaker` (directly, or as a group's
+    /// coordinator) to return `err` instead of succeeding. Models an
+    /// unreachable device — used by S2 health-tracking tests. Persists
+    /// until `clear_command_error`.
+    pub fn set_command_error(&self, speaker: &SpeakerId, err: WireError) {
+        lock!(self).command_errors.insert(speaker.clone(), err);
+    }
+
+    /// Clear a forced command error so `speaker`'s commands succeed again
+    /// (models the device coming back — drives the recovery transition).
+    pub fn clear_command_error(&self, speaker: &SpeakerId) {
+        lock!(self).command_errors.remove(speaker);
+    }
+
     /// Returns `true` if `subscribe_topology` has been called successfully.
     /// Test-only introspection — confirms `discover_with` auto-subscribes.
     pub fn topology_subscribed(&self) -> bool {
@@ -234,6 +255,9 @@ impl MockWire {
             .get(group)
             .cloned()
             .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        if let Some(err) = guard.command_errors.get(&coord) {
+            return Err(err.clone());
+        }
         let state = guard
             .speakers
             .get(&coord)
@@ -268,6 +292,9 @@ impl Wire for MockWire {
             .get(group)
             .cloned()
             .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        if let Some(err) = guard.command_errors.get(&coord) {
+            return Err(err.clone());
+        }
         let entry = guard
             .speakers
             .get_mut(&coord)
@@ -300,6 +327,9 @@ impl Wire for MockWire {
             .get(group)
             .cloned()
             .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        if let Some(err) = guard.command_errors.get(&coord) {
+            return Err(err.clone());
+        }
         let entry = guard
             .speakers
             .get_mut(&coord)
@@ -330,6 +360,9 @@ impl Wire for MockWire {
 
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
         let mut guard = lock!(self);
+        if let Some(err) = guard.command_errors.get(speaker) {
+            return Err(err.clone());
+        }
         let entry = guard
             .speakers
             .get_mut(speaker)
@@ -347,6 +380,9 @@ impl Wire for MockWire {
 
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
         let mut guard = lock!(self);
+        if let Some(err) = guard.command_errors.get(speaker) {
+            return Err(err.clone());
+        }
         let entry = guard
             .speakers
             .get_mut(speaker)

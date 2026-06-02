@@ -50,6 +50,10 @@ pub(crate) struct GroupCache {
 #[derive(Default)]
 struct TopologyMaps {
     speaker_to_group: HashMap<SpeakerId, GroupId>,
+    /// `GroupId` → coordinator `SpeakerId`. Used by S2 health tracking to
+    /// attribute a group-addressed command's failure to a concrete speaker
+    /// (the coordinator the command was routed to).
+    group_to_coordinator: HashMap<GroupId, SpeakerId>,
 }
 
 pub struct StateManager {
@@ -245,11 +249,25 @@ impl StateManager {
     pub fn install_topology(&self, snapshot: &DiscoverySnapshot) {
         let mut maps = TopologyMaps::default();
         for g in &snapshot.groups {
+            maps.group_to_coordinator
+                .insert(g.id.clone(), g.coordinator.clone());
             for m in &g.members {
                 maps.speaker_to_group.insert(m.clone(), g.id.clone());
             }
         }
         *self.topology.write().unwrap_or_else(|p| p.into_inner()) = maps;
+    }
+
+    /// Resolve a group to its coordinator `SpeakerId` from the installed
+    /// topology. `None` if the group is unknown (no topology, or a stale id).
+    /// Used by S2 health tracking for group-addressed commands.
+    pub fn coordinator_of(&self, group: &GroupId) -> Option<SpeakerId> {
+        self.topology
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .group_to_coordinator
+            .get(group)
+            .cloned()
     }
 
     /// Read the cached state for `speaker`. Honest partial — fields

@@ -60,6 +60,8 @@
 //!   `discover_with` that acquires the lock last is the one whose wire
 //!   ends up in the slot.
 
+mod events;
+mod health;
 mod state_manager;
 
 use std::sync::{Mutex, OnceLock};
@@ -69,7 +71,13 @@ use oto_core::{
 };
 use oto_wire::SonosWire;
 
+use crate::health::HealthTracker;
 use crate::state_manager::StateManager;
+
+// Re-export the FRB consumer's drain hook for the app-originated event bus
+// (v0.5 S2). `api.rs::subscribe_change_events` interleaves this with the
+// wire channel. See `events.rs` for the dual-channel rationale.
+pub use crate::events::try_recv_app_event;
 
 // `Send` lets the wire cross threads into the static; `Sync` is not
 // needed — all access is serialised by the `Mutex`. Don't add `+ Sync`.
@@ -95,6 +103,33 @@ fn discover_lock() -> &'static Mutex<()> {
 fn state_manager() -> &'static StateManager {
     static SM: OnceLock<StateManager> = OnceLock::new();
     SM.get_or_init(StateManager::new)
+}
+
+/// Process-global per-speaker subscription-health tracker (v0.5 S2).
+/// Observed by command dispatch; reset by `discover_with` on wire
+/// replacement. Emits `SubscriptionError`/`Recovered` onto the app event
+/// bus (`events::push`) on health transitions.
+fn health_tracker() -> &'static HealthTracker {
+    static HT: OnceLock<HealthTracker> = OnceLock::new();
+    HT.get_or_init(HealthTracker::new)
+}
+
+/// Observe a per-speaker command's result and emit a health-transition
+/// event onto the app bus if the speaker's `Healthy ↔ Errored` state flips.
+fn observe_speaker_health<R>(speaker: &SpeakerId, result: &Result<R, WireError>) {
+    if let Some(event) = health_tracker().observe(speaker, result) {
+        events::push(event);
+    }
+}
+
+/// Observe a group-addressed command's result against the group's
+/// coordinator (the speaker the command was routed to). No-op if the
+/// coordinator can't be resolved (unknown/stale group) — the command's own
+/// `NotFound` already conveys that, and health is reachability-only.
+fn observe_group_health<R>(group: &GroupId, result: &Result<R, WireError>) {
+    if let Some(coordinator) = state_manager().coordinator_of(group) {
+        observe_speaker_health(&coordinator, result);
+    }
 }
 
 /// Lock the slot and call `f` with the held wire, returning
@@ -160,6 +195,14 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
     // `subscribe_change_events` once this fn returns); it will
     // capture the post-bump generation on entry.
     state_manager().bump_and_clear();
+    // v0.5 S2: a fresh wire starts with a clean health slate — drop any
+    // Errored marks from the old wire so the first command on the new wire
+    // is judged from Healthy (and a recovery on the new wire isn't masked).
+    health_tracker().reset_all();
+    // …and drop any app-bus event still queued against the OLD wire, so a
+    // stale SubscriptionError/Recovered can't surface on the NEW stream
+    // after rediscover (review #65). Health just reset, so it'd be wrong.
+    events::clear();
     // Slice 4: install fresh topology so the cache-backed
     // `speaker_state` can resolve speaker → group → transport against
     // the wire we're about to install. Order matters: AFTER
@@ -181,32 +224,44 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
 
 /// Start playback on `group` (routed to its coordinator).
 pub fn play(group: &GroupId) -> Result<(), WireError> {
-    with_wire(|w| w.play(group))
+    let result = with_wire(|w| w.play(group));
+    observe_group_health(group, &result);
+    result
 }
 
 /// Pause playback on `group` (routed to its coordinator).
 pub fn pause(group: &GroupId) -> Result<(), WireError> {
-    with_wire(|w| w.pause(group))
+    let result = with_wire(|w| w.pause(group));
+    observe_group_health(group, &result);
+    result
 }
 
 /// Skip to the next track on `group`.
 pub fn next(group: &GroupId) -> Result<(), WireError> {
-    with_wire(|w| w.next(group))
+    let result = with_wire(|w| w.next(group));
+    observe_group_health(group, &result);
+    result
 }
 
 /// Skip to the previous track on `group`.
 pub fn previous(group: &GroupId) -> Result<(), WireError> {
-    with_wire(|w| w.previous(group))
+    let result = with_wire(|w| w.previous(group));
+    observe_group_health(group, &result);
+    result
 }
 
 /// Set `speaker`'s volume (per-speaker, not per-group).
 pub fn set_volume(speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
-    with_wire(|w| w.set_volume(speaker, volume))
+    let result = with_wire(|w| w.set_volume(speaker, volume));
+    observe_speaker_health(speaker, &result);
+    result
 }
 
 /// Set `speaker`'s mute state (per-speaker, not per-group).
 pub fn set_mute(speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
-    with_wire(|w| w.set_mute(speaker, muted))
+    let result = with_wire(|w| w.set_mute(speaker, muted));
+    observe_speaker_health(speaker, &result);
+    result
 }
 
 /// One-shot read of `speaker`'s current volume/mute/transport snapshot.
@@ -437,6 +492,11 @@ fn clear_slot() {
     // Cache survives across tests in the same process otherwise; clear it
     // so the next test starts from a known-empty state.
     state_manager().clear();
+    // S2: clear per-speaker health so a prior test's Errored mark doesn't
+    // leak into the next test (same process under `cargo test`).
+    health_tracker().reset_all();
+    // S2: drain any app-bus events a prior test pushed so they don't leak.
+    while events::try_recv_app_event().is_some() {}
     // Drop any stranded test receiver so the next test starts clean.
     test_helpers::reset_rx();
 }
@@ -690,6 +750,199 @@ mod tests {
         assert!(
             mock_probe.topology_subscribed(),
             "discover_with must call subscribe_topology on the installed wire"
+        );
+    }
+
+    // ── S2: SubscriptionError reactive emission ───────────────────────────
+
+    /// Drain every app-bus event currently queued (the S2 sibling channel).
+    fn drain_app_events() -> Vec<ChangeEvent> {
+        let mut out = Vec::new();
+        while let Some(e) = try_recv_app_event() {
+            out.push(e);
+        }
+        out
+    }
+
+    /// Build a discovered wire from an `Arc<MockWire>` the test still holds,
+    /// so the test can arrange command errors before/after `discover_with`.
+    fn discover_with_held_mock() -> std::sync::Arc<MockWire> {
+        let mock = std::sync::Arc::new(MockWire::default());
+        let for_app = std::sync::Arc::clone(&mock);
+        discover_with(move || Box::new(ArcWire(for_app))).expect("discover ok");
+        mock
+    }
+
+    #[test]
+    fn subscription_error_emitted_on_first_network_failure() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events(); // ignore anything from setup
+        mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+
+        let res = set_volume(&kitchen, Volume::new(50).unwrap());
+        assert!(matches!(res, Err(WireError::Network(_))));
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "exactly one SubscriptionError");
+        assert!(matches!(
+            &events[0],
+            ChangeEvent::SubscriptionError { speaker, .. } if *speaker == kitchen
+        ));
+    }
+
+    #[test]
+    fn subscription_error_not_repeated_on_repeated_failures() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+
+        let _ = set_volume(&kitchen, Volume::new(50).unwrap());
+        let _ = set_volume(&kitchen, Volume::new(51).unwrap());
+        let _ = set_mute(&kitchen, true);
+
+        let events = drain_app_events();
+        assert_eq!(
+            events.len(),
+            1,
+            "edge-triggered: only the first failure emits"
+        );
+    }
+
+    #[test]
+    fn subscription_recovered_after_error_then_success() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+        let _ = set_volume(&kitchen, Volume::new(50).unwrap()); // → Errored
+        let _ = drain_app_events(); // consume the SubscriptionError
+
+        mock.clear_command_error(&kitchen); // device back
+        let res = set_volume(&kitchen, Volume::new(60).unwrap());
+        assert!(res.is_ok());
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            ChangeEvent::SubscriptionRecovered { speaker } if *speaker == kitchen
+        ));
+    }
+
+    #[test]
+    fn backend_error_does_not_emit_health_event() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&kitchen, WireError::Backend("soap fault".into()));
+
+        let _ = set_volume(&kitchen, Volume::new(50).unwrap());
+
+        assert!(
+            drain_app_events().is_empty(),
+            "Backend error is not a reachability signal — no health event"
+        );
+    }
+
+    #[test]
+    fn group_command_failure_attributes_to_coordinator() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        // Kitchen group's coordinator is RINCON_KITCHEN (fixture).
+        let coord = SpeakerId::new("RINCON_KITCHEN");
+        let group = GroupId::new("RINCON_KITCHEN:1");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&coord, WireError::Network("unreachable".into()));
+
+        let res = play(&group);
+        assert!(matches!(res, Err(WireError::Network(_))));
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "group failure → one SubscriptionError");
+        assert!(
+            matches!(&events[0], ChangeEvent::SubscriptionError { speaker, .. } if *speaker == coord),
+            "attributed to the group's coordinator"
+        );
+    }
+
+    #[test]
+    fn health_state_resets_on_wire_replacement() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        // Wire 1: drive kitchen to Errored.
+        let mock1 = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock1.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+        let _ = set_volume(&kitchen, Volume::new(50).unwrap());
+        assert_eq!(drain_app_events().len(), 1, "errored on wire 1");
+
+        // Rediscover (wire 2) → health reset. A successful command must NOT
+        // emit Recovered (the speaker is Healthy again, not Errored).
+        let _mock2 = discover_with_held_mock();
+        let _ = drain_app_events();
+        let res = set_volume(&kitchen, Volume::new(60).unwrap());
+        assert!(res.is_ok());
+        assert!(
+            drain_app_events().is_empty(),
+            "health reset on rediscover — no stale Recovered event"
+        );
+    }
+
+    #[test]
+    fn speaker_state_read_does_not_trigger_health_check() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        let _mock = discover_with_held_mock();
+        let _ = drain_app_events();
+
+        // speaker_state is a cache read (no SOAP, no command dispatch).
+        let _ = speaker_state(&kitchen);
+
+        assert!(
+            drain_app_events().is_empty(),
+            "cache-read speaker_state must not observe health"
+        );
+    }
+
+    #[test]
+    fn discover_with_clears_stale_app_events() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        // Queue a SubscriptionError on wire 1 and deliberately DON'T drain
+        // it (simulates an event still in the bus when rediscover starts).
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+        let _ = set_volume(&kitchen, Volume::new(50).unwrap());
+
+        // Rediscover: health resets, so the queued event is stale and must
+        // be dropped — it must not surface on the new stream (review #65).
+        let _ = discover_with_held_mock();
+        assert!(
+            drain_app_events().is_empty(),
+            "rediscover must clear stale app-bus events"
         );
     }
 

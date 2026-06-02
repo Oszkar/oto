@@ -381,20 +381,41 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // Err — that's correct because the OLD subscriber is the one
     // listening on this sink.
     let gen = oto_app::current_generation();
-    loop {
-        let event = match rx.recv() {
-            Ok(e) => e,
-            // Sender dropped — wire was replaced (discover() ran).
-            // Return cleanly; FRB stream completes; Dart rebuilds.
-            Err(_) => return,
-        };
+    // Apply one event to the cache + forward it to Dart. Returns `false`
+    // if the Dart subscriber cancelled (the caller should then return).
+    let emit = |event: oto_core::ChangeEvent| -> bool {
         oto_app::apply_event_at_generation(gen, &event);
-        let dto = crate::map::to_change_event_dto(event);
-        if sink.add(dto).is_err() {
-            // Dart subscriber cancelled. Return cleanly; the
-            // sender stays alive for any next consumer (in
-            // practice there isn't one until the next discover()).
-            return;
+        sink.add(crate::map::to_change_event_dto(event)).is_ok()
+    };
+    loop {
+        // Drain TWO sources onto the one FRB stream (v0.5 S2):
+        //   1. oto-app's sibling bus — SubscriptionError/Recovered emitted
+        //      on command-dispatch health transitions,
+        //   2. the wire's v0.4 channel (`rx`) — property events from the
+        //      pump; its `Disconnected` is the teardown signal (wire
+        //      replaced on discover() → stream completes → Dart rebuilds).
+        //
+        // Drain the app bus FIRST, fully, every iteration — otherwise a
+        // busy wire channel could starve app events indefinitely (review
+        // #65). The app bus never disconnects (it's process-global), so
+        // only the wire channel drives loop exit.
+        while let Some(event) = oto_app::try_recv_app_event() {
+            if !emit(event) {
+                return;
+            }
+        }
+        // Then block briefly on the wire channel so teardown stays prompt
+        // and we loop back to re-drain the app bus at least every ~10 ms.
+        match rx.recv_timeout(std::time::Duration::from_millis(10)) {
+            Ok(event) => {
+                if !emit(event) {
+                    return;
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            // Wire's Sender dropped — wire was replaced (discover() ran).
+            // Return cleanly; FRB stream completes; Dart rebuilds.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         }
     }
 }
