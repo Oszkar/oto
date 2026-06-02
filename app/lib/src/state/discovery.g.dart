@@ -11,6 +11,12 @@ part of 'discovery.dart';
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
 /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
+///
+/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// multicast replies and discovery finds nothing on release builds. The
+/// lock is released in a `finally` so a failed discover still frees it.
+/// Other platforms call `discover()` directly (no channel handler exists).
 
 @ProviderFor(discovery)
 const discoveryProvider = DiscoveryProvider._();
@@ -18,6 +24,12 @@ const discoveryProvider = DiscoveryProvider._();
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
 /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
+///
+/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// multicast replies and discovery finds nothing on release builds. The
+/// lock is released in a `finally` so a failed discover still frees it.
+/// Other platforms call `discover()` directly (no channel handler exists).
 
 final class DiscoveryProvider
     extends
@@ -32,6 +44,12 @@ final class DiscoveryProvider
   /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
   /// runs it off the UI isolate, so this is a Future provider: AsyncValue
   /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
+  ///
+  /// On Android (v0.5 S3) the SSDP window is wrapped in a held
+  /// `WifiManager.MulticastLock` — without it Android drops the inbound
+  /// multicast replies and discovery finds nothing on release builds. The
+  /// lock is released in a `finally` so a failed discover still frees it.
+  /// Other platforms call `discover()` directly (no channel handler exists).
   const DiscoveryProvider._()
     : super(
         from: null,
@@ -58,4 +76,4 @@ final class DiscoveryProvider
   }
 }
 
-String _$discoveryHash() => r'38b5b0ee3cff790a96f3e2e030d7534a6ec0745f';
+String _$discoveryHash() => r'01ef6086e7c27e6d1b222ec4deb6462a6faf75b4';

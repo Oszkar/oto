@@ -109,10 +109,10 @@ pub enum ChangeEventDto {
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
 
-// TODO(v0.5): Android release discovery needs a held WifiManager.MulticastLock
-// (perms are declared in app/android/app/src/main/AndroidManifest.xml); SSDP
-// multicast is dropped without it. v0.1 discovery is verified on Windows via
-// this bridge.
+// Android release discovery holds a WifiManager.MulticastLock around this
+// SSDP window — acquired/released on the Dart side (discoveryProvider) via
+// the `me.oszkar.oto/multicast_lock` MethodChannel (v0.5 S3). Without it
+// Android drops the inbound SSDP multicast replies.
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
 /// topology — speaker identities (id / room / model / ip) plus the
