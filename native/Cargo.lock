@@ -1203,7 +1203,7 @@ dependencies = [
 
 [[package]]
 name = "oto-app"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "oto-core",
  "oto-mock",
@@ -1212,18 +1212,18 @@ dependencies = [
 
 [[package]]
 name = "oto-core"
-version = "0.4.0"
+version = "0.5.0"
 
 [[package]]
 name = "oto-mock"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "oto-core",
 ]
 
 [[package]]
 name = "oto-wire"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "if-addrs",
  "mio",
@@ -1241,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "oto_native"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "flutter_rust_bridge",
  "openssl",

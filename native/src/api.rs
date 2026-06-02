@@ -183,9 +183,10 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
 
 // ── v0.4 DEV-ONLY: MockWire injection for integration tests ───────────────────
 //
-// TODO(v0.5): consider removing once the v0.4 integration test pattern
-// is established. Until then, this is the only FRB-side seam to drive
-// the LAN-free end-to-end test in `app/integration_test/v0_4_events_test.dart`.
+// TODO(v0.6): consider removing once the integration test pattern no longer
+// needs it. Until then, this is the only FRB-side seam to drive the LAN-free
+// end-to-end tests in `app/integration_test/v0_4_events_test.dart` (incl. the
+// v0.5 TopologyChanged delivery test).
 //
 // Trust boundary (per /codex review on PR #43, finding P1 #2): the FRB
 // fn symbols (`dev_discover_mock`, `dev_push_subscription_error_on_mock`)

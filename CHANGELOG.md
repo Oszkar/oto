@@ -6,17 +6,47 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-Post-v0.4 code-review batch (shipping toward v0.5).
+## [0.5.0] - 2026-06-02
+
+v0.5 — Hardening before the v0.6 UI. Topology change events, in-band subscription-failure surfacing, Android release discovery, and speaker-model repopulation — built on the capability layers v0.4 proved, so the UI is a pure design+build problem. All event additions ride the single v0.4 FRB `Stream<ChangeEventDto>`; no FRB stream-surface redesign.
+
+### Added
+
+- **Topology change events (S1).** Live ZoneGroupTopology via a per-speaker `GroupMembership` watch in the event pump → payload-less `ChangeEvent::TopologyChanged` on the v0.4 stream. The Dart `TopologyController` debounces 250 ms then re-discovers (Option A — a full wire+pump+cache rebuild, correct by construction; the lightweight SOAP `refresh_topology` fast-path is deferred to v0.6). `Wire` trait grown additively with `subscribe_topology(&self) -> Result<(), WireError>` (must precede `subscribe_speakers`; `discover_with` enforces it) + `refresh_topology(&self) -> Result<DiscoverySnapshot, WireError>` (`GetZoneGroupState` SOAP, no SSDP). Mechanism: ZoneGroupTopology is a *service*, not a watchable property — the change surfaces via the speaker-scoped `GroupMembership` property (P0c hardware finding, [`docs/sonos-notes.md`](docs/sonos-notes.md)).
+- **Subscription-failure surfacing (S2).** `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` (carried on the surface since v0.4, never emitted — the SDK at `=0.5.2` swallows subscription failures) now emit **reactively from command dispatch**: `oto-app` tracks per-speaker `Healthy ↔ Errored` and emits on the edge — `WireError::Network` from a Healthy speaker → `SubscriptionError`; `Ok` from an Errored speaker → `SubscriptionRecovered` (`Backend`/`NotFound` don't flip health). Events ride a sibling app-event channel the FRB consumer drains alongside the wire channel.
+- **Android `MulticastLock` (S3).** A `WifiManager.MulticastLock` (Kotlin `MulticastLockHandler` over the `me.oszkar.oto/multicast_lock` MethodChannel) is held around `discover()`'s SSDP window — Android silently drops inbound SSDP multicast without it, so release-build discovery found nothing. Acquired/released best-effort from the Dart `discoveryProvider` (a lock failure doesn't abort discovery); refresh paths don't take the lock.
+- **Speaker `model` repopulate (S4).** `SpeakerIdentity.model` (always `None` since v0.3 — ZoneGroupTopology carries no model) is repopulated by a bounded, parallel per-member `device_description.xml` fetch (`<modelName>`) inside `discover()` + `refresh_topology()`, best-effort (a failed/timed-out fetch leaves `model = None`; discovery still succeeds). `ureq` promoted to a direct `oto-wire` dep (already in the locked graph transitively via `sonos-api`).
+
+### Changed
+
+- **`discover_with` ordering:** calls `wire.subscribe_topology()` before `wire.subscribe_speakers()` so the pump registers the `GroupMembership` watch at spawn.
+- **FRB consumer (`subscribe_change_events`) is dual-channel:** drains the wire channel (whose `Disconnected` drives teardown) AND the app-event bus; idle poll bounded.
+- **Event-stream re-subscribe is generation-gated:** the Dart `changeEventsProvider` keys re-subscription on `current_wire_generation()` (bumped on a *successful* `discover_with` only), so a failed re-discover doesn't tear the live stream down onto a one-shot receiver.
+- **`docs/ARCHITECTURE.md`:** `Wire` trait listing grown with `subscribe_topology`/`refresh_topology`; v0.5 event-flow section (topology path + pump guards + app-event bus + generation-gated re-subscribe).
 
 ### Fixed
 
-- **SSDP multicast egress interface ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).** `discover_locations` now pins each per-NIC socket's outgoing multicast interface with `socket2::set_multicast_if_v4` before sending the M-SEARCH. It previously bound per-NIC but left egress to the OS routing table, so on a multi-NIC host every M-SEARCH could leave the *default* interface — the `#76` failure class, and a drift from what `ARCHITECTURE` / `ROADMAP` / `sonos-notes` already described as done. Hardware-validated non-regressive on the 4-speaker LAN: the dev host's LAN NIC *is* the OS default multicast interface, so the bug stays dormant there ("single-NIC hosts work by accident"); the fix makes per-NIC egress deterministic for hosts where Sonos sits behind a non-default NIC. `socket2` promoted to a direct `oto-wire` dep; `native/crates/wire/examples/ssdp_multicast_if_probe.rs` added as the A/B diagnostic.
+- **SSDP multicast egress interface ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).** `discover_locations` now pins each per-NIC socket's outgoing multicast interface with `socket2::set_multicast_if_v4` before sending the M-SEARCH (previously left egress to the OS routing table, so on a multi-NIC host the M-SEARCH could leave the *default* interface). Hardware-validated non-regressive on the 4-speaker LAN. `socket2` promoted to a direct `oto-wire` dep; `examples/ssdp_multicast_if_probe.rs` added as the A/B diagnostic.
+- **Cumulative-review fixes** (post-merge `/codex` review of the S1–S4 series): the **seed → rediscover infinite loop** (the pump now suppresses the per-speaker subscribe seed and only emits `TopologyChanged` on real regroups); **frozen pump routing** after a regroup (group-addressed events dropped until the pump is rebuilt); **failed-rediscover event stranding** (generation-gated re-subscribe, above); **app-bus event generation-stamping** (stale old-wire events dropped, not surfaced on the new stream); plus `subscribe_topology` lock race, the consumer idle busy-poll, and a `device_description` thread-fan-out cap.
 
-### Housekeeping (review follow-ups)
+### Known issues / deferred
 
-- **CI:** added a compile-only `clippy -p oto-wire --features live-tests --tests` step so the hardware-gated live tests can't bit-rot — it never *runs* them (no `--run-ignored`), so the LAN is untouched.
-- **`scripts/verify_generated.dart`:** dropped two non-existent `frb_generated.{io,web}.rs` pathspecs; fixed a stale provider-name doc comment (`subscribeChangeEventsProvider` → `changeEventsProvider`) and a `StateManager` clear-step comment.
-- **Dependency hygiene:** Dependabot now ignores `dtolnay/rust-toolchain` (it pre-publishes branches for unreleased future Rust versions, so Dependabot proposed a `@1.100.0` rustup can't install; the MSRV is a deliberate manual floor), `quick-xml` (track `sonos-api`'s `=0.31.0`), and `socket2` minor/major (stay on 0.5 to share hyper's transitive). Dropped the inert Dependabot auto-merge workflow; merges to `main` are manual, gated by the `ci` checks.
+- **Lightweight SOAP topology refresh (Option D)** is deferred to v0.6: v0.5 re-discovers on a regroup (~3–5 s). The fast-path must not ship until it rebuilds/atomically updates the pump's coordinator→group routing.
+- **Group form/break** commands → v0.5.1 (mutating SOAP; own spike + design).
+- **Subscription-failure surfacing is command-driven (Approach A):** a speaker that goes silent *while idle* isn't flagged until the next command to it fails. Approaches B (tracing capture) and C (heartbeat probe) are recorded post-1.0 candidates.
+- **Residual app-bus race:** a command spanning a rediscover's generation bump can stamp an event with the new generation or contaminate the post-reset health tracker — a transient, self-correcting spurious flag; a full fix would rework the v0.4 generation/slot dual-lock protocol (v0.6 note).
+- **S5 (lock-granularity revisit):** <!-- ACCEPTANCE: S5 verdict from the v0.5 dogfood --> _pending the acceptance dogfood; closed as "not triggered" unless visible latency/stutter is observed._
+
+### Housekeeping
+
+- **CI:** compile-only `clippy -p oto-wire --features live-tests --tests` step so the hardware-gated live tests can't bit-rot (never runs them; LAN untouched).
+- **`scripts/verify_generated.dart`:** dropped two non-existent `frb_generated.{io,web}.rs` pathspecs; fixed stale doc comments.
+- **Dependency hygiene:** Dependabot ignores `dtolnay/rust-toolchain`, `quick-xml` (track `sonos-api`'s `=0.31.0`), and `socket2`; dropped the inert auto-merge workflow (merges to `main` are manual, gated by `ci`).
+
+### Hardware acceptance
+
+<!-- ACCEPTANCE: fill from the v0.5 dogfood evidence (docs/superpowers/specs/2026-XX-XX-v0.5-release-evidence/) -->
+_Acceptance dogfood pending — see the release-evidence directory. Criteria: S1 `TopologyChanged` ~5 s after a regroup + topology refresh; S3 release APK discovers on a real Android device; S4 model populated for ≥2 speakers; all v0.4 criteria still pass; ≥30 min idle + ≥30 min active with a mid-session regroup._
 
 ## [0.4.0] - 2026-05-26
 
