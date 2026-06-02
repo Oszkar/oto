@@ -32,10 +32,33 @@ part 'events.g.dart';
 /// the provider is still invalidated and rebuilt when `discoveryProvider`
 /// changes (rediscovery), so the FRB stream restarts cleanly on wire
 /// replacement — the intended lifecycle boundary.
+/// The current wire generation, or `null` until the first successful
+/// discovery. `currentWireGeneration()` bumps only on a successful
+/// `discover_with`, so although this recomputes on every `discoveryProvider`
+/// transition, its VALUE only changes when a new wire is actually installed.
+/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
+/// rebuild only on a real new wire — not on a loading/failed re-discover.
+@riverpod
+BigInt? wireGeneration(Ref ref) {
+  final discovery = ref.watch(discoveryProvider);
+  // hasValue stays true across loading/error once discovery has succeeded
+  // once (AsyncValue retains the prior value), so a failed re-discover keeps
+  // reading the SAME generation → no change → no rebuild downstream.
+  return discovery.hasValue ? rust_api.currentWireGeneration() : null;
+}
+
 @Riverpod(keepAlive: true)
 Stream<rust_api.ChangeEventDto> changeEvents(Ref ref) {
-  // Trigger rebuild on discovery change. We don't need the value;
-  // the dependency on the provider is the signal.
-  ref.watch(discoveryProvider);
+  // Re-subscribe only when a NEW wire is installed — keyed on the wire
+  // generation, NOT raw discovery state. A failed re-discover keeps the old
+  // wire (discover_with retains it on failure), whose event receiver is
+  // one-shot and cannot be retaken; re-subscribing then would strand events
+  // on a dead receiver. Gating on the generation avoids that tear-down
+  // (codex review #67-followup #2).
+  final generation = ref.watch(wireGenerationProvider);
+  if (generation == null) {
+    // No wire installed yet — nothing to subscribe to.
+    return const Stream<rust_api.ChangeEventDto>.empty();
+  }
   return rust_api.subscribeChangeEvents();
 }

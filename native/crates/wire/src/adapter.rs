@@ -410,21 +410,26 @@ impl Wire for SonosWire {
         {
             return Err(WireError::NoSpeakersDiscovered);
         }
-        // If the pump is already running, the flag is read-only — a watch
-        // can only be registered at spawn time. A repeat call after the
-        // flag was already set (topology requested before spawn) is a
-        // harmless idempotent `Ok`. But if the pump spawned WITHOUT the
-        // flag, topology events can never start: fail fast on that misuse
-        // rather than returning a silent, misleading `Ok`.
-        let pump_running = self
-            .events_state
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .is_some();
-        if pump_running && !self.topology_requested.load(Ordering::SeqCst) {
+        // Hold `events_state` across the pump-running check AND the flag
+        // store. `subscribe_speakers` reads `topology_requested` (via
+        // `snapshot_for_pump`) while holding this same lock as it spawns the
+        // pump, so taking it here serialises the two: either we set the flag
+        // before the pump reads it (pump gets the watch), or the pump has
+        // already spawned and we observe it. Without the shared hold the
+        // store could land between the pump-running check and the spawn,
+        // leaving a pump with no topology watch yet both calls returning Ok
+        // (codex review #67-followup #5; MockWire already did this correctly).
+        //
+        // If the pump is already running: a repeat call after the flag was
+        // already set is a harmless idempotent `Ok`; but if the pump spawned
+        // WITHOUT the flag, topology events can never start — fail fast
+        // rather than returning a misleading `Ok`.
+        let pump_guard = self.events_state.lock().unwrap_or_else(|p| p.into_inner());
+        if pump_guard.is_some() && !self.topology_requested.load(Ordering::SeqCst) {
             return Err(WireError::AlreadySubscribed);
         }
         self.topology_requested.store(true, Ordering::SeqCst);
+        drop(pump_guard);
         Ok(())
     }
 

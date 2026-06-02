@@ -28,9 +28,15 @@ part of 'events.dart';
 /// the provider is still invalidated and rebuilt when `discoveryProvider`
 /// changes (rediscovery), so the FRB stream restarts cleanly on wire
 /// replacement — the intended lifecycle boundary.
+/// The current wire generation, or `null` until the first successful
+/// discovery. `currentWireGeneration()` bumps only on a successful
+/// `discover_with`, so although this recomputes on every `discoveryProvider`
+/// transition, its VALUE only changes when a new wire is actually installed.
+/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
+/// rebuild only on a real new wire — not on a loading/failed re-discover.
 
-@ProviderFor(changeEvents)
-const changeEventsProvider = ChangeEventsProvider._();
+@ProviderFor(wireGeneration)
+const wireGenerationProvider = WireGenerationProvider._();
 
 /// Single-consumer stream of ChangeEvents from Rust. Subscribes once
 /// per discovery cycle: when `discoveryProvider` yields a new value
@@ -52,17 +58,16 @@ const changeEventsProvider = ChangeEventsProvider._();
 /// the provider is still invalidated and rebuilt when `discoveryProvider`
 /// changes (rediscovery), so the FRB stream restarts cleanly on wire
 /// replacement — the intended lifecycle boundary.
+/// The current wire generation, or `null` until the first successful
+/// discovery. `currentWireGeneration()` bumps only on a successful
+/// `discover_with`, so although this recomputes on every `discoveryProvider`
+/// transition, its VALUE only changes when a new wire is actually installed.
+/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
+/// rebuild only on a real new wire — not on a loading/failed re-discover.
 
-final class ChangeEventsProvider
-    extends
-        $FunctionalProvider<
-          AsyncValue<rust_api.ChangeEventDto>,
-          rust_api.ChangeEventDto,
-          Stream<rust_api.ChangeEventDto>
-        >
-    with
-        $FutureModifier<rust_api.ChangeEventDto>,
-        $StreamProvider<rust_api.ChangeEventDto> {
+final class WireGenerationProvider
+    extends $FunctionalProvider<BigInt?, BigInt?, BigInt?>
+    with $Provider<BigInt?> {
   /// Single-consumer stream of ChangeEvents from Rust. Subscribes once
   /// per discovery cycle: when `discoveryProvider` yields a new value
   /// (success or error), this provider is invalidated and re-runs the
@@ -83,6 +88,60 @@ final class ChangeEventsProvider
   /// the provider is still invalidated and rebuilt when `discoveryProvider`
   /// changes (rediscovery), so the FRB stream restarts cleanly on wire
   /// replacement — the intended lifecycle boundary.
+  /// The current wire generation, or `null` until the first successful
+  /// discovery. `currentWireGeneration()` bumps only on a successful
+  /// `discover_with`, so although this recomputes on every `discoveryProvider`
+  /// transition, its VALUE only changes when a new wire is actually installed.
+  /// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
+  /// rebuild only on a real new wire — not on a loading/failed re-discover.
+  const WireGenerationProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'wireGenerationProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$wireGenerationHash();
+
+  @$internal
+  @override
+  $ProviderElement<BigInt?> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  BigInt? create(Ref ref) {
+    return wireGeneration(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(BigInt? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<BigInt?>(value),
+    );
+  }
+}
+
+String _$wireGenerationHash() => r'6dba8cada3a1a86e67a56791020803b1cc38c96e';
+
+@ProviderFor(changeEvents)
+const changeEventsProvider = ChangeEventsProvider._();
+
+final class ChangeEventsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<rust_api.ChangeEventDto>,
+          rust_api.ChangeEventDto,
+          Stream<rust_api.ChangeEventDto>
+        >
+    with
+        $FutureModifier<rust_api.ChangeEventDto>,
+        $StreamProvider<rust_api.ChangeEventDto> {
   const ChangeEventsProvider._()
     : super(
         from: null,
@@ -109,4 +168,4 @@ final class ChangeEventsProvider
   }
 }
 
-String _$changeEventsHash() => r'13eff4dcb0cecd17c74d7e39afd12b048401c78d';
+String _$changeEventsHash() => r'5cb7b520b72864c1031e9fc532a4c68f58870165';

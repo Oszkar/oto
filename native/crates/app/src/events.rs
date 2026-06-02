@@ -32,9 +32,16 @@ use std::sync::{
 
 use oto_core::ChangeEvent;
 
+/// Each event carries the wire **generation** it was emitted under (the
+/// `StateManager` generation, bumped per successful `discover_with`). The
+/// FRB consumer captures its generation when it starts against a wire and
+/// drops any app event stamped with a different one — so a stale
+/// `SubscriptionError`/`Recovered` from an OLD wire (still queued, or pushed
+/// by a lingering old-wire command) can't surface on the NEW stream after a
+/// rediscover (codex cumulative-review #3).
 struct Bus {
-    tx: Sender<ChangeEvent>,
-    rx: Mutex<Receiver<ChangeEvent>>,
+    tx: Sender<(u64, ChangeEvent)>,
+    rx: Mutex<Receiver<(u64, ChangeEvent)>>,
 }
 
 fn bus() -> &'static Bus {
@@ -48,23 +55,27 @@ fn bus() -> &'static Bus {
     })
 }
 
-/// Push an app-originated event onto the sibling channel. Fire-and-forget:
-/// the send can only fail if the receiver were dropped, which never happens
-/// (the bus is `'static`).
-pub(crate) fn push(event: ChangeEvent) {
-    let _ = bus().tx.send(event);
+/// Push an app-originated event stamped with the current wire `generation`.
+/// Fire-and-forget: the send can only fail if the receiver were dropped,
+/// which never happens (the bus is `'static`).
+pub(crate) fn push(generation: u64, event: ChangeEvent) {
+    let _ = bus().tx.send((generation, event));
 }
 
-/// Non-blocking drain of one app-originated event, for the FRB consumer to
-/// interleave with the wire channel. `None` if the channel is empty
-/// (`Disconnected` is unreachable — the `'static` bus keeps a `Sender`).
-pub fn try_recv_app_event() -> Option<ChangeEvent> {
-    bus()
-        .rx
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .try_recv()
-        .ok()
+/// Non-blocking drain of the next app-originated event whose stamp matches
+/// `consumer_gen` (the wire generation the calling FRB consumer belongs to).
+/// Events stamped with a different generation are stale — drained and
+/// dropped here so they never reach the new stream. `None` once the channel
+/// has no matching event left this tick.
+pub fn try_recv_app_event(consumer_gen: u64) -> Option<ChangeEvent> {
+    let rx = bus().rx.lock().unwrap_or_else(|p| p.into_inner());
+    while let Ok((gen, event)) = rx.try_recv() {
+        if gen == consumer_gen {
+            return Some(event);
+        }
+        // Stale (different wire era) — drop and keep draining.
+    }
+    None
 }
 
 /// Drain and discard every pending app-bus event. Called by `discover_with`

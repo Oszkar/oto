@@ -96,6 +96,15 @@ Future<void> devPushTopologyChangeOnMock() =>
 Stream<ChangeEventDto> subscribeChangeEvents() =>
     RustLib.instance.api.crateApiSubscribeChangeEvents();
 
+/// The current wire generation — bumped by `discover_with` on every
+/// **successful** wire install. The Dart event-stream provider keys its
+/// re-subscription on this so a FAILED re-discover (which does not bump it)
+/// doesn't tear down the live stream into a one-shot, un-retakeable receiver
+/// (review #67-followup #2). `#[frb(sync)]` — a cheap atomic read, called
+/// inline from a Riverpod `select`, so it must not be a `Future`.
+BigInt currentWireGeneration() =>
+    RustLib.instance.api.crateApiCurrentWireGeneration();
+
 @freezed
 sealed class ChangeEventDto with _$ChangeEventDto {
   const ChangeEventDto._();
