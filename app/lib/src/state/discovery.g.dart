@@ -17,6 +17,11 @@ part of 'discovery.dart';
 /// multicast replies and discovery finds nothing on release builds. The
 /// lock is released in a `finally` so a failed discover still frees it.
 /// Other platforms call `discover()` directly (no channel handler exists).
+///
+/// The lock is **best-effort**: it's an optimization to stop Android
+/// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
+/// service, permission denied — the native handler returns a structured
+/// error), we still attempt discovery rather than hard-failing.
 
 @ProviderFor(discovery)
 const discoveryProvider = DiscoveryProvider._();
@@ -30,6 +35,11 @@ const discoveryProvider = DiscoveryProvider._();
 /// multicast replies and discovery finds nothing on release builds. The
 /// lock is released in a `finally` so a failed discover still frees it.
 /// Other platforms call `discover()` directly (no channel handler exists).
+///
+/// The lock is **best-effort**: it's an optimization to stop Android
+/// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
+/// service, permission denied — the native handler returns a structured
+/// error), we still attempt discovery rather than hard-failing.
 
 final class DiscoveryProvider
     extends
@@ -50,6 +60,11 @@ final class DiscoveryProvider
   /// multicast replies and discovery finds nothing on release builds. The
   /// lock is released in a `finally` so a failed discover still frees it.
   /// Other platforms call `discover()` directly (no channel handler exists).
+  ///
+  /// The lock is **best-effort**: it's an optimization to stop Android
+  /// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
+  /// service, permission denied — the native handler returns a structured
+  /// error), we still attempt discovery rather than hard-failing.
   const DiscoveryProvider._()
     : super(
         from: null,
@@ -76,4 +91,4 @@ final class DiscoveryProvider
   }
 }
 
-String _$discoveryHash() => r'01ef6086e7c27e6d1b222ec4deb6462a6faf75b4';
+String _$discoveryHash() => r'a1e518381167514cf0d16dd6021238226f762b35';
