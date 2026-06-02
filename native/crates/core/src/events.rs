@@ -41,7 +41,13 @@ pub enum ChangeEvent {
     /// A previously-erroring speaker is back online — its cache is
     /// being refreshed via the next NOTIFY.
     SubscriptionRecovered { speaker: SpeakerId },
-    // v0.5: TopologyChanged { snapshot: DiscoverySnapshot },
+    /// The household topology changed (speakers regrouped). Payload-less:
+    /// the Dart layer re-pulls authoritative topology on receipt (the
+    /// mechanism is a Dart concern — v0.5 S1 uses a debounced full
+    /// re-discover; v0.6 may swap in a lighter refresh). The app-layer
+    /// cache applies this as a no-op — the re-pull drives the update.
+    /// Added in v0.5 (S1).
+    TopologyChanged,
 }
 
 #[cfg(test)]
@@ -84,6 +90,12 @@ mod tests {
             ChangeEvent::SubscriptionRecovered { speaker } => assert_eq!(speaker, sid),
             _ => panic!("expected SubscriptionRecovered variant"),
         }
+    }
+
+    #[test]
+    fn topology_changed_variant_exists() {
+        let ev = ChangeEvent::TopologyChanged;
+        assert!(matches!(ev, ChangeEvent::TopologyChanged));
     }
 
     #[test]

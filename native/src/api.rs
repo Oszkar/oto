@@ -100,6 +100,11 @@ pub enum ChangeEventDto {
     SubscriptionRecovered {
         speaker_id: String,
     },
+    /// Household topology changed (speakers regrouped). Payload-less: the
+    /// Dart `TopologyController` debounces then re-pulls topology on
+    /// receipt (v0.5 S1: invalidates `discoveryProvider` → full
+    /// re-discover; v0.6 may swap in a lighter SOAP refresh).
+    TopologyChanged,
 }
 
 // ── Discovery ─────────────────────────────────────────────────────────────────
@@ -266,6 +271,31 @@ pub fn dev_push_subscription_error_on_mock(
     }
 }
 
+/// DEV-ONLY: push a `TopologyChanged` event into the held MockWire's
+/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock`
+/// — the integration test uses it to drive the v0.5 topology-event path
+/// (FRB stream delivery of `ChangeEventDto::TopologyChanged`) without a LAN.
+/// Returns an error if `dev_discover_mock` hasn't run yet. In release builds
+/// the body is a no-op that returns `CommandError::Sonos`.
+pub fn dev_push_topology_change_on_mock() -> Result<(), CommandError> {
+    #[cfg(debug_assertions)]
+    {
+        let guard = dev_mock_handle().lock().unwrap_or_else(|p| p.into_inner());
+        let mock = guard
+            .as_ref()
+            .ok_or_else(|| CommandError::NotFound("dev_discover_mock not called yet".into()))?;
+        mock.push_topology_change();
+        Ok(())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Err(CommandError::Sonos(
+            "dev_push_topology_change_on_mock is debug-only; not available in release builds"
+                .into(),
+        ))
+    }
+}
+
 /// Newtype wrapping `Arc<MockWire>` so it implements `Wire` and can be
 /// boxed into the `oto_app::slot()`. We can't `Box<Arc<MockWire>>`
 /// directly because the slot holds `Box<dyn Wire>` and `Arc<T>` itself
@@ -312,6 +342,12 @@ impl oto_core::Wire for MockWireArc {
     }
     fn subscribe_speakers(&self) -> Result<(), oto_core::WireError> {
         self.0.subscribe_speakers()
+    }
+    fn subscribe_topology(&self) -> Result<(), oto_core::WireError> {
+        self.0.subscribe_topology()
+    }
+    fn refresh_topology(&self) -> Result<oto_core::DiscoverySnapshot, oto_core::WireError> {
+        self.0.refresh_topology()
     }
     fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<oto_core::ChangeEvent>> {
         self.0.take_event_stream()

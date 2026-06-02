@@ -10,7 +10,7 @@ part 'api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `take_event_stream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
@@ -78,6 +78,15 @@ Future<void> devPushSubscriptionErrorOnMock({
   message: message,
 );
 
+/// DEV-ONLY: push a `TopologyChanged` event into the held MockWire's
+/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock`
+/// — the integration test uses it to drive the v0.5 topology-event path
+/// (FRB stream delivery of `ChangeEventDto::TopologyChanged`) without a LAN.
+/// Returns an error if `dev_discover_mock` hasn't run yet. In release builds
+/// the body is a no-op that returns `CommandError::Sonos`.
+Future<void> devPushTopologyChangeOnMock() =>
+    RustLib.instance.api.crateApiDevPushTopologyChangeOnMock();
+
 /// Subscribe to the unified v0.4 change-event stream. One call per app
 /// instance; the Dart `changeEventsProvider` is the consumer.
 /// Stream completes (`onDone` fires) when `discover()` replaces the
@@ -114,6 +123,13 @@ sealed class ChangeEventDto with _$ChangeEventDto {
   const factory ChangeEventDto.subscriptionRecovered({
     required String speakerId,
   }) = ChangeEventDto_SubscriptionRecovered;
+
+  /// Household topology changed (speakers regrouped). Payload-less: the
+  /// Dart `TopologyController` debounces then re-pulls topology on
+  /// receipt (v0.5 S1: invalidates `discoveryProvider` → full
+  /// re-discover; v0.6 may swap in a lighter SOAP refresh).
+  const factory ChangeEventDto.topologyChanged() =
+      ChangeEventDto_TopologyChanged;
 }
 
 @freezed

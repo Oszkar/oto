@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -44,6 +45,14 @@ pub struct SonosWire {
     /// lifetime of the wire. The `Receiver` is taken once via
     /// `take_event_stream` and then is `None` inside the option.
     events_state: Mutex<Option<EventsState>>,
+    /// v0.5 (S1): `true` once `subscribe_topology` has been called.
+    /// Read by `subscribe_speakers` when it builds the pump — when set,
+    /// the pump also registers a per-speaker `GroupMembership` watch so
+    /// regroups surface as `ChangeEvent::TopologyChanged`. MUST be set
+    /// before `subscribe_speakers` builds the pump (the SDK manager is
+    /// moved into the pump thread and can't take new watches after);
+    /// `discover_with` enforces this ordering.
+    topology_requested: AtomicBool,
 }
 
 struct EventsState {
@@ -66,6 +75,7 @@ impl SonosWire {
             speaker_to_coordinator: Mutex::new(HashMap::new()),
             id_to_name: Mutex::new(HashMap::new()),
             events_state: Mutex::new(None),
+            topology_requested: AtomicBool::new(false),
         }
     }
 
@@ -113,6 +123,7 @@ impl SonosWire {
             coord_to_group,
             speaker_to_coord,
             speaker_names: id_to_name,
+            watch_topology: self.topology_requested.load(Ordering::SeqCst),
         })
     }
 
@@ -361,6 +372,75 @@ impl Wire for SonosWire {
         control::soap_speaker_state(&self.client, speaker_addr, transport_addr)
     }
 
+    fn subscribe_topology(&self) -> Result<(), WireError> {
+        // Record intent to watch ZoneGroupTopology. The actual SDK
+        // `GroupMembership` watch is registered when `subscribe_speakers`
+        // builds the pump (the SDK manager lives on the pump thread, so
+        // all watches must be registered at spawn time). MUST therefore be
+        // called BEFORE `subscribe_speakers` — `discover_with` enforces the
+        // ordering. Requires discover() to have populated the caches.
+        if self
+            .id_to_addr
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_empty()
+        {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
+        // If the pump is already running, the flag is read-only — a watch
+        // can only be registered at spawn time. A repeat call after the
+        // flag was already set (topology requested before spawn) is a
+        // harmless idempotent `Ok`. But if the pump spawned WITHOUT the
+        // flag, topology events can never start: fail fast on that misuse
+        // rather than returning a silent, misleading `Ok`.
+        let pump_running = self
+            .events_state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_some();
+        if pump_running && !self.topology_requested.load(Ordering::SeqCst) {
+            return Err(WireError::AlreadySubscribed);
+        }
+        self.topology_requested.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+        // Re-pull authoritative topology via GetZoneGroupState SOAP — no
+        // SSDP. Any reachable speaker returns the whole household
+        // (PerNetwork), so try cached IPs until one answers; this handles
+        // the case where the first cached speaker has gone to sleep.
+        let ips: Vec<String> = {
+            let guard = self.id_to_addr.lock().unwrap_or_else(|p| p.into_inner());
+            guard.values().map(|addr| addr.ip().to_string()).collect()
+        };
+        if ips.is_empty() {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
+        let mut last_err = WireError::NoDevicesFound;
+        let mut groups = None;
+        for ip in &ips {
+            match crate::control::fetch_zone_group_state(&self.client, ip) {
+                Ok(g) => {
+                    groups = Some(g);
+                    break;
+                }
+                Err(e) => last_err = e,
+            }
+        }
+        // On total failure, leave every cache untouched and surface the
+        // last error — the caller keeps its previous topology view.
+        let groups = groups.ok_or(last_err)?;
+        let snapshot = to_snapshot(groups);
+        if snapshot.speakers.is_empty() {
+            return Err(WireError::Backend(
+                "refresh_topology: ZoneGroupTopology yielded 0 usable speakers".into(),
+            ));
+        }
+        self.populate_caches(&snapshot);
+        Ok(snapshot)
+    }
+
     fn subscribe_speakers(&self) -> Result<(), WireError> {
         // v0.4 Slice 3: wire up the sonos-sdk-state pump thread. One
         // shot per wire — repeated calls error with `AlreadySubscribed`.
@@ -410,6 +490,51 @@ mod tests {
         assert_eq!(
             extract_ip("http://10.83.0.10:1400/xml/device_description.xml"),
             Some("10.83.0.10".to_string())
+        );
+    }
+
+    /// `refresh_topology` before any `discover()` has populated a cached IP
+    /// must fail fast with `NoSpeakersDiscovered` — it has no speaker to
+    /// issue `GetZoneGroupState` against. (The "network error leaves caches
+    /// unchanged" property is structural: `populate_caches` runs only after
+    /// a successful `fetch_zone_group_state`, behind the `?`.)
+    #[test]
+    fn refresh_topology_before_discover_errors() {
+        let wire = SonosWire::new();
+        assert_eq!(
+            wire.refresh_topology(),
+            Err(WireError::NoSpeakersDiscovered)
+        );
+    }
+
+    /// `subscribe_topology` before discovery must reject (no cached speakers
+    /// to watch); after `populate_caches` it succeeds and is idempotent.
+    #[test]
+    fn subscribe_topology_gate_and_idempotency() {
+        let wire = SonosWire::new();
+        assert_eq!(
+            wire.subscribe_topology(),
+            Err(WireError::NoSpeakersDiscovered),
+            "must reject before discovery populates caches"
+        );
+        let snap = to_snapshot(
+            sonos_api::services::zone_group_topology::parse_zone_group_state_xml(
+                topology_tests::GROUPED_XML,
+            )
+            .expect("parse"),
+        );
+        wire.populate_caches(&snap);
+        assert!(
+            wire.subscribe_topology().is_ok(),
+            "ok after caches populated"
+        );
+        assert!(
+            wire.subscribe_topology().is_ok(),
+            "idempotent — second call must not error"
+        );
+        assert!(
+            wire.topology_requested.load(Ordering::SeqCst),
+            "flag set so the pump registers GroupMembership watches"
         );
     }
 

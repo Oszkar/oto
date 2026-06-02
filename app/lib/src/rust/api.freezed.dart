@@ -55,7 +55,7 @@ extension ChangeEventDtoPatterns on ChangeEventDto {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_Mute value)?  mute,TResult Function( ChangeEventDto_Playback value)?  playback,TResult Function( ChangeEventDto_Track value)?  track,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_Mute value)?  mute,TResult Function( ChangeEventDto_Playback value)?  playback,TResult Function( ChangeEventDto_Track value)?  track,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,TResult Function( ChangeEventDto_TopologyChanged value)?  topologyChanged,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
@@ -64,7 +64,8 @@ return mute(_that);case ChangeEventDto_Playback() when playback != null:
 return playback(_that);case ChangeEventDto_Track() when track != null:
 return track(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
-return subscriptionRecovered(_that);case _:
+return subscriptionRecovered(_that);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
+return topologyChanged(_that);case _:
   return orElse();
 
 }
@@ -82,7 +83,7 @@ return subscriptionRecovered(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_Mute value)  mute,required TResult Function( ChangeEventDto_Playback value)  playback,required TResult Function( ChangeEventDto_Track value)  track,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_Mute value)  mute,required TResult Function( ChangeEventDto_Playback value)  playback,required TResult Function( ChangeEventDto_Track value)  track,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,required TResult Function( ChangeEventDto_TopologyChanged value)  topologyChanged,}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume():
@@ -91,7 +92,8 @@ return mute(_that);case ChangeEventDto_Playback():
 return playback(_that);case ChangeEventDto_Track():
 return track(_that);case ChangeEventDto_SubscriptionError():
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered():
-return subscriptionRecovered(_that);}
+return subscriptionRecovered(_that);case ChangeEventDto_TopologyChanged():
+return topologyChanged(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -105,7 +107,7 @@ return subscriptionRecovered(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_Mute value)?  mute,TResult? Function( ChangeEventDto_Playback value)?  playback,TResult? Function( ChangeEventDto_Track value)?  track,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_Mute value)?  mute,TResult? Function( ChangeEventDto_Playback value)?  playback,TResult? Function( ChangeEventDto_Track value)?  track,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,TResult? Function( ChangeEventDto_TopologyChanged value)?  topologyChanged,}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
@@ -114,7 +116,8 @@ return mute(_that);case ChangeEventDto_Playback() when playback != null:
 return playback(_that);case ChangeEventDto_Track() when track != null:
 return track(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
-return subscriptionRecovered(_that);case _:
+return subscriptionRecovered(_that);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
+return topologyChanged(_that);case _:
   return null;
 
 }
@@ -131,7 +134,7 @@ return subscriptionRecovered(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  bool muted)?  mute,TResult Function( String groupId,  PlaybackStateDto state)?  playback,TResult Function( String groupId,  TrackDto track)?  track,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  bool muted)?  mute,TResult Function( String groupId,  PlaybackStateDto state)?  playback,TResult Function( String groupId,  TrackDto track)?  track,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,TResult Function()?  topologyChanged,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
 return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute() when mute != null:
@@ -139,7 +142,8 @@ return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback() when pla
 return playback(_that.groupId,_that.state);case ChangeEventDto_Track() when track != null:
 return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
-return subscriptionRecovered(_that.speakerId);case _:
+return subscriptionRecovered(_that.speakerId);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
+return topologyChanged();case _:
   return orElse();
 
 }
@@ -157,7 +161,7 @@ return subscriptionRecovered(_that.speakerId);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  bool muted)  mute,required TResult Function( String groupId,  PlaybackStateDto state)  playback,required TResult Function( String groupId,  TrackDto track)  track,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  bool muted)  mute,required TResult Function( String groupId,  PlaybackStateDto state)  playback,required TResult Function( String groupId,  TrackDto track)  track,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,required TResult Function()  topologyChanged,}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume():
 return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute():
@@ -165,7 +169,8 @@ return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback():
 return playback(_that.groupId,_that.state);case ChangeEventDto_Track():
 return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError():
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered():
-return subscriptionRecovered(_that.speakerId);}
+return subscriptionRecovered(_that.speakerId);case ChangeEventDto_TopologyChanged():
+return topologyChanged();}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -179,7 +184,7 @@ return subscriptionRecovered(_that.speakerId);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  bool muted)?  mute,TResult? Function( String groupId,  PlaybackStateDto state)?  playback,TResult? Function( String groupId,  TrackDto track)?  track,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  bool muted)?  mute,TResult? Function( String groupId,  PlaybackStateDto state)?  playback,TResult? Function( String groupId,  TrackDto track)?  track,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,TResult? Function()?  topologyChanged,}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
 return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute() when mute != null:
@@ -187,7 +192,8 @@ return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback() when pla
 return playback(_that.groupId,_that.state);case ChangeEventDto_Track() when track != null:
 return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
-return subscriptionRecovered(_that.speakerId);case _:
+return subscriptionRecovered(_that.speakerId);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
+return topologyChanged();case _:
   return null;
 
 }
@@ -600,6 +606,38 @@ as String,
 
 
 }
+
+/// @nodoc
+
+
+class ChangeEventDto_TopologyChanged extends ChangeEventDto {
+  const ChangeEventDto_TopologyChanged(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_TopologyChanged);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'ChangeEventDto.topologyChanged()';
+}
+
+
+}
+
+
+
 
 /// @nodoc
 mixin _$CommandError {

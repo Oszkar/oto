@@ -127,6 +127,13 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let wire = make();
     let snapshot = wire.discover()?;
+    // v0.5 (S1): register topology-event interest BEFORE subscribe_speakers.
+    // subscribe_speakers builds the event pump and (for SonosWire) the SDK
+    // manager moves into the pump thread, so the GroupMembership watch must
+    // be requested first — subscribe_speakers reads the flag when it spawns
+    // the pump. Idempotent on the wire; a logic-bug error here (discover()
+    // just succeeded) propagates as a discovery failure.
+    wire.subscribe_topology()?;
     // v0.4: activate the subscription before installing the wire so
     // `take_event_stream` is callable as soon as the slot is replaced.
     // A NoSpeakersDiscovered here would be a logic bug (discover()
@@ -455,6 +462,51 @@ mod tests {
     /// harmless under `cargo nextest` (a separate process per test).
     static TEST_SERIAL: Mutex<()> = Mutex::new(());
 
+    /// Test-only `Wire` that wraps `Arc<MockWire>` so a test can keep a
+    /// reference to the mock after `discover_with` boxes it into the slot,
+    /// then introspect it (e.g. `topology_subscribed()`). Mirrors the
+    /// `MockWireArc` pattern in `native/src/api.rs`'s dev seam.
+    struct ArcWire(std::sync::Arc<MockWire>);
+
+    impl Wire for ArcWire {
+        fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
+            self.0.discover()
+        }
+        fn play(&self, g: &GroupId) -> Result<(), WireError> {
+            self.0.play(g)
+        }
+        fn pause(&self, g: &GroupId) -> Result<(), WireError> {
+            self.0.pause(g)
+        }
+        fn next(&self, g: &GroupId) -> Result<(), WireError> {
+            self.0.next(g)
+        }
+        fn previous(&self, g: &GroupId) -> Result<(), WireError> {
+            self.0.previous(g)
+        }
+        fn set_volume(&self, s: &SpeakerId, v: Volume) -> Result<(), WireError> {
+            self.0.set_volume(s, v)
+        }
+        fn set_mute(&self, s: &SpeakerId, m: bool) -> Result<(), WireError> {
+            self.0.set_mute(s, m)
+        }
+        fn speaker_state(&self, s: &SpeakerId) -> Result<SpeakerState, WireError> {
+            self.0.speaker_state(s)
+        }
+        fn subscribe_speakers(&self) -> Result<(), WireError> {
+            self.0.subscribe_speakers()
+        }
+        fn subscribe_topology(&self) -> Result<(), WireError> {
+            self.0.subscribe_topology()
+        }
+        fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+            self.0.refresh_topology()
+        }
+        fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
+            self.0.take_event_stream()
+        }
+    }
+
     /// Comprehensive slot test:
     ///
     /// 1. Pre-discover routing → NotFound.
@@ -615,6 +667,29 @@ mod tests {
         assert!(
             volume_seeds >= 3,
             "subscribe_speakers must emit ≥3 Volume seeds for the 3-speaker fixture; got {volume_seeds} (total seeds: {total_seeds})"
+        );
+    }
+
+    /// v0.5 (S1): `discover_with` must auto-invoke `subscribe_topology` so
+    /// the topology-event watch is active without the caller driving it.
+    /// The `MockWire::topology_subscribed()` introspection confirms the
+    /// call happened. (Ordering — topology before speakers — is enforced
+    /// at the wire layer; here we only assert it was invoked.)
+    #[test]
+    fn discover_with_auto_invokes_subscribe_topology() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        clear_slot();
+
+        // Hold an Arc to the mock so we can introspect it after install.
+        let mock = std::sync::Arc::new(MockWire::default());
+        let mock_probe = std::sync::Arc::clone(&mock);
+        discover_with(move || Box::new(ArcWire(mock))).expect("discover ok");
+        assert!(
+            mock_probe.topology_subscribed(),
+            "discover_with must call subscribe_topology on the installed wire"
         );
     }
 

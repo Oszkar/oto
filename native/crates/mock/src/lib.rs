@@ -38,6 +38,9 @@ struct Model {
     tx: Option<Sender<ChangeEvent>>,
     /// Receiver half — taken once via `take_event_stream`.
     rx: Option<Receiver<ChangeEvent>>,
+    /// `true` after `subscribe_topology` succeeds. Idempotent gate: subsequent
+    /// calls remain `Ok(())` regardless of this flag.
+    topology_subscribed: bool,
 }
 
 /// Volume every speaker is seeded at. Shared by `Model::seeded` and the
@@ -52,6 +55,7 @@ impl Model {
             member_to_coord: HashMap::new(),
             tx: None,
             rx: None,
+            topology_subscribed: false,
         }
     }
 
@@ -87,6 +91,7 @@ impl Model {
             member_to_coord,
             tx: None,
             rx: None,
+            topology_subscribed: false,
         }
     }
 }
@@ -202,6 +207,46 @@ impl MockWire {
             let _ = tx.send(event);
         }
     }
+
+    /// Convenience seam: push a `TopologyChanged` event as if a real
+    /// GENA NOTIFY arrived. No-op if no pump is active.
+    pub fn push_topology_change(&self) {
+        self.push_event(ChangeEvent::TopologyChanged);
+    }
+
+    /// Returns `true` if `subscribe_topology` has been called successfully.
+    /// Test-only introspection — confirms `discover_with` auto-subscribes.
+    pub fn topology_subscribed(&self) -> bool {
+        lock!(self).topology_subscribed
+    }
+
+    /// Shared `next`/`previous` body. On real Sonos a skip triggers an
+    /// AVTransport NOTIFY (track change, possibly a transitional state),
+    /// so the mock mirrors that by emitting a per-group `Playback` event
+    /// carrying the coordinator's current cached state — closing the
+    /// silent-no-op gap (v0.4 review follow-up). The skip itself doesn't
+    /// model a queue, so the state value is the current one (no fabricated
+    /// metadata); the point is that a skip is observable on the stream.
+    fn skip(&self, group: &GroupId) -> Result<(), WireError> {
+        let guard = lock!(self);
+        let coord = guard
+            .coords
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        let state = guard
+            .speakers
+            .get(&coord)
+            .and_then(|s| s.transport.as_ref().map(|t| t.state))
+            .unwrap_or(PlaybackState::Stopped);
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::Playback {
+                group: group.clone(),
+                state,
+            });
+        }
+        Ok(())
+    }
 }
 
 impl Wire for MockWire {
@@ -276,21 +321,11 @@ impl Wire for MockWire {
     }
 
     fn next(&self, group: &GroupId) -> Result<(), WireError> {
-        let guard = lock!(self);
-        guard
-            .coords
-            .get(group)
-            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
-        Ok(())
+        self.skip(group)
     }
 
     fn previous(&self, group: &GroupId) -> Result<(), WireError> {
-        let guard = lock!(self);
-        guard
-            .coords
-            .get(group)
-            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
-        Ok(())
+        self.skip(group)
     }
 
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
@@ -423,6 +458,29 @@ impl Wire for MockWire {
         guard.tx = Some(tx);
         guard.rx = Some(rx);
         Ok(())
+    }
+
+    fn subscribe_topology(&self) -> Result<(), WireError> {
+        if !self.discovered.load(Ordering::SeqCst) {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
+        let mut guard = lock!(self);
+        // Mirror the SonosWire contract: must be called before the pump
+        // (here, `subscribe_speakers` sets `tx`). Idempotent before the
+        // pump; once the pump is running, `Ok` only if topology was already
+        // requested, else `AlreadySubscribed` (fail fast — the watch can no
+        // longer be registered).
+        if guard.tx.is_some() && !guard.topology_subscribed {
+            return Err(WireError::AlreadySubscribed);
+        }
+        guard.topology_subscribed = true;
+        Ok(())
+    }
+
+    fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+        // Return the same snapshot `discover()` would return. The mock
+        // has no post-discover mutation, so the clone is always "fresh".
+        self.outcome.clone()
     }
 
     fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
@@ -752,6 +810,44 @@ mod tests {
     }
 
     #[test]
+    fn next_emits_playback_event() {
+        // v0.4 review follow-up: a skip must be observable on the event
+        // stream (mirrors the real AVTransport NOTIFY), not a silent no-op.
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_KITCHEN:1");
+        w.next(&g).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Playback { group, .. } => assert_eq!(group, g),
+            other => panic!("expected Playback event from next, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn previous_emits_playback_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_OFFICE:0");
+        w.previous(&g).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::Playback { group, .. } => assert_eq!(group, g),
+            other => panic!("expected Playback event from previous, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn push_event_surfaces_arbitrary_event() {
         let w = MockWire::default();
         w.discover().unwrap();
@@ -776,5 +872,83 @@ mod tests {
         w.subscribe_speakers().unwrap();
         assert!(w.take_event_stream().is_some());
         assert!(w.take_event_stream().is_none(), "second take returns None");
+    }
+
+    // ── v0.5 topology surface ─────────────────────────────────────────────
+
+    #[test]
+    fn subscribe_topology_errors_without_discover() {
+        let w = MockWire::default();
+        assert_eq!(w.subscribe_topology(), Err(WireError::NoSpeakersDiscovered));
+    }
+
+    #[test]
+    fn subscribe_topology_ok_after_discover() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        assert!(w.subscribe_topology().is_ok());
+        assert!(w.topology_subscribed(), "flag set after subscribe");
+    }
+
+    #[test]
+    fn subscribe_topology_is_idempotent() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        assert!(w.subscribe_topology().is_ok());
+        assert!(w.subscribe_topology().is_ok(), "second call must not error");
+    }
+
+    #[test]
+    fn subscribe_topology_after_speakers_without_prior_request_errors() {
+        // Misuse: subscribe_speakers ran first (pump active), topology was
+        // never requested → the watch can't start, so fail fast.
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        assert_eq!(w.subscribe_topology(), Err(WireError::AlreadySubscribed));
+    }
+
+    #[test]
+    fn subscribe_topology_then_speakers_then_repeat_is_ok() {
+        // Correct order: topology requested before the pump. A redundant
+        // post-pump call is idempotent Ok (the watch is already active).
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_topology().unwrap();
+        w.subscribe_speakers().unwrap();
+        assert!(
+            w.subscribe_topology().is_ok(),
+            "repeat after pump is Ok when topology was already requested"
+        );
+    }
+
+    #[test]
+    fn refresh_topology_returns_fixture_snapshot() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        let snap = w.refresh_topology().unwrap();
+        assert_eq!(snap.speakers.len(), 3);
+        assert_eq!(snap.groups.len(), 2);
+    }
+
+    #[test]
+    fn refresh_topology_errors_on_failing_mock() {
+        let w = MockWire::failing(WireError::NoDevicesFound);
+        assert_eq!(w.refresh_topology(), Err(WireError::NoDevicesFound));
+    }
+
+    #[test]
+    fn push_topology_change_delivers_event() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        w.push_topology_change();
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100))
+                .unwrap(),
+            ChangeEvent::TopologyChanged
+        ));
     }
 }

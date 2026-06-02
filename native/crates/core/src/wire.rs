@@ -47,6 +47,33 @@ pub trait Wire {
     /// `ChangeEvent::SubscriptionError`, not via this `Result`.
     fn subscribe_speakers(&self) -> Result<(), WireError>;
 
+    /// Register v0.5 topology-event interest (ZoneGroupTopology /
+    /// `GroupMembership`) for all currently-known speakers. Emits
+    /// `ChangeEvent::TopologyChanged` on the unified stream when the
+    /// household is regrouped.
+    ///
+    /// **Ordering — must be called BEFORE `subscribe_speakers`.** The
+    /// topology watch is registered when `subscribe_speakers` spawns the
+    /// event pump, so this call only records intent; calling it after the
+    /// pump is running is too late. `discover_with` enforces the ordering
+    /// (it calls `subscribe_topology` then `subscribe_speakers`).
+    ///
+    /// Requires a prior successful `discover()` (else
+    /// `NoSpeakersDiscovered`). Idempotent while the pump is not yet
+    /// running: repeated pre-`subscribe_speakers` calls return `Ok`. Once
+    /// the pump is running it returns `Ok` if topology was already
+    /// requested (the watch is active), but `AlreadySubscribed` if it was
+    /// not — failing fast on the misuse rather than silently no-op'ing.
+    fn subscribe_topology(&self) -> Result<(), WireError>;
+
+    /// Re-fetch the current topology via `GetZoneGroupState` SOAP
+    /// against a cached speaker IP — no SSDP. Returns a fresh
+    /// `DiscoverySnapshot`. Network errors leave all existing caches
+    /// unchanged.
+    ///
+    /// Requires a prior successful `discover()` to have a cached IP.
+    fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError>;
+
     /// Take the unified event-stream receiver. Returns `None` if
     /// already taken or if no `subscribe_*` call has activated the
     /// pump yet. May be called before or after `subscribe_speakers`;

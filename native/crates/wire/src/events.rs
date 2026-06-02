@@ -56,6 +56,12 @@ pub(crate) struct PumpInputs {
     /// Friendly room names per speaker, used only to build the
     /// `sonos_discovery::Device` records the SDK needs in `add_devices`.
     pub(crate) speaker_names: HashMap<SpeakerId, String>,
+    /// v0.5 (S1): when `true`, also register a per-speaker
+    /// `GroupMembership` watch so regroups surface as
+    /// `ChangeEvent::TopologyChanged`. Set from
+    /// `SonosWire::topology_requested` (i.e. whether `subscribe_topology`
+    /// ran before the pump was built).
+    pub(crate) watch_topology: bool,
 }
 
 /// Owns the pump thread + the shared stop flag.
@@ -336,7 +342,7 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
 /// failure manifests as the speaker's Volume/Mute/Playback events
 /// simply never arriving (and the UI shows the last-known value).
 fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
-    use sonos_state::{CurrentTrack, Mute, PlaybackState, Volume};
+    use sonos_state::{CurrentTrack, GroupMembership, Mute, PlaybackState, Volume};
 
     let sdk_id = |sid: &SpeakerId| sonos_state::SpeakerId::new(sid.as_str());
 
@@ -357,6 +363,15 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
         if inputs.coord_to_group.contains_key(sid) {
             let _ = manager.watch_property_with_subscription::<PlaybackState>(&sdk_sid);
             let _ = manager.watch_property_with_subscription::<CurrentTrack>(&sdk_sid);
+        }
+
+        // v0.5 (S1): ZoneGroupTopology / GroupMembership is `Scope::Speaker`
+        // (P0c finding, sonos-notes § "Topology change events") — watch it
+        // on EVERY speaker, not just coordinators. A single regroup fires
+        // `group_membership` on each affected speaker; the downstream
+        // Dart `TopologyController` debounces + re-pulls once.
+        if inputs.watch_topology {
+            let _ = manager.watch_property_with_subscription::<GroupMembership>(&sdk_sid);
         }
     }
 
@@ -457,9 +472,18 @@ fn map_upstream_event(
                 track: map_current_track(t),
             })
         }
+        // v0.5 (S1): ZoneGroupTopology change. The SDK emits one
+        // `group_membership` event per affected speaker on a regroup
+        // (P0c finding). It carries no usable payload at this layer —
+        // the authoritative topology is re-pulled via `refresh_topology`
+        // SOAP downstream — so this maps to the payload-less
+        // `TopologyChanged`. Emitted from EVERY speaker (not
+        // coordinator-filtered like AVTransport): the per-speaker fan-out
+        // is deduped by the Dart `TopologyController`'s debounce.
+        "group_membership" => Some(ChangeEvent::TopologyChanged),
         // Any other property key (e.g. "position" if some future code
-        // path registers it; topology keys in v0.5) is silently
-        // dropped here. Document explicitly so the silence is intentional.
+        // path registers it) is silently dropped here. Document
+        // explicitly so the silence is intentional.
         _ => None,
     }
 }
@@ -720,6 +744,7 @@ mod tests {
             coord_to_group: HashMap::new(),
             speaker_to_coord: HashMap::new(),
             speaker_names: HashMap::new(),
+            watch_topology: false,
         };
         let err = EventPump::spawn(inputs).err().expect("must error");
         assert!(matches!(err, WireError::NoSpeakersDiscovered));
@@ -761,6 +786,7 @@ mod tests {
             coord_to_group,
             speaker_to_coord,
             speaker_names,
+            watch_topology: false,
         }
     }
 
@@ -792,6 +818,25 @@ mod tests {
             std::time::Duration::from_secs(5),
             || {
                 let (pump, _rx) = EventPump::spawn(fake_inputs_one_speaker()).expect("spawn ok");
+                drop(pump);
+            },
+        );
+    }
+
+    #[test]
+    fn pump_with_topology_watch_constructs_and_drops() {
+        // v0.5 (S1): when watch_topology is set, the pump also registers a
+        // per-speaker GroupMembership watch. Verify that path constructs +
+        // tears down cleanly (no hardware; the SDK only binds its local
+        // callback port). Guards against a regression where the extra watch
+        // registration deadlocks or panics on spawn/drop.
+        let mut inputs = fake_inputs_one_speaker();
+        inputs.watch_topology = true;
+        run_with_deadline(
+            "EventPump::spawn(topology) + drop",
+            std::time::Duration::from_secs(5),
+            move || {
+                let (pump, _rx) = EventPump::spawn(inputs).expect("spawn ok");
                 drop(pump);
             },
         );

@@ -163,6 +163,28 @@ void main() {
     unawaited(h.sub.cancel());
   });
 
+  test('v0.5 S1: TopologyChanged is delivered end-to-end over the FRB stream', () async {
+    // The FRB `subscribe_change_events` stream-loop has no Rust-level CI
+    // test (it blocks on recv()); this integration test is the only
+    // automated coverage that the loop forwards a variant to Dart. v0.5
+    // adds the payload-less TopologyChanged variant — assert it crosses
+    // the bridge unchanged, driven by the dev seam (debug-only).
+    await api.devDiscoverMock();
+    final h = _subscribeAndCollect();
+    await h.seedComplete.future.timeout(const Duration(seconds: 5));
+    h.events.clear();
+
+    await api.devPushTopologyChangeOnMock();
+    await _waitFor(() => h.events.isNotEmpty,
+        message: 'no TopologyChanged event arrived after devPushTopologyChangeOnMock');
+
+    expect(h.events, hasLength(1));
+    expect(h.events.first, isA<api.ChangeEventDto_TopologyChanged>(),
+        reason: 'the payload-less TopologyChanged variant must cross the FRB stream');
+
+    unawaited(h.sub.cancel());
+  });
+
   test('v0.4 Slice 2: play(group) emits per-GROUP ChangeEventDto.Playback', () async {
     // Kitchen group is the multi-speaker fixture group (Kitchen +
     // Dining). The acceptance bar: the Playback event carries the
