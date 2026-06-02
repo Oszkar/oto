@@ -376,13 +376,9 @@ impl Wire for SonosWire {
         // Record intent to watch ZoneGroupTopology. The actual SDK
         // `GroupMembership` watch is registered when `subscribe_speakers`
         // builds the pump (the SDK manager lives on the pump thread, so
-        // all watches must be registered at spawn time). Idempotent:
-        // repeated calls just re-assert the flag.
-        //
-        // Requires discover() to have populated the caches — same gate as
-        // the pump. Calling this before `subscribe_speakers` (per
-        // `discover_with`'s ordering) means the flag is already set when
-        // the pump reads it via `snapshot_for_pump`.
+        // all watches must be registered at spawn time). MUST therefore be
+        // called BEFORE `subscribe_speakers` — `discover_with` enforces the
+        // ordering. Requires discover() to have populated the caches.
         if self
             .id_to_addr
             .lock()
@@ -390,6 +386,20 @@ impl Wire for SonosWire {
             .is_empty()
         {
             return Err(WireError::NoSpeakersDiscovered);
+        }
+        // If the pump is already running, the flag is read-only — a watch
+        // can only be registered at spawn time. A repeat call after the
+        // flag was already set (topology requested before spawn) is a
+        // harmless idempotent `Ok`. But if the pump spawned WITHOUT the
+        // flag, topology events can never start: fail fast on that misuse
+        // rather than returning a silent, misleading `Ok`.
+        let pump_running = self
+            .events_state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_some();
+        if pump_running && !self.topology_requested.load(Ordering::SeqCst) {
+            return Err(WireError::AlreadySubscribed);
         }
         self.topology_requested.store(true, Ordering::SeqCst);
         Ok(())

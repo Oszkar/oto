@@ -464,8 +464,16 @@ impl Wire for MockWire {
         if !self.discovered.load(Ordering::SeqCst) {
             return Err(WireError::NoSpeakersDiscovered);
         }
-        // Idempotent: repeated calls after discovery are silent no-ops.
-        lock!(self).topology_subscribed = true;
+        let mut guard = lock!(self);
+        // Mirror the SonosWire contract: must be called before the pump
+        // (here, `subscribe_speakers` sets `tx`). Idempotent before the
+        // pump; once the pump is running, `Ok` only if topology was already
+        // requested, else `AlreadySubscribed` (fail fast — the watch can no
+        // longer be registered).
+        if guard.tx.is_some() && !guard.topology_subscribed {
+            return Err(WireError::AlreadySubscribed);
+        }
+        guard.topology_subscribed = true;
         Ok(())
     }
 
@@ -888,6 +896,30 @@ mod tests {
         w.discover().unwrap();
         assert!(w.subscribe_topology().is_ok());
         assert!(w.subscribe_topology().is_ok(), "second call must not error");
+    }
+
+    #[test]
+    fn subscribe_topology_after_speakers_without_prior_request_errors() {
+        // Misuse: subscribe_speakers ran first (pump active), topology was
+        // never requested → the watch can't start, so fail fast.
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        assert_eq!(w.subscribe_topology(), Err(WireError::AlreadySubscribed));
+    }
+
+    #[test]
+    fn subscribe_topology_then_speakers_then_repeat_is_ok() {
+        // Correct order: topology requested before the pump. A redundant
+        // post-pump call is idempotent Ok (the watch is already active).
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_topology().unwrap();
+        w.subscribe_speakers().unwrap();
+        assert!(
+            w.subscribe_topology().is_ok(),
+            "repeat after pump is Ok when topology was already requested"
+        );
     }
 
     #[test]

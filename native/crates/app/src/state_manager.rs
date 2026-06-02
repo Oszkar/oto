@@ -164,8 +164,9 @@ impl StateManager {
             }
             // SubscriptionError / SubscriptionRecovered / TopologyChanged
             // have no cache effect here — they're surface events. The Dart
-            // TopologyController handles TopologyChanged by calling
-            // refresh_topology(); the StateManager cache is flushed there.
+            // TopologyController reacts to TopologyChanged by re-pulling
+            // topology (v0.5 S1: a debounced full re-discover, which
+            // rebuilds this cache from scratch); nothing to apply here.
             ChangeEvent::SubscriptionError { .. }
             | ChangeEvent::SubscriptionRecovered { .. }
             | ChangeEvent::TopologyChanged => {}

@@ -42,8 +42,11 @@ pub enum ChangeEvent {
     /// being refreshed via the next NOTIFY.
     SubscriptionRecovered { speaker: SpeakerId },
     /// The household topology changed (speakers regrouped). Payload-less:
-    /// the Dart `TopologyController` re-fetches authoritative topology via
-    /// `refresh_topology()` SOAP on receipt. Added in v0.5 (S1).
+    /// the Dart layer re-pulls authoritative topology on receipt (the
+    /// mechanism is a Dart concern — v0.5 S1 uses a debounced full
+    /// re-discover; v0.6 may swap in a lighter refresh). The app-layer
+    /// cache applies this as a no-op — the re-pull drives the update.
+    /// Added in v0.5 (S1).
     TopologyChanged,
 }
 

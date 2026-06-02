@@ -101,7 +101,9 @@ pub enum ChangeEventDto {
         speaker_id: String,
     },
     /// Household topology changed (speakers regrouped). Payload-less: the
-    /// Dart `TopologyController` calls `refreshTopology()` on receipt.
+    /// Dart `TopologyController` debounces then re-pulls topology on
+    /// receipt (v0.5 S1: invalidates `discoveryProvider` → full
+    /// re-discover; v0.6 may swap in a lighter SOAP refresh).
     TopologyChanged,
 }
 
