@@ -289,6 +289,25 @@ fn to_snapshot(groups: Vec<ZoneGroupInfo>) -> DiscoverySnapshot {
     }
 }
 
+/// v0.5 S4: fill in `SpeakerIdentity.model` from each speaker's
+/// `device_description.xml` (ZGT carries no model — D1). Parallel,
+/// best-effort: a speaker whose fetch fails simply keeps `model = None`.
+/// Shared by `discover()` and `refresh_topology()` so both paths populate
+/// it consistently.
+fn populate_models(snapshot: &mut DiscoverySnapshot) {
+    let targets: Vec<(SpeakerId, IpAddr)> = snapshot
+        .speakers
+        .iter()
+        .map(|s| (s.id.clone(), s.ip))
+        .collect();
+    let models = crate::device_description::fetch_models_parallel(&targets);
+    for speaker in &mut snapshot.speakers {
+        if let Some(model) = models.get(&speaker.id) {
+            speaker.model = Some(model.clone());
+        }
+    }
+}
+
 impl Wire for SonosWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
         let locations = ssdp::discover_locations(SSDP_TIMEOUT)?;
@@ -325,7 +344,7 @@ impl Wire for SonosWire {
             )));
         }
         let groups = groups.ok_or(last_err)?;
-        let snapshot = to_snapshot(groups);
+        let mut snapshot = to_snapshot(groups);
         if snapshot.speakers.is_empty() {
             return Err(WireError::Backend(
                 "ZoneGroupTopology yielded 0 usable speakers (all locations unparseable — anomalous)"
@@ -333,6 +352,10 @@ impl Wire for SonosWire {
             ));
         }
         self.populate_caches(&snapshot);
+        // v0.5 S4: repopulate `model` (absent from ZGT — D1) via parallel
+        // device_description.xml fetches. Best-effort: failures leave
+        // `model = None` and don't fail discovery.
+        populate_models(&mut snapshot);
         Ok(snapshot)
     }
 
@@ -431,13 +454,16 @@ impl Wire for SonosWire {
         // On total failure, leave every cache untouched and surface the
         // last error — the caller keeps its previous topology view.
         let groups = groups.ok_or(last_err)?;
-        let snapshot = to_snapshot(groups);
+        let mut snapshot = to_snapshot(groups);
         if snapshot.speakers.is_empty() {
             return Err(WireError::Backend(
                 "refresh_topology: ZoneGroupTopology yielded 0 usable speakers".into(),
             ));
         }
         self.populate_caches(&snapshot);
+        // v0.5 S4: same model repopulate as discover() — keep the refresh
+        // path consistent so a regroup re-pull doesn't drop `model`.
+        populate_models(&mut snapshot);
         Ok(snapshot)
     }
 
