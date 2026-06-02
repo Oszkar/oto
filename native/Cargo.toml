@@ -56,6 +56,17 @@ quick-xml = "=0.31.0"
 # §7-approved (review follow-up). Contained to oto-wire.
 socket2 = "0.5"
 
+# Blocking, runtime-free HTTP client for oto-wire's v0.5 model repopulate
+# (device_description.rs): fetches `device_description.xml` for the
+# `<modelName>`. Sonos's embedded server replies chunked even to an
+# HTTP/1.0 request, which a raw TcpStream mis-frames (sonos-notes § SSDP
+# "HTTP fetch quirk"); ureq handles chunked + bounded timeouts with a sync
+# API matching the SOAP path. ALREADY in the locked graph (transitive via
+# sonos-api's SOAP client / webpki-roots — see deny.toml); this only adds a
+# direct edge to the already-resolved version. §7-approved (2026-05-29).
+# Exact pin so no second ureq major enters the build.
+ureq = "=2.12.1"
+
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.
 [package]

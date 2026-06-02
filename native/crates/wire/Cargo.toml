@@ -43,9 +43,15 @@ socket2 = { workspace = true }
 # responder bound to a later socket. mio::Poll waits collectively, so a
 # quiet socket cannot consume any of the deadline. Win+Android+*nix.
 mio = { version = "1.2", features = ["net", "os-poll"] }
-# DIDL-Lite XML parser for track metadata (parse_track_didl). Already in
-# the locked graph via sonos-api (transitive) — unify, don't bump.
+# DIDL-Lite XML parser for track metadata (parse_track_didl). Also parses
+# `<modelName>` out of device_description.xml in device_description.rs
+# (v0.5 model repopulate). Already in the locked graph via sonos-api
+# (transitive) — unify, don't bump.
 quick-xml = { workspace = true }
+# Blocking HTTP client for the v0.5 model repopulate — fetches each
+# speaker's device_description.xml for `<modelName>`. Already in the locked
+# graph (transitive via sonos-api); direct edge only. See workspace dep.
+ureq = { workspace = true }
 
 # v0.4 Path A reactive event stack. `oto-wire` is the only crate that
 # touches the Sonos SDK family (AGENTS.md §4). Pump thread in
