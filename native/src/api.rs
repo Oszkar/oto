@@ -382,11 +382,27 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // listening on this sink.
     let gen = oto_app::current_generation();
     loop {
-        let event = match rx.recv() {
+        // Drain TWO sources onto the one FRB stream (v0.5 S2):
+        //   1. the wire's v0.4 channel (`rx`) — property events from the
+        //      pump; its `Disconnected` is the teardown signal (wire
+        //      replaced on discover() → stream completes → Dart rebuilds),
+        //   2. oto-app's sibling bus — SubscriptionError/Recovered emitted
+        //      on command-dispatch health transitions.
+        // Block briefly on the wire channel (so teardown stays prompt),
+        // then poll the app bus on each idle tick. ~10 ms no-event latency
+        // is fine — events are user-paced. The app bus never disconnects
+        // (it's process-global), so only the wire channel drives exit.
+        let event = match rx.recv_timeout(std::time::Duration::from_millis(10)) {
             Ok(e) => e,
-            // Sender dropped — wire was replaced (discover() ran).
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                match oto_app::try_recv_app_event() {
+                    Some(e) => e,
+                    None => continue,
+                }
+            }
+            // Wire's Sender dropped — wire was replaced (discover() ran).
             // Return cleanly; FRB stream completes; Dart rebuilds.
-            Err(_) => return,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         };
         oto_app::apply_event_at_generation(gen, &event);
         let dto = crate::map::to_change_event_dto(event);
