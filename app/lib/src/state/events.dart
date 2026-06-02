@@ -12,26 +12,6 @@ import 'discovery.dart';
 
 part 'events.g.dart';
 
-/// Single-consumer stream of ChangeEvents from Rust. Subscribes once
-/// per discovery cycle: when `discoveryProvider` yields a new value
-/// (success or error), this provider is invalidated and re-runs the
-/// FRB `subscribe_change_events` call against the current wire.
-///
-/// Per-speaker / per-group projections are added in Slice 2; for
-/// v0.4 baseline, downstream consumers `ref.watch(changeEventsProvider)`
-/// directly and filter client-side.
-///
-/// **keepAlive: true** (per /codex review on PR #43, finding P1 #1):
-/// the Rust consumer loop in `api.rs::subscribe_change_events` blocks
-/// indefinitely in `recv()` and only observes Dart cancellation on the
-/// next `sink.add(...)` attempt. With `keepAlive: false`, normal
-/// provider disposal (no widgets listening) could strand the Rust loop
-/// while it still holds the one-shot `take_event_stream()` receiver,
-/// making the wire unable to re-stream until rediscovery. Keeping the
-/// provider alive for the app lifetime avoids that whole class of bug;
-/// the provider is still invalidated and rebuilt when `discoveryProvider`
-/// changes (rediscovery), so the FRB stream restarts cleanly on wire
-/// replacement — the intended lifecycle boundary.
 /// The current wire generation, or `null` until the first successful
 /// discovery. `currentWireGeneration()` bumps only on a successful
 /// `discover_with`, so although this recomputes on every `discoveryProvider`
@@ -47,14 +27,28 @@ BigInt? wireGeneration(Ref ref) {
   return discovery.hasValue ? rust_api.currentWireGeneration() : null;
 }
 
+/// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
+/// **new wire** — keyed on [wireGenerationProvider], which only changes on a
+/// successful `discover_with`. A failed/loading re-discover does NOT rebuild
+/// this provider: `discover_with` keeps the old wire on failure, and its
+/// `take_event_stream` receiver is one-shot and can't be retaken, so
+/// re-subscribing then would strand events on a dead receiver (codex review
+/// #67-followup #2).
+///
+/// Downstream consumers `ref.watch(changeEventsProvider)` and filter
+/// client-side (Volume/Mute/Playback/Track/Subscription*/TopologyChanged).
+///
+/// **keepAlive: true** (per /codex review on PR #43, finding P1 #1): the
+/// Rust consumer loop in `api.rs::subscribe_change_events` blocks on
+/// `recv_timeout` and only observes Dart cancellation on the next
+/// `sink.add(...)`. With `keepAlive: false`, normal provider disposal (no
+/// widgets listening) could strand the Rust loop while it holds the
+/// one-shot receiver, making the wire unable to re-stream until rediscovery.
+/// Keeping it alive for the app lifetime avoids that class of bug; it still
+/// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
+/// wire replacement — the intended lifecycle boundary.
 @Riverpod(keepAlive: true)
 Stream<rust_api.ChangeEventDto> changeEvents(Ref ref) {
-  // Re-subscribe only when a NEW wire is installed — keyed on the wire
-  // generation, NOT raw discovery state. A failed re-discover keeps the old
-  // wire (discover_with retains it on failure), whose event receiver is
-  // one-shot and cannot be retaken; re-subscribing then would strand events
-  // on a dead receiver. Gating on the generation avoids that tear-down
-  // (codex review #67-followup #2).
   final generation = ref.watch(wireGenerationProvider);
   if (generation == null) {
     // No wire installed yet — nothing to subscribe to.
