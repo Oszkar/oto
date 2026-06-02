@@ -116,9 +116,11 @@ fn health_tracker() -> &'static HealthTracker {
 
 /// Observe a per-speaker command's result and emit a health-transition
 /// event onto the app bus if the speaker's `Healthy ↔ Errored` state flips.
+/// The event is stamped with the current wire generation so the FRB consumer
+/// can drop it if a rediscover has since replaced the wire (events.rs #3).
 fn observe_speaker_health<R>(speaker: &SpeakerId, result: &Result<R, WireError>) {
     if let Some(event) = health_tracker().observe(speaker, result) {
-        events::push(event);
+        events::push(state_manager().current_generation(), event);
     }
 }
 
@@ -495,8 +497,9 @@ fn clear_slot() {
     // S2: clear per-speaker health so a prior test's Errored mark doesn't
     // leak into the next test (same process under `cargo test`).
     health_tracker().reset_all();
-    // S2: drain any app-bus events a prior test pushed so they don't leak.
-    while events::try_recv_app_event().is_some() {}
+    // S2: drain any app-bus events a prior test pushed so they don't leak
+    // (gen-agnostic — clear() empties the channel regardless of stamp).
+    events::clear();
     // Drop any stranded test receiver so the next test starts clean.
     test_helpers::reset_rx();
 }
@@ -755,10 +758,13 @@ mod tests {
 
     // ── S2: SubscriptionError reactive emission ───────────────────────────
 
-    /// Drain every app-bus event currently queued (the S2 sibling channel).
+    /// Drain every app-bus event currently queued at the current generation
+    /// (the S2 sibling channel). Mirrors the FRB consumer, which drains with
+    /// the wire generation it captured at start.
     fn drain_app_events() -> Vec<ChangeEvent> {
+        let gen = current_generation();
         let mut out = Vec::new();
-        while let Some(e) = try_recv_app_event() {
+        while let Some(e) = try_recv_app_event(gen) {
             out.push(e);
         }
         out

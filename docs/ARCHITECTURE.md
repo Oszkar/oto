@@ -73,7 +73,7 @@ Consequences:
 
 **`speaker_state` addressing (D2).** Volume/mute are per-speaker (cached from `Volume` / `Mute` events); transport is per-group (cached from `Playback` / `Track` events at the group coordinator). The cache stores transport per `GroupId`; the read resolves speaker → group via the `StateManager`'s topology map (installed on every `discover_with`) → group transport cache. A solo speaker is its own coordinator, so the resolution degrades cleanly.
 
-**Topology refresh is one-shot.** Caches are populated only by `discover()`. App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`; a stale `GroupId` returns `WireError::NotFound`. Live topology-change events are v0.5 (v0.4 covers property events only — volume / mute / transport / track).
+**Topology refresh (v0.5 S1).** Caches are populated by `discover()` and re-populated by `refresh_topology()` (`GetZoneGroupState` SOAP, no SSDP). App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`; live `TopologyChanged` events now drive a refresh so the view follows a regroup automatically (the Dart layer re-discovers — Option A). A stale `GroupId` still returns `WireError::NotFound` as the fallback if an event is ever missed. (v0.4 covered property events only — volume / mute / transport / track.)
 
 **State-read shape (`speaker_state`).** `SpeakerState { volume: Option<Volume>, muted: Option<bool>, transport: Option<TransportState> }`. The signature is identical to v0.2/v0.3, but v0.4 swapped the backing source from SOAP-per-call to the `StateManager` event cache. `Option<T>` fields are now honest partial *cold-start*: a property is `None` until its first event lands in the cache (in practice, within the SUBSCRIBE NOTIFY seed phase ~1 s after `discover()`).
 
@@ -133,6 +133,18 @@ pub trait Wire {
     // receiver returned by `take_event_stream`.
     fn subscribe_speakers(&self) -> Result<(), WireError>;
     fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<ChangeEvent>>;
+
+    // v0.5 (S1) — topology events. `subscribe_topology` registers the
+    // per-speaker ZoneGroupTopology (`GroupMembership`) watch; it MUST be
+    // called BEFORE `subscribe_speakers` (the watch is registered at pump
+    // spawn), which `discover_with` enforces. A regroup surfaces as a
+    // payload-less `ChangeEvent::TopologyChanged`. `refresh_topology`
+    // re-pulls authoritative topology via `GetZoneGroupState` SOAP (no
+    // SSDP) — kept on the trait for the live test; v0.5's UI-refresh path
+    // is a full re-discover (Option A), so `refresh_topology` is not yet on
+    // the production hot path (v0.6 Option D).
+    fn subscribe_topology(&self) -> Result<(), WireError>;
+    fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError>;
 }
 ```
 
@@ -160,7 +172,12 @@ sequenceDiagram
     AP-->>U: ChangeEventDto (Stream)
 ```
 
-The Dart `subscribeChangeEventsProvider` (a Riverpod `StreamProvider`) depends on `discoveryProvider`, so a re-discovery deterministically tears down the OLD wire (sender drops → FRB consumer's `recv()` returns `Err` → stream completes) and the Dart layer rebuilds the consumer against the NEW wire. A generation counter on `StateManager` makes stale-OLD-wire applies after a mid-stream `discover_with` no-op against the freshly-cleared cache.
+The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when a NEW wire is installed — keyed on the **wire generation** (`current_wire_generation()`, bumped by `discover_with` on success only), not raw discovery state. A *failed* re-discover keeps the old wire (whose event receiver is one-shot and can't be retaken), so gating on the generation avoids tearing the live stream down onto a dead receiver. The same `StateManager` generation makes stale-OLD-wire cache applies after a mid-stream `discover_with` no-op against the freshly-cleared cache.
+
+**Live events (v0.5).** Two additions on the same single FRB stream:
+
+- **Topology events (S1).** The pump also registers a per-speaker `GroupMembership` watch (ZoneGroupTopology is a *service*, not a watchable property — the change surfaces via the speaker-scoped `GroupMembership` property; see [sonos-notes § Topology change events](sonos-notes.md#topology-change-events--how-regrouping-surfaces-p0c-finding-v05)). A regroup → payload-less `ChangeEvent::TopologyChanged`; the Dart `TopologyController` debounces 250 ms then re-discovers (Option A — a full rebuild, correct by construction; the lightweight SOAP `refresh_topology` fast-path is deferred to v0.6). Two pump-side guards make this safe: (1) the **first** `GroupMembership` per speaker is the subscribe *seed* and is suppressed — otherwise seed → re-discover → new pump → new seed would loop forever; (2) once a real regroup is seen the pump marks its (now-stale, frozen-at-spawn) coordinator→group routing **dirty** and drops group-addressed `Playback`/`Track` until the pump is rebuilt by re-discover. **v0.6 guard:** the lightweight `refresh_topology` must not ship until it rebuilds or atomically updates pump routing.
+- **Subscription health (S2).** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
 
 ## Scope
 

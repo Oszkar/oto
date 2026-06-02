@@ -60,26 +60,38 @@ fn parse_model_name(xml: &str) -> Option<String> {
     }
 }
 
-/// Fetch `<modelName>` for each `(speaker_id, ip)` in parallel (one scoped
-/// thread per speaker, so total latency ≈ the slowest single fetch, not the
-/// sum). Returns only the speakers whose fetch succeeded; the rest are
-/// absent (caller leaves their `model = None`). A panicking fetch thread is
-/// dropped, not propagated — one bad speaker can't fail discovery.
+/// Max concurrent fetches. A real household is a handful of speakers (one
+/// chunk = the old "all at once" behaviour, latency ≈ the slowest fetch).
+/// The cap bounds thread creation if a malformed/hostile ZoneGroupTopology
+/// ever yields an absurd member count (codex review #67-followup #7) — no
+/// silent truncation, just bounded concurrency across sequential chunks.
+const MAX_CONCURRENT_FETCHES: usize = 8;
+
+/// Fetch `<modelName>` for each `(speaker_id, ip)` in parallel, at most
+/// `MAX_CONCURRENT_FETCHES` at a time (scoped threads per chunk). Returns
+/// only the speakers whose fetch succeeded; the rest are absent (caller
+/// leaves their `model = None`). A panicking fetch thread is dropped, not
+/// propagated — one bad speaker can't fail discovery.
 pub(crate) fn fetch_models_parallel(targets: &[(SpeakerId, IpAddr)]) -> HashMap<SpeakerId, String> {
-    std::thread::scope(|scope| {
-        let handles: Vec<_> = targets
-            .iter()
-            .map(|(sid, ip)| {
-                let sid = sid.clone();
-                let ip = *ip;
-                scope.spawn(move || fetch_model(ip).map(|model| (sid, model)))
-            })
-            .collect();
-        handles
-            .into_iter()
-            .filter_map(|h| h.join().ok().flatten())
-            .collect()
-    })
+    let mut out = HashMap::new();
+    for chunk in targets.chunks(MAX_CONCURRENT_FETCHES) {
+        let batch: Vec<(SpeakerId, String)> = std::thread::scope(|scope| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|(sid, ip)| {
+                    let sid = sid.clone();
+                    let ip = *ip;
+                    scope.spawn(move || fetch_model(ip).map(|model| (sid, model)))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .filter_map(|h| h.join().ok().flatten())
+                .collect()
+        });
+        out.extend(batch);
+    }
+    out
 }
 
 #[cfg(test)]

@@ -397,16 +397,23 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         //
         // Drain the app bus FIRST, fully, every iteration — otherwise a
         // busy wire channel could starve app events indefinitely (review
-        // #65). The app bus never disconnects (it's process-global), so
-        // only the wire channel drives loop exit.
-        while let Some(event) = oto_app::try_recv_app_event() {
+        // #65). Drain at OUR generation so a stale event from an old wire
+        // is dropped, not forwarded onto this stream (review #67-followup
+        // #3). The app bus never disconnects (it's process-global), so only
+        // the wire channel drives loop exit.
+        while let Some(event) = oto_app::try_recv_app_event(gen) {
             if !emit(event) {
                 return;
             }
         }
-        // Then block briefly on the wire channel so teardown stays prompt
-        // and we loop back to re-drain the app bus at least every ~10 ms.
-        match rx.recv_timeout(std::time::Duration::from_millis(10)) {
+        // Then block on the wire channel with a coarse poll so an idle
+        // stream doesn't busy-wake (review #67-followup #6: a 10 ms poll
+        // span at 100 Hz when nothing's happening). 250 ms bounds both the
+        // app-bus re-drain cadence and teardown-detection latency — fine,
+        // app events are degraded-state flags, not real-time, and teardown
+        // is not latency-critical. When events flow the inner drains + the
+        // Ok arm keep the loop hot regardless.
+        match rx.recv_timeout(std::time::Duration::from_millis(250)) {
             Ok(event) => {
                 if !emit(event) {
                     return;
@@ -418,4 +425,15 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         }
     }
+}
+
+/// The current wire generation — bumped by `discover_with` on every
+/// **successful** wire install. The Dart event-stream provider keys its
+/// re-subscription on this so a FAILED re-discover (which does not bump it)
+/// doesn't tear down the live stream into a one-shot, un-retakeable receiver
+/// (review #67-followup #2). `#[frb(sync)]` — a cheap atomic read, called
+/// inline from a Riverpod `select`, so it must not be a `Future`.
+#[flutter_rust_bridge::frb(sync)]
+pub fn current_wire_generation() -> u64 {
+    oto_app::current_generation()
 }

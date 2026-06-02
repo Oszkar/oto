@@ -18,7 +18,7 @@
 //! registers watches silently with no UPnP SUBSCRIBE.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::IpAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -401,6 +401,7 @@ fn pump_loop(
     stop: Arc<AtomicBool>,
 ) {
     let iter = manager.iter();
+    let mut topology = TopologyFilter::new();
     while !stop.load(Ordering::Acquire) {
         let Some(upstream) = iter.recv_timeout(POLL_INTERVAL) else {
             // Timeout fired — no event this poll cycle. The
@@ -414,17 +415,84 @@ fn pump_loop(
             continue;
         };
         let speaker = SpeakerId::new(upstream.speaker_id.as_str());
-        if let Some(event) = map_upstream_event(
+        let Some(event) = map_upstream_event(
             &manager,
             &upstream,
             &speaker,
             &coord_to_group,
             &speaker_to_coord,
-        ) {
-            if tx.send(event).is_err() {
-                // Receiver gone — wire was dropped before us. Bail.
-                return;
+        ) else {
+            continue;
+        };
+        // Apply the topology filter (seed suppression + post-regroup
+        // group-event drop) before forwarding. See `TopologyFilter`.
+        let Some(event) = topology.admit(&speaker, event) else {
+            continue;
+        };
+        if tx.send(event).is_err() {
+            // Receiver gone — wire was dropped before us. Bail.
+            return;
+        }
+    }
+}
+
+/// Pump-loop-local filter for the v0.5 topology-event path. Stateful, owned
+/// by `pump_loop` (one per pump). Two jobs, both cross-PR review fixes
+/// (codex cumulative review of the v0.5 series):
+///
+/// 1. **Seed suppression (#1).** A fresh `GroupMembership` subscription emits
+///    one startup *seed* NOTIFY per speaker, before any user action (P0c
+///    finding). Each would map to `TopologyChanged`. Under the S1 Option-A
+///    design the Dart controller reacts to `TopologyChanged` with a full
+///    re-discover — which spawns a new pump, which emits new seeds, which
+///    trigger another re-discover: an infinite loop. So we drop the FIRST
+///    `group_membership` per speaker (the seed) and only emit on the 2nd+
+///    (a real regroup).
+///
+/// 2. **Post-regroup group-event drop (#4).** The pump's `coord_to_group` /
+///    `speaker_to_coord` maps are captured by value at spawn and frozen.
+///    After a real regroup they're stale, so a `Playback`/`Track` event
+///    would carry an obsolete `GroupId`. Once a real topology change is
+///    seen we mark the pump `dirty` and drop group-addressed events until
+///    the pump is rebuilt (Option A rebuilds it via re-discover). Per-speaker
+///    `Volume`/`Mute` are unaffected by grouping and keep flowing.
+struct TopologyFilter {
+    /// Speakers whose initial (seed) `group_membership` we've already
+    /// swallowed. Absent ↔ "next group_membership is this speaker's seed".
+    seen_seed: HashSet<SpeakerId>,
+    /// Set once a real (post-seed) topology change is observed. While set,
+    /// group-addressed events are dropped (stale routing).
+    dirty: bool,
+}
+
+impl TopologyFilter {
+    fn new() -> Self {
+        Self {
+            seen_seed: HashSet::new(),
+            dirty: false,
+        }
+    }
+
+    /// Decide whether to forward `event` (which originated from `speaker`).
+    /// `None` = drop. Mutates seed/dirty state.
+    fn admit(&mut self, speaker: &SpeakerId, event: ChangeEvent) -> Option<ChangeEvent> {
+        match &event {
+            ChangeEvent::TopologyChanged => {
+                // `insert` returns true the FIRST time for this speaker — that
+                // first group_membership is the subscribe seed: swallow it.
+                if self.seen_seed.insert(speaker.clone()) {
+                    return None;
+                }
+                // A real regroup: routing is now stale until pump rebuild.
+                self.dirty = true;
+                Some(event)
             }
+            // Group-addressed events carry a GroupId routed via the frozen
+            // maps; after a regroup that routing is stale — drop until rebuild.
+            ChangeEvent::Playback { .. } | ChangeEvent::Track { .. } if self.dirty => None,
+            // Volume/Mute (per-speaker) and the surface events are
+            // grouping-independent — always forward.
+            _ => Some(event),
         }
     }
 }
@@ -621,6 +689,115 @@ mod tests {
             av_transport_group_id(&solo, &s2c, &c2g).is_none(),
             "coordinator missing from coord_to_group must drop the event",
         );
+    }
+
+    // ── TopologyFilter (seed suppression #1 + dirty-drop #4) ──────────────
+
+    fn track_ev(g: &str) -> ChangeEvent {
+        ChangeEvent::Track {
+            group: gid(g),
+            track: oto_core::Track {
+                id: None,
+                title: None,
+                artist: None,
+                album: None,
+                track_number: None,
+                duration: None,
+                art_uri: None,
+                uri: None,
+            },
+        }
+    }
+    fn playback_ev(g: &str) -> ChangeEvent {
+        ChangeEvent::Playback {
+            group: gid(g),
+            state: oto_core::PlaybackState::Playing,
+        }
+    }
+    fn volume_ev(s: &str) -> ChangeEvent {
+        ChangeEvent::Volume {
+            speaker: sid(s),
+            volume: oto_core::Volume::new(40).unwrap(),
+        }
+    }
+
+    #[test]
+    fn first_topology_event_per_speaker_is_suppressed_as_seed() {
+        let mut f = TopologyFilter::new();
+        // First group_membership for a speaker is the subscribe seed → drop.
+        assert!(f
+            .admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged)
+            .is_none());
+    }
+
+    #[test]
+    fn second_topology_event_emits_and_marks_dirty() {
+        let mut f = TopologyFilter::new();
+        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
+                                                                         // A real regroup (2nd group_membership for the speaker) is forwarded.
+        assert!(matches!(
+            f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged),
+            Some(ChangeEvent::TopologyChanged)
+        ));
+    }
+
+    #[test]
+    fn seeds_are_per_speaker() {
+        let mut f = TopologyFilter::new();
+        // Each speaker's FIRST event is its own seed (suppressed).
+        assert!(f
+            .admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
+            .is_none());
+        assert!(f
+            .admit(&sid("RINCON_B"), ChangeEvent::TopologyChanged)
+            .is_none());
+        // A's second is a real change.
+        assert!(f
+            .admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
+            .is_some());
+    }
+
+    /// The loop-prevention invariant: a burst of seed-only events (one per
+    /// speaker, as a fresh subscription emits) yields ZERO TopologyChanged —
+    /// so the Dart controller never triggers a re-discover off the seeds, so
+    /// the seed → rediscover → seed loop cannot start.
+    #[test]
+    fn seed_only_burst_emits_no_topology_change() {
+        let mut f = TopologyFilter::new();
+        let emitted = ["RINCON_A", "RINCON_B", "RINCON_C"]
+            .into_iter()
+            .filter_map(|s| f.admit(&sid(s), ChangeEvent::TopologyChanged))
+            .count();
+        assert_eq!(emitted, 0, "seed burst must emit no TopologyChanged");
+    }
+
+    #[test]
+    fn group_events_pass_before_a_regroup() {
+        let mut f = TopologyFilter::new();
+        // Before any real topology change, group-addressed events flow.
+        assert!(f.admit(&sid("RINCON_K"), playback_ev("G:1")).is_some());
+        assert!(f.admit(&sid("RINCON_K"), track_ev("G:1")).is_some());
+    }
+
+    #[test]
+    fn group_events_dropped_while_dirty_but_volume_mute_pass() {
+        let mut f = TopologyFilter::new();
+        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
+        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // real → dirty
+                                                                         // Group-addressed events now carry stale routing → dropped.
+        assert!(f.admit(&sid("RINCON_K"), playback_ev("G:stale")).is_none());
+        assert!(f.admit(&sid("RINCON_K"), track_ev("G:stale")).is_none());
+        // Per-speaker events are grouping-independent → still flow.
+        assert!(f.admit(&sid("RINCON_K"), volume_ev("RINCON_K")).is_some());
+        assert!(f
+            .admit(
+                &sid("RINCON_K"),
+                ChangeEvent::Mute {
+                    speaker: sid("RINCON_K"),
+                    muted: true
+                }
+            )
+            .is_some());
     }
 
     // ── map_playback_state ────────────────────────────────────────────
