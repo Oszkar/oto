@@ -11,6 +11,17 @@ part of 'discovery.dart';
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
 /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
+///
+/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// multicast replies and discovery finds nothing on release builds. The
+/// lock is released in a `finally` so a failed discover still frees it.
+/// Other platforms call `discover()` directly (no channel handler exists).
+///
+/// The lock is **best-effort**: it's an optimization to stop Android
+/// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
+/// service, permission denied — the native handler returns a structured
+/// error), we still attempt discovery rather than hard-failing.
 
 @ProviderFor(discovery)
 const discoveryProvider = DiscoveryProvider._();
@@ -18,6 +29,17 @@ const discoveryProvider = DiscoveryProvider._();
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
 /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
+///
+/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// multicast replies and discovery finds nothing on release builds. The
+/// lock is released in a `finally` so a failed discover still frees it.
+/// Other platforms call `discover()` directly (no channel handler exists).
+///
+/// The lock is **best-effort**: it's an optimization to stop Android
+/// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
+/// service, permission denied — the native handler returns a structured
+/// error), we still attempt discovery rather than hard-failing.
 
 final class DiscoveryProvider
     extends
@@ -32,6 +54,17 @@ final class DiscoveryProvider
   /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
   /// runs it off the UI isolate, so this is a Future provider: AsyncValue
   /// gives loading / error / data; retry via `ref.invalidate` / `ref.refresh`.
+  ///
+  /// On Android (v0.5 S3) the SSDP window is wrapped in a held
+  /// `WifiManager.MulticastLock` — without it Android drops the inbound
+  /// multicast replies and discovery finds nothing on release builds. The
+  /// lock is released in a `finally` so a failed discover still frees it.
+  /// Other platforms call `discover()` directly (no channel handler exists).
+  ///
+  /// The lock is **best-effort**: it's an optimization to stop Android
+  /// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
+  /// service, permission denied — the native handler returns a structured
+  /// error), we still attempt discovery rather than hard-failing.
   const DiscoveryProvider._()
     : super(
         from: null,
@@ -58,4 +91,4 @@ final class DiscoveryProvider
   }
 }
 
-String _$discoveryHash() => r'38b5b0ee3cff790a96f3e2e030d7534a6ec0745f';
+String _$discoveryHash() => r'a1e518381167514cf0d16dd6021238226f762b35';

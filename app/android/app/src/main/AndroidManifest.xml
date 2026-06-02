@@ -2,12 +2,9 @@
     <!-- LAN discovery (oto-wire SSDP + device-description HTTP). INTERNET
          is required in the MAIN manifest for release builds (debug/profile
          get it from Flutter tooling only). CHANGE_WIFI_MULTICAST_STATE is
-         required to acquire a WifiManager.MulticastLock; without the lock
-         Android silently drops SSDP multicast replies.
-         TODO(v0.5): acquire/release a MulticastLock around discover()
-         (Kotlin in MainActivity or a MethodChannel) — until then Android
-         release discovery still won't receive SSDP replies. v0.1
-         discovery is proven on Windows via the Rust bridge. -->
+         required to acquire the WifiManager.MulticastLock that
+         MulticastLockHandler holds around discover()'s SSDP window (v0.5
+         S3) — without it Android silently drops SSDP multicast replies. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
