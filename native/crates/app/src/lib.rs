@@ -199,6 +199,10 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
     // Errored marks from the old wire so the first command on the new wire
     // is judged from Healthy (and a recovery on the new wire isn't masked).
     health_tracker().reset_all();
+    // …and drop any app-bus event still queued against the OLD wire, so a
+    // stale SubscriptionError/Recovered can't surface on the NEW stream
+    // after rediscover (review #65). Health just reset, so it'd be wrong.
+    events::clear();
     // Slice 4: install fresh topology so the cache-backed
     // `speaker_state` can resolve speaker → group → transport against
     // the wire we're about to install. Order matters: AFTER
@@ -917,6 +921,28 @@ mod tests {
         assert!(
             drain_app_events().is_empty(),
             "cache-read speaker_state must not observe health"
+        );
+    }
+
+    #[test]
+    fn discover_with_clears_stale_app_events() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        // Queue a SubscriptionError on wire 1 and deliberately DON'T drain
+        // it (simulates an event still in the bus when rediscover starts).
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+        let _ = set_volume(&kitchen, Volume::new(50).unwrap());
+
+        // Rediscover: health resets, so the queued event is stale and must
+        // be dropped — it must not surface on the new stream (review #65).
+        let _ = discover_with_held_mock();
+        assert!(
+            drain_app_events().is_empty(),
+            "rediscover must clear stale app-bus events"
         );
     }
 

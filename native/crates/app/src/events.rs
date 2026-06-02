@@ -11,8 +11,9 @@
 //! wire is replaced, its pump's `Sender` drops, the FRB consumer's wire
 //! `recv()` returns `Disconnected`, the FRB stream completes, and the Dart
 //! provider rebuilds against the new wire. The FRB consumer drains BOTH:
-//! it blocks (with a short timeout) on the wire channel — whose `Disconnect`
-//! still drives teardown — and polls this sibling channel via `try_recv`.
+//! it blocks (with a short timeout) on the wire channel — whose
+//! `Disconnected` still drives teardown — and polls this sibling channel
+//! via `try_recv` (fully, every iteration, so a busy wire can't starve it).
 //!
 //! **Receiver lives behind a `Mutex` for the bus's whole life — NOT taken.**
 //! The FRB consumer restarts on every wire replacement, so a take-once
@@ -66,35 +67,18 @@ pub fn try_recv_app_event() -> Option<ChangeEvent> {
         .ok()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use oto_core::SpeakerId;
-
-    #[test]
-    fn push_then_try_recv_round_trips() {
-        push(ChangeEvent::SubscriptionRecovered {
-            speaker: SpeakerId::new("RINCON_BUS_TEST"),
-        });
-        // Drain until we see our event (the bus is process-global; other
-        // tests in this binary may have pushed too — match on our id).
-        let mut seen = false;
-        while let Some(ev) = try_recv_app_event() {
-            if matches!(ev, ChangeEvent::SubscriptionRecovered { speaker } if speaker.as_str() == "RINCON_BUS_TEST")
-            {
-                seen = true;
-            }
-        }
-        assert!(
-            seen,
-            "pushed event must be drainable via try_recv_app_event"
-        );
-    }
-
-    #[test]
-    fn try_recv_is_none_when_empty() {
-        // Drain anything pending first, then assert empty.
-        while try_recv_app_event().is_some() {}
-        assert!(try_recv_app_event().is_none());
-    }
+/// Drain and discard every pending app-bus event. Called by `discover_with`
+/// on wire replacement: health resets there, so any `SubscriptionError` /
+/// `Recovered` still queued against the OLD wire is stale and must not
+/// surface on the NEW stream after rediscover.
+pub(crate) fn clear() {
+    let rx = bus().rx.lock().unwrap_or_else(|p| p.into_inner());
+    while rx.try_recv().is_ok() {}
 }
+
+// No unit tests here: the bus is a process-global singleton, so any
+// emptiness/round-trip assertion races other tests that `push()` in the
+// same `cargo test` binary (review #65). The push → `try_recv_app_event`
+// path is covered end-to-end — via real command-dispatch failures — by the
+// `oto-app` S2 integration tests in `lib.rs`, which serialize on
+// `TEST_SERIAL`.
