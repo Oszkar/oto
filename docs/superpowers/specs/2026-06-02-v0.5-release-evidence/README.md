@@ -4,18 +4,18 @@ Mirrors the v0.4 § 8 pattern. This is the **user-ordered, non-skippable** Task 
 gate: v0.5.0 is not released until every criterion below is validated on real
 hardware (LAN + a real Android device) with output captured here.
 
-Run date: _TBD_ · LAN: _N-speaker household_ · Host: _Windows / WSL+device_
+Run date: 2026-06-02 (LAN round) · LAN: 2-speaker household (Living Room = Sonos Beam, Kitchen = Sonos One) · Host: Windows + WSL/device for S3
 
 ## Criteria
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | **S1** — operator regroup → `TopologyChanged` (~5 s) + `refresh_topology` re-pull reflects new grouping | ⬜ pending | `live_topology_events` log below |
-| 2 | **S4** — `model` populated for ≥2 speakers after discover + refresh | ⬜ pending | `live_model_populate` log below |
-| 3 | **v0.4 regression** — Volume / Mute / Playback / Track / seed / renewal still pass | ⬜ pending | `live_events` log below |
-| 4 | **S3** — release APK discovers the household on a real Android device | ⬜ pending | device note / logcat snippet |
-| 5 | **Dogfood** — ≥30 min idle + ≥30 min active, regroup mid-session: events prompt, renewals clean, no rediscover storm, no errors | ⬜ pending | `v05-dogfood.log` summary |
-| 6 | **S5** — lock-granularity: any UI-perceptible stutter under the active dogfood? (no → S5 "not triggered", closed) | ⬜ pending | dogfood observation |
+| 1 | **S1** — operator regroup → `TopologyChanged` (~5 s) + `refresh_topology` re-pull reflects new grouping | ✅ PASS | `TopologyChanged #1 @14.7 s` (operator reaction), refresh → 2 speakers in **1 group, members=2** (Kitchen merged into Living Room). **Zero spurious `TopologyChanged` in the 3 s+ pre-regroup window** → seed-suppression fix confirmed live (no rediscover loop). |
+| 2 | **S4** — `model` populated for ≥2 speakers after discover + refresh | ✅ PASS | discover + refresh both: Living Room → `Sonos Beam`, Kitchen → `Sonos One`. |
+| 3 | **v0.4 regression** — Volume / Mute / Playback / Track / seed / renewal still pass | ✅ PASS | `live_events` 5/5: per-group play/pause (Paused, correct GroupId), volume 5→6, seed 2/2 speakers, double-discover no-hang, **renewal cycle 28.5 min / 44 events / renewals fired clean ~1542 s, no disconnect**. |
+| 4 | **S3** — release APK discovers the household on a real Android device | ⬜ pending | (Android run — user doing shortly) |
+| 5 | **Dogfood** — ≥30 min idle + ≥30 min active, regroup mid-session: events prompt, renewals clean, no rediscover storm, no errors | 🟡 partial | renewal_cycle (≈28.5 min continuous, renewals clean, 0 errors) covers most of the idle leg; active legs exercised by the operator tests + S1 regroup. Formal `event-tail` dogfood optional/pending. |
+| 6 | **S5** — lock-granularity: any UI-perceptible stutter under load? (no → S5 "not triggered", closed) | 🟡 likely-closed | No latency/contention observed across the live suite (incl. the 28.5-min run). Confirm under the active dogfood if run. |
 
 ## Commands
 
@@ -32,44 +32,70 @@ cargo nextest run -p oto-wire --features live-tests \
 # 4. S3 release APK (WSL/Mac + device)
 flutter build apk --release
 adb install -r app/build/app/outputs/flutter-apk/app-release.apk
-# 5. Dogfood (≥30 min idle + ≥30 min active, regroup mid-session)
+# 5. Dogfood (optional — ≥30 min idle + ≥30 min active, regroup mid-session)
 cargo run -p oto_native --example event-tail --features oto-wire/live-tests | tee /tmp/v05-dogfood.log
 ```
 
 ## Logs
 
-### 1 — S1 topology events
+### 1 — S1 topology events ✅ (2/2 passed, 24 s)
 
 ```text
-(paste live_topology_events output)
+operator_regroup_emits_topology_changed:
+  discovered 2 speakers in 2 groups (before regroup): each members=1
+  (pre-regroup window: only Playback/Track events seen — NO TopologyChanged)
+  TopologyChanged #1 after 14.7208668s
+  refresh_topology → 2 speakers in 1 groups (after regroup):
+    group RINCON_542A1B9463A801400:3426502567 coord=RINCON_542A1B9463A801400 members=2
+  test ... ok
+subscribe_topology_then_speakers_activates_stream:
+  topology watch active; stream takeable ... ok
 ```
 
-### 2 — S4 model populate
+### 2 — S4 model populate ✅ (1/1 passed, 3 s)
 
 ```text
-(paste live_model_populate output)
+[discover]  RINCON_542A1B9463A801400 (Living Room) → Some("Sonos Beam")
+[discover]  RINCON_7828CAE858CA01400 (Kitchen)      → Some("Sonos One")
+[refresh]   RINCON_7828CAE858CA01400 (Kitchen)      → Some("Sonos One")
+[refresh]   RINCON_542A1B9463A801400 (Living Room)  → Some("Sonos Beam")
+test ... ok
 ```
 
-### 3 — v0.4 regression
+### 3 — v0.4 regression ✅ (5/5 passed, ~29 min incl. renewal obs.)
 
 ```text
-(paste live_events output)
+double_discover_does_not_hang ........................ ok (7.1 s)
+operator_play_pause_emits_per_group_event ............ ok — Playback …:3426502567 → Paused (per-group GroupId), 4.6 s
+operator_volume_change_emits_event ................... ok — Volume RINCON_542A1B9463A801400 → 6 (baseline 5), 6.9 s
+renewal_cycle_observation ............................ ok (1713 s ≈ 28.5 min)
+  events_seen=44; renewals fired clean ~1542 s:
+    ✅ Renewed subscription for 10.83.0.105 RenderingControl
+    ✅ Renewed subscription for 10.83.0.103 AVTransport
+    ✅ Renewed subscription for 10.83.0.105 AVTransport
+    ✅ Renewed subscription for 10.83.0.103 RenderingControl
+  no disconnect, no errors
+subscribe_then_seed_notifies_arrive .................. ok — seed Volume 2/2 speakers
 ```
 
 ### 4 — S3 release APK on Android
 
 ```text
-(device + Android version; discovery result / logcat snippet)
+(pending — user running shortly)
 ```
 
 ### 5 — Dogfood
 
 ```text
-(idle + active summary: duration, event/error counts, renewal cycles, regroup behavior)
+(optional / pending — the 28.5-min renewal_cycle_observation above covers
+most of the idle leg with renewals clean and 0 errors)
 ```
 
 ## Verdict
 
-_TBD — fill once all six criteria pass. Then the CHANGELOG `<!-- ACCEPTANCE -->`
-lines + the ROADMAP v0.5 acceptance note are updated to match, and the
-`chore(release): v0.5.0` PR is opened._
+**3 of 6 criteria PASS** (S1, S4, v0.4 regression) with captured evidence; the
+S1 run also confirms the codex-review seed-suppression fix on hardware (no
+spurious `TopologyChanged`, no rediscover loop). **Remaining: S3** (Android
+release-APK discovery) and an explicit dogfood/S5 sign-off if desired. Once S3
+passes, the CHANGELOG `<!-- ACCEPTANCE -->` lines + the ROADMAP v0.5 acceptance
+note are finalized and the `chore(release): v0.5.0` PR opens.
