@@ -81,7 +81,20 @@ pub use crate::events::try_recv_app_event;
 
 // `Send` lets the wire cross threads into the static; `Sync` is not
 // needed — all access is serialised by the `Mutex`. Don't add `+ Sync`.
-type HeldWire = Box<dyn Wire + Send>;
+type BoxedWire = Box<dyn Wire + Send>;
+
+/// The installed wire paired with the `StateManager` generation it was
+/// installed under. Pairing them in the slot lets the FRB consumer take
+/// its receiver and its generation **atomically** (one slot-lock
+/// acquisition) — see [`take_event_stream_with_generation`]. Without the
+/// pairing the consumer could take an OLD wire's receiver and then read a
+/// NEWER generation (a concurrent rediscover bumped it between the two
+/// reads), applying the old wire's buffered events into the new wire's
+/// freshly-seeded cache.
+struct HeldWire {
+    wire: BoxedWire,
+    generation: u64,
+}
 
 fn slot() -> &'static Mutex<Option<HeldWire>> {
     static SLOT: OnceLock<Mutex<Option<HeldWire>>> = OnceLock::new();
@@ -144,9 +157,9 @@ fn with_wire<R>(f: impl FnOnce(&dyn Wire) -> Result<R, WireError>) -> Result<R, 
     let guard = slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    match guard.as_deref() {
+    match guard.as_ref() {
         None => Err(WireError::NotFound("no wire — discover first".into())),
-        Some(wire) => f(wire),
+        Some(held) => f(&*held.wire),
     }
 }
 
@@ -158,7 +171,7 @@ fn with_wire<R>(f: impl FnOnce(&dyn Wire) -> Result<R, WireError>) -> Result<R, 
 /// discoveries serialise; the slot lock is only taken at the very end
 /// for the replacement, so playback commands are *not* blocked for the
 /// 3 s SSDP + SOAP window. See the module doc-comment.
-pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapshot, WireError> {
+pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapshot, WireError> {
     let _discover_guard = discover_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -185,18 +198,26 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
     // `apply_event_at_generation(old_gen, ...)` against `state_manager`.
     //
     // Order (intentional):
-    //   1. bump_and_clear  →  makes any future apply_*_at_generation
-    //      from the OLD consumer no-op (gen mismatch), and clears the
-    //      stale cache before the NEW seeds repopulate it.
-    //   2. slot replacement → drops the old wire (Sender side of the
-    //      old channel), which unblocks the OLD consumer's `recv()`
-    //      with Err and lets the consumer exit.
+    //   1. bump_clear_and_install → bumps the generation (so any future
+    //      apply_*_at_generation from the OLD consumer no-ops on the gen
+    //      mismatch), clears the stale property caches, and installs the
+    //      NEW topology — in one step. Folding the topology install into
+    //      the bump means there is never a window where a wire is present
+    //      but the topology map is empty (which would make a concurrent
+    //      `speaker_state` spuriously return NotFound for a speaker that
+    //      exists in both topologies — L5). It returns the generation it
+    //      bumped to, which we pin to the wire in the slot swap below.
+    //   2. slot replacement → installs the NEW wire PAIRED with that
+    //      generation, and drops the old wire (Sender side of the old
+    //      channel), which unblocks the OLD consumer's `recv()` with Err
+    //      and lets the consumer exit.
     //
     // The NEW consumer hasn't been spawned yet (the Dart provider
     // depends on `discoveryProvider`; it rebuilds + calls
-    // `subscribe_change_events` once this fn returns); it will
-    // capture the post-bump generation on entry.
-    state_manager().bump_and_clear();
+    // `subscribe_change_events` once this fn returns); it takes its
+    // (generation, receiver) pair atomically from the slot on entry
+    // (`take_event_stream_with_generation`).
+    let generation = state_manager().bump_clear_and_install(&snapshot);
     // v0.5 S2: a fresh wire starts with a clean health slate — drop any
     // Errored marks from the old wire so the first command on the new wire
     // is judged from Healthy (and a recovery on the new wire isn't masked).
@@ -205,17 +226,9 @@ pub fn discover_with(make: impl FnOnce() -> HeldWire) -> Result<DiscoverySnapsho
     // stale SubscriptionError/Recovered can't surface on the NEW stream
     // after rediscover (review #65). Health just reset, so it'd be wrong.
     events::clear();
-    // Slice 4: install fresh topology so the cache-backed
-    // `speaker_state` can resolve speaker → group → transport against
-    // the wire we're about to install. Order matters: AFTER
-    // bump_and_clear (which also wipes topology) and BEFORE the slot
-    // swap (so a `speaker_state` racing past the swap sees consistent
-    // topology with empty caches, not stale topology with empty
-    // caches).
-    state_manager().install_topology(&snapshot);
     *slot()
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(wire);
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(HeldWire { wire, generation });
     Ok(snapshot)
 }
 
@@ -313,7 +326,26 @@ pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .as_ref()
-        .and_then(|w| w.take_event_stream())
+        .and_then(|held| held.wire.take_event_stream())
+}
+
+/// Hand the FRB consumer its event-stream receiver **paired with the
+/// generation the wire was installed under**, both read under one slot
+/// lock so a concurrent `discover_with` cannot slip a generation bump
+/// between "take receiver" and "read generation". The consumer applies
+/// events at this generation; once a later `discover_with` bumps the
+/// `StateManager` past it, those applies no-op — so a lingering OLD-wire
+/// consumer cannot pollute the NEW wire's freshly-seeded cache. Returns
+/// `None` if no wire is installed or the receiver was already taken (one
+/// consumer per wire).
+pub fn take_event_stream_with_generation() -> Option<(u64, std::sync::mpsc::Receiver<ChangeEvent>)>
+{
+    let guard = slot()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let held = guard.as_ref()?;
+    let generation = held.generation;
+    held.wire.take_event_stream().map(|rx| (generation, rx))
 }
 
 /// Generation-aware apply — no-op if `gen` doesn't match the current
@@ -377,7 +409,7 @@ pub mod test_helpers {
 
     use oto_core::ChangeEvent;
 
-    use crate::{apply_event_at_generation, current_generation, take_event_stream};
+    use crate::{apply_event_at_generation, current_generation, take_event_stream_with_generation};
 
     /// Process-static holder for the held wire's event receiver during
     /// tests. The receiver is one-shot per wire, but a test may drain
@@ -411,13 +443,14 @@ pub mod test_helpers {
     /// the stale (pre-bump) generation.
     pub fn process_pending_events(timeout: std::time::Duration) -> usize {
         let deadline = std::time::Instant::now() + timeout;
-        // `gen` is re-read whenever we refresh the receiver (see the
-        // `Disconnected` arm). For OLD-wire events buffered before a
-        // gen bump, the captured OLD gen is correct — the apply will
-        // succeed if gen still matches, or no-op if `bump_and_clear`
-        // already ran (matching production semantics). For NEW-wire
-        // events arriving after a refresh, the refreshed gen ensures
-        // they reach the cache.
+        // `gen` is paired with the receiver whenever we (re)take the
+        // stream via `take_event_stream_with_generation` (the refill
+        // below + the `Disconnected` arm). For OLD-wire events buffered
+        // before a gen bump, the captured OLD gen is correct — the apply
+        // succeeds if gen still matches, or no-ops if a rediscover already
+        // bumped (matching production semantics). For NEW-wire events
+        // arriving after a refresh, the re-paired gen ensures they reach
+        // the cache.
         let mut gen = current_generation();
         let mut count = 0;
         loop {
@@ -431,10 +464,16 @@ pub mod test_helpers {
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if slot_guard.is_none() {
-                *slot_guard = take_event_stream();
-                if slot_guard.is_none() {
+                // Take the receiver and its wire's generation together so
+                // NEW-wire events apply at the NEW generation (mirrors the
+                // production consumer's atomic pairing).
+                match take_event_stream_with_generation() {
+                    Some((g, rx)) => {
+                        gen = g;
+                        *slot_guard = Some(rx);
+                    }
                     // No wire installed.
-                    return count;
+                    None => return count,
                 }
             }
             // Drop the guard before the (potentially blocking) recv —
@@ -461,16 +500,14 @@ pub mod test_helpers {
                     break;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    // Wire was replaced — drop this rx, leave the
-                    // slot empty so the next iteration re-takes from
-                    // the new wire. Re-read the generation so the
-                    // NEW receiver's events apply at the NEW gen
-                    // (matching what the production NEW consumer in
-                    // `api.rs::subscribe_change_events` captures when
-                    // it's spawned against the replacement wire).
+                    // Wire was replaced — drop this rx, leave the slot
+                    // empty so the next iteration re-takes (rx, gen)
+                    // together via `take_event_stream_with_generation`,
+                    // which re-pairs `gen` with the NEW wire (mirroring
+                    // the production NEW consumer in
+                    // `api.rs::subscribe_change_events`).
                     drop(rx);
                     // (slot is already None because we `.take()`d above.)
-                    gen = current_generation();
                 }
             }
         }
@@ -1027,6 +1064,46 @@ mod tests {
             in_make.load(Ordering::SeqCst),
             0,
             "both make() bodies must have run to completion"
+        );
+    }
+
+    /// M1: the FRB consumer must take its event-stream receiver and the
+    /// generation it applies at as ONE atomic pair, so a rediscover can't
+    /// slip a generation bump between "take receiver" and "read
+    /// generation" (which would let an OLD wire's buffered events apply
+    /// into the NEW wire's freshly-seeded cache).
+    /// `take_event_stream_with_generation` returns the generation the
+    /// installed wire was paired with; a second discover bumps it, and the
+    /// new wire's receiver pairs with the bumped value.
+    #[test]
+    fn event_stream_receiver_is_paired_with_its_wire_generation() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        clear_slot();
+
+        // Wire 1: receiver pairs with the generation it was installed under.
+        discover_with(|| Box::new(MockWire::default())).unwrap();
+        let gen_1 = current_generation();
+        let (paired_1, _rx1) = take_event_stream_with_generation().expect("wire 1 installed");
+        assert_eq!(
+            paired_1, gen_1,
+            "receiver handed out paired with its wire's install generation"
+        );
+
+        // Rediscover: new wire, bumped generation, atomically re-paired.
+        discover_with(|| Box::new(MockWire::default())).unwrap();
+        let gen_2 = current_generation();
+        assert_eq!(gen_2, gen_1 + 1, "rediscover bumps the generation");
+        let (paired_2, _rx2) = take_event_stream_with_generation().expect("wire 2 installed");
+        assert_eq!(
+            paired_2, gen_2,
+            "wire 2's receiver pairs with the bumped gen"
+        );
+        assert_ne!(
+            paired_1, paired_2,
+            "the two wires' receivers carry distinct generations — an OLD-wire \
+             event applied at paired_1 no-ops once paired_2 is current"
         );
     }
 }

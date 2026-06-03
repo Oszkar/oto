@@ -46,12 +46,12 @@ pub(crate) fn fetch_zone_group_state(
 /// The `"status code"` substring is the **only** discriminator between a
 /// rejected command and a network failure. This depends on `sonos-api`'s
 /// error-message format remaining stable.
-/// TODO(v0.5): replace string-sniff with structured error if sonos-api gains one
+/// TODO(v0.6): replace string-sniff with structured error if sonos-api gains one
 pub(crate) fn map_sdk_err(e: ApiError) -> WireError {
     match e {
         ApiError::NetworkError(msg) => {
             if msg.contains("status code") {
-                // TODO(v0.5): replace string-sniff with structured error if sonos-api gains one
+                // TODO(v0.6): replace string-sniff with structured error if sonos-api gains one
                 WireError::Backend(msg)
             } else {
                 WireError::Network(msg)

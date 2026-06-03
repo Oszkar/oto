@@ -54,8 +54,11 @@ Future<void> setVolume({required String speakerId, required int volume}) =>
 Future<void> setMute({required String speakerId, required bool muted}) =>
     RustLib.instance.api.crateApiSetMute(speakerId: speakerId, muted: muted);
 
-/// One-shot read of `speaker_id`'s current volume/mute/transport snapshot.
-/// Blocking SOAP round-trip; Dart `Future`.
+/// One-shot read of `speaker_id`'s current volume/mute/transport
+/// snapshot. **Not a SOAP round-trip** — reads the event-fed
+/// `StateManager` cache in `oto-app` (v0.4 Slice 4); fields are
+/// honest-partial (`None` until that property's first event lands).
+/// Surfaced as a Dart `Future` like the other commands.
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
 
