@@ -28,6 +28,7 @@ v0.5 — Hardening before the v0.6 UI. Topology change events, in-band subscript
 
 - **SSDP multicast egress interface ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).** `discover_locations` now pins each per-NIC socket's outgoing multicast interface with `socket2::set_multicast_if_v4` before sending the M-SEARCH (previously left egress to the OS routing table, so on a multi-NIC host the M-SEARCH could leave the *default* interface). Hardware-validated non-regressive on the 4-speaker LAN. `socket2` promoted to a direct `oto-wire` dep; `examples/ssdp_multicast_if_probe.rs` added as the A/B diagnostic.
 - **Cumulative-review fixes** (post-merge `/codex` review of the S1–S4 series): the **seed → rediscover infinite loop** (the pump now suppresses the per-speaker subscribe seed and only emits `TopologyChanged` on real regroups); **frozen pump routing** after a regroup (group-addressed events dropped until the pump is rebuilt); **failed-rediscover event stranding** (generation-gated re-subscribe, above); **app-bus event generation-stamping** (stale old-wire events dropped, not surfaced on the new stream); plus `subscribe_topology` lock race, the consumer idle busy-poll, and a `device_description` thread-fan-out cap.
+- **Pre-release review follow-up (S1–S4).** The FRB event consumer now takes its receiver and wire generation as one atomic pair (`take_event_stream_with_generation`), closing a narrow rediscover TOCTOU that could apply an old wire's buffered events into the new wire's cache; the topology install is folded into the generation bump (`StateManager::bump_clear_and_install`) so a concurrent re-discover can't make `speaker_state` transiently return `NotFound`. Plus a v0.5 doc-accuracy sweep (`speaker_state` documented as a cache read, not SOAP; the Dart `TopologyController` noted as implemented + tested but dormant until the v0.6 UI activates it; `SubscriptionError` clarified as command-observed reachability) and an SSDP-response-validation `TODO(v0.6)` (accepted risk: LAN-local, port-1400-only).
 
 ### Known issues / deferred
 
@@ -147,7 +148,8 @@ v0.1 — Foundation + LAN discovery. Identity-only discovery proven end-to-end t
 
 Known v0.1 limitations: discovery is identity-only (bonded surrounds/stereo pairs appear as standalone players — real ZoneGroupTopology is v0.3); verified on Windows — Android **release** discovery needs a `WifiManager.MulticastLock` (`TODO(v0.5)`).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Oszkar/oto/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Oszkar/oto/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Oszkar/oto/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Oszkar/oto/compare/v0.1.0...v0.2.0
