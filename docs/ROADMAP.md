@@ -14,7 +14,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.6   | next | The designed Flutter UI |
 | v1.0   | future | Stable — externally tested, packaged |
 
-v0.1, v0.2, v0.3 and v0.4 are verified on Windows. Hardware acceptance for v0.4 — 16/17 criteria pass; § 8.17 (Android debug APK) was deferred and is now **retired by v0.5 P0a** (2026-05-30): the debug APK discovers + streams `ChangeEvent`s on a real Pixel 7a (API 36) — evidence at [docs/superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md](superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md). v0.4 full evidence at [docs/superpowers/specs/2026-05-25-v0.4-release-evidence/](superpowers/specs/2026-05-25-v0.4-release-evidence/). Android **release** discovery remains non-functional pending a held `WifiManager.MulticastLock` (v0.5 S3) — P0a confirmed debug works without it.
+v0.1–v0.4 are verified on Windows. **v0.5 hardware acceptance — PASS** (2026-06-02/03, 2-speaker LAN + a real Android device): S1 topology events (regroup → `TopologyChanged` + refresh, no rediscover loop), S4 model repopulate, the v0.4 regression suite (incl. a 28.5 min renewal cycle), and **S3 — Android *release* discovery now works** with the held `WifiManager.MulticastLock` (it was non-functional before). Evidence at [docs/superpowers/specs/2026-06-02-v0.5-release-evidence/](superpowers/specs/2026-06-02-v0.5-release-evidence/README.md). Earlier: v0.4 full evidence at [2026-05-25-v0.4-release-evidence/](superpowers/specs/2026-05-25-v0.4-release-evidence/); P0a debug-APK smoke at [2026-05-30-v0.5-android-debug-evidence.md](superpowers/specs/2026-05-30-v0.5-android-debug-evidence.md).
 
 ## v0.4 — Live property events (released)
 
@@ -51,7 +51,7 @@ Capability-layer items that land before the v0.6 UI milestone designs against th
 - ✅ **Reactive-vs-NOTIFY revisit — DONE (P0b, 2026-06-01).** Production `event-tail` traces (~80 min combined, idle + active) confirmed Path A (sonos-sdk-state) stable: 0 errors, renewals clean at ~82% TTL, all events prompt and complete, no cross-speaker bleed. Path B reconsideration trigger not met. See `docs/sonos-notes.md` § "Reactive-vs-NOTIFY traces — P0b validation". S1 notes: double Track events need last-wins dedup (~200 ms window); `Transitioning` Playback state passes through or maps to `Loading`.
 - ✅ **Android `MulticastLock` — DONE (S3).** A `WifiManager.MulticastLock` (Kotlin `MulticastLockHandler` over a MethodChannel) is held around `discover()`'s SSDP window — without it Android drops the inbound SSDP multicast and release-build discovery finds nothing. Best-effort on the Dart side (a lock failure doesn't abort discovery).
 - ✅ **Speaker `model` string repopulate — DONE (S4).** `SpeakerIdentity.model` is repopulated by a bounded, parallel per-member `device_description.xml` fetch (`ureq`) inside `discover()` + `refresh_topology()`; best-effort (a failed fetch leaves `model = None`).
-- **Lock-granularity revisit (S5, conditional).** v0.4 dogfooding showed no contention between event-apply writes (StateManager `RwLock`s) and command-time `SLOT` holds; the v0.5 acceptance dogfood re-evaluates with the topology-event stream added. Closed as "not triggered" unless the dogfood shows visible latency/stutter.
+- ✅ **Lock-granularity revisit (S5) — CLOSED, not triggered.** v0.4 dogfooding showed no contention; the v0.5 acceptance suite (incl. a 28.5 min renewal cycle with the topology-event stream active) showed no contention or stutter either. No lock narrowing needed.
 
 ### Explicit non-goals
 

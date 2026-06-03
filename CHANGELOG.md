@@ -35,7 +35,7 @@ v0.5 — Hardening before the v0.6 UI. Topology change events, in-band subscript
 - **Group form/break** commands → v0.5.1 (mutating SOAP; own spike + design).
 - **Subscription-failure surfacing is command-driven (Approach A):** a speaker that goes silent *while idle* isn't flagged until the next command to it fails. Approaches B (tracing capture) and C (heartbeat probe) are recorded post-1.0 candidates.
 - **Residual app-bus race:** a command spanning a rediscover's generation bump can stamp an event with the new generation or contaminate the post-reset health tracker — a transient, self-correcting spurious flag; a full fix would rework the v0.4 generation/slot dual-lock protocol (v0.6 note).
-- **S5 (lock-granularity revisit):** <!-- ACCEPTANCE: S5 verdict from the v0.5 dogfood --> _pending the acceptance dogfood; closed as "not triggered" unless visible latency/stutter is observed._
+- **S5 (lock-granularity revisit):** evaluated and **closed — not triggered.** No contention or latency observed across the acceptance live suite (incl. a 28.5 min renewal cycle); no lock narrowing needed (matches the v0.4 finding).
 
 ### Housekeeping
 
@@ -45,8 +45,13 @@ v0.5 — Hardening before the v0.6 UI. Topology change events, in-band subscript
 
 ### Hardware acceptance
 
-<!-- ACCEPTANCE: fill from the v0.5 dogfood evidence (docs/superpowers/specs/2026-XX-XX-v0.5-release-evidence/) -->
-_Acceptance dogfood pending — see the release-evidence directory. Criteria: S1 `TopologyChanged` ~5 s after a regroup + topology refresh; S3 release APK discovers on a real Android device; S4 model populated for ≥2 speakers; all v0.4 criteria still pass; ≥30 min idle + ≥30 min active with a mid-session regroup._
+Validated on a 2-speaker LAN (Sonos Beam + Sonos One) and a real Android device — full evidence in [`docs/superpowers/specs/2026-06-02-v0.5-release-evidence/`](docs/superpowers/specs/2026-06-02-v0.5-release-evidence/README.md):
+
+- **S1** — operator regroup → `TopologyChanged` + `refresh_topology` re-pull reflects the new grouping; **zero spurious events in the pre-regroup window** (seed-suppression fix confirmed live — no rediscover loop).
+- **S4** — `model` populated for both speakers (Beam / One) after discover + refresh.
+- **v0.4 regression** — `live_events` 5/5: per-group play/pause, volume, seeds, double-discover, and a 28.5 min renewal cycle (renewals clean, no disconnect).
+- **S3** — release APK discovers the household on a real Android device (the held `MulticastLock` makes release SSDP work).
+- **Dogfood / S5** — idle health via the 28.5 min renewal cycle; active + topology behavior via the operator/S1 tests; no contention/stutter → S5 closed.
 
 ## [0.4.0] - 2026-05-26
 

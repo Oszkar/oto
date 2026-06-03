@@ -14,8 +14,8 @@ Run date: 2026-06-02 (LAN round) · LAN: 2-speaker household (Living Room = Sono
 | 2 | **S4** — `model` populated for ≥2 speakers after discover + refresh | ✅ PASS | discover + refresh both: Living Room → `Sonos Beam`, Kitchen → `Sonos One`. |
 | 3 | **v0.4 regression** — Volume / Mute / Playback / Track / seed / renewal still pass | ✅ PASS | `live_events` 5/5: per-group play/pause (Paused, correct GroupId), volume 5→6, seed 2/2 speakers, double-discover no-hang, **renewal cycle 28.5 min / 44 events / renewals fired clean ~1542 s, no disconnect**. |
 | 4 | **S3** — release APK discovers the household on a real Android device | ✅ PASS | Release APK (built WSL, Flutter 3.44) on a real device via the `main_s3_check` harness → on-screen **"PASS — discovered N speakers"** with the speaker list. The held `WifiManager.MulticastLock` makes release-build SSDP discovery work (debug worked without it, per P0a). |
-| 5 | **Dogfood** — ≥30 min idle + ≥30 min active, regroup mid-session: events prompt, renewals clean, no rediscover storm, no errors | 🟡 partial | renewal_cycle (≈28.5 min continuous, renewals clean, 0 errors) covers most of the idle leg; active legs exercised by the operator tests + S1 regroup. Formal `event-tail` dogfood optional/pending. |
-| 6 | **S5** — lock-granularity: any UI-perceptible stutter under load? (no → S5 "not triggered", closed) | 🟡 likely-closed | No latency/contention observed across the live suite (incl. the 28.5-min run). Confirm under the active dogfood if run. |
+| 5 | **Dogfood** — sustained idle + active, regroup mid-session: events prompt, renewals clean, no rediscover storm, no errors | ✅ PASS (accepted on coverage) | Satisfied by the live suite, per the gate owner's decision (2026-06-03): the 28.5-min renewal cycle covers idle health (renewals clean, 0 errors, no disconnect); active behavior + topology events + no-loop covered by the operator/S1 regroup tests. No separate dedicated `event-tail` session run. |
+| 6 | **S5** — lock-granularity: any UI-perceptible stutter under load? (no → "not triggered", closed) | ✅ closed (not triggered) | No latency/contention observed across the full live suite (incl. the 28.5-min run); no stutter reported. Matches the v0.4 finding. S5 closed — no narrowing needed. |
 
 ## Commands
 
@@ -92,15 +92,23 @@ Launch → on-screen "PASS — discovered N speakers" + speaker list.
 ### 5 — Dogfood
 
 ```text
-(optional / pending — the 28.5-min renewal_cycle_observation above covers
-most of the idle leg with renewals clean and 0 errors)
+Accepted on coverage (gate owner, 2026-06-03), no separate session:
+  - idle health   : renewal_cycle_observation ≈28.5 min, renewals clean,
+                    0 errors, no disconnect (see § 3)
+  - active + topo  : operator volume/play-pause + S1 regroup (TopologyChanged,
+                    no spurious seeds, refresh re-pull correct)
 ```
 
 ## Verdict
 
-**3 of 6 criteria PASS** (S1, S4, v0.4 regression) with captured evidence; the
-S1 run also confirms the codex-review seed-suppression fix on hardware (no
-spurious `TopologyChanged`, no rediscover loop). **Remaining: S3** (Android
-release-APK discovery) and an explicit dogfood/S5 sign-off if desired. Once S3
-passes, the CHANGELOG `<!-- ACCEPTANCE -->` lines + the ROADMAP v0.5 acceptance
-note are finalized and the `chore(release): v0.5.0` PR opens.
+**All 6 criteria satisfied — v0.5.0 release-ready.** S1, S4, v0.4 regression,
+and S3 PASS with captured evidence; the S1 run confirms the codex-review
+seed-suppression fix on hardware (no spurious `TopologyChanged`, no rediscover
+loop). Criterion 5 accepted on the live-suite coverage and S5 closed
+"not triggered" per the gate owner's decision (2026-06-03). CHANGELOG
+`<!-- ACCEPTANCE -->` lines + the ROADMAP v0.5 acceptance note finalized; the
+`chore(release): v0.5.0` PR follows.
+
+Hardware: 2-speaker LAN (Living Room = Sonos Beam @ 10.83.0.103, Kitchen =
+Sonos One @ 10.83.0.105); Android release on a real device (WSL build,
+Flutter 3.44).
