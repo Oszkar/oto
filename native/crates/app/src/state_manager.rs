@@ -56,13 +56,30 @@ struct TopologyMaps {
     group_to_coordinator: HashMap<GroupId, SpeakerId>,
 }
 
+/// Build the speaker→group / group→coordinator maps from a snapshot.
+/// Shared by `install_topology` and `bump_clear_and_install` so the two
+/// paths can't drift.
+fn build_topology_maps(snapshot: &DiscoverySnapshot) -> TopologyMaps {
+    let mut maps = TopologyMaps::default();
+    for g in &snapshot.groups {
+        maps.group_to_coordinator
+            .insert(g.id.clone(), g.coordinator.clone());
+        for m in &g.members {
+            maps.speaker_to_group.insert(m.clone(), g.id.clone());
+        }
+    }
+    maps
+}
+
 pub struct StateManager {
     speakers: RwLock<HashMap<SpeakerId, SpeakerCache>>,
     groups: RwLock<HashMap<GroupId, GroupCache>>,
     /// Speaker→group resolution used by Slice 4's cache-backed
-    /// `speaker_state`. Refreshed by `install_topology` on every
-    /// successful `discover_with`; cleared by `bump_and_clear` so a
-    /// failed install never leaves stale topology with fresh caches.
+    /// `speaker_state`. Refreshed by `bump_clear_and_install` on every
+    /// successful `discover_with` — atomically with the generation bump +
+    /// cache clear, so it is never momentarily empty while a wire is
+    /// installed (which would surface as a spurious `speaker_state`
+    /// NotFound; see that method).
     topology: RwLock<TopologyMaps>,
     /// Generation counter — bumped by `discover_with` on every wire
     /// replacement so the previous consumer loop (still draining the
@@ -242,20 +259,15 @@ impl StateManager {
             .contains_key(speaker)
     }
 
-    /// Install the speaker→group mapping from `snapshot`. Called by
-    /// `discover_with` right after `bump_and_clear`, so the topology
-    /// always matches the wire whose seeds are about to repopulate the
-    /// caches. Replaces any prior topology entirely — no diff/merge.
+    /// Install the speaker→group mapping from `snapshot`, replacing any
+    /// prior topology entirely (no diff/merge). **Test-only now:**
+    /// production wire replacement installs topology via
+    /// `bump_clear_and_install` (atomically with the generation bump +
+    /// cache clear). Retained for the unit tests that exercise topology
+    /// installation in isolation.
+    #[cfg(test)]
     pub fn install_topology(&self, snapshot: &DiscoverySnapshot) {
-        let mut maps = TopologyMaps::default();
-        for g in &snapshot.groups {
-            maps.group_to_coordinator
-                .insert(g.id.clone(), g.coordinator.clone());
-            for m in &g.members {
-                maps.speaker_to_group.insert(m.clone(), g.id.clone());
-            }
-        }
-        *self.topology.write().unwrap_or_else(|p| p.into_inner()) = maps;
+        *self.topology.write().unwrap_or_else(|p| p.into_inner()) = build_topology_maps(snapshot);
     }
 
     /// Resolve a group to its coordinator `SpeakerId` from the installed
@@ -315,12 +327,15 @@ impl StateManager {
         self.generation.load(Ordering::Acquire)
     }
 
-    /// Bump the generation counter AND clear both caches in one call.
-    /// Used by `discover_with` when replacing the wire: any in-flight
-    /// `apply_event_at_generation` calls from the OLD wire's consumer
-    /// loop will no-op after the bump (the generation check fails),
-    /// AND the now-stale state is gone before the NEW wire's seed
-    /// events repopulate it.
+    /// Bump the generation counter AND clear both caches + topology in
+    /// one call. Production wire-replacement uses `bump_clear_and_install`
+    /// (which folds the new-topology install into the same step); this
+    /// primitive is **test-only**, retained for the unit tests that
+    /// exercise the clear-to-empty behaviour. Any in-flight
+    /// `apply_event_at_generation` calls from the OLD wire's consumer loop
+    /// will no-op after the bump (the generation check fails), AND the
+    /// now-stale state is gone before the NEW wire's seed events
+    /// repopulate it.
     ///
     /// The bump uses `Release` and the clear writes happen *after* it,
     /// so a reader who first observes the new generation via
@@ -338,6 +353,7 @@ impl StateManager {
     /// the wire slot to be replaced — and `discover_with` runs the slot
     /// replacement *after* this call returns, so NEW consumers cannot
     /// observe a partially-cleared cache.
+    #[cfg(test)]
     pub fn bump_and_clear(&self) {
         // Order: bump first (Release), then clear. The Acquire-load
         // in `apply_event_at_generation` will see the bumped value
@@ -358,6 +374,46 @@ impl StateManager {
             .unwrap_or_else(|p| p.into_inner())
             .clear();
         *self.topology.write().unwrap_or_else(|p| p.into_inner()) = TopologyMaps::default();
+    }
+
+    /// Bump the generation, clear both property caches, AND install the
+    /// new topology — in one call — returning the generation this bumped
+    /// to. This is the production wire-replacement path (`discover_with`).
+    ///
+    /// **Why fold the install into the bump** (vs. `bump_and_clear` then
+    /// a separate `install_topology`): the two-step path left a window
+    /// where the generation had bumped and topology was cleared to
+    /// *empty* but the new topology wasn't installed yet — while the OLD
+    /// wire was still in the slot. A `speaker_state` landing in that
+    /// window saw a present wire with empty topology and returned a
+    /// spurious `NotFound` for a speaker that exists in both the old and
+    /// new topology. Folding the install in means topology goes old → new
+    /// directly (never empty); only the property caches blink empty,
+    /// which `speaker_state` already reports as honest-partial `None`s,
+    /// not `NotFound`.
+    ///
+    /// Ordering mirrors `bump_and_clear`: the `fetch_add` is
+    /// `Release` and precedes the cache clears, so a stale OLD consumer's
+    /// `Acquire`-load in `apply_event_at_generation` sees the new
+    /// generation and skips before it can read or write a half-updated
+    /// cache. The returned value is `prev + 1`; `discover_with` holds
+    /// `DISCOVER_LOCK` across the whole call, so no other thread bumps
+    /// concurrently and the return is the authoritative new generation.
+    pub fn bump_clear_and_install(&self, snapshot: &DiscoverySnapshot) -> u64 {
+        let new_gen = self.generation.fetch_add(1, Ordering::Release) + 1;
+        self.speakers
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
+        self.groups
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
+        // Install the NEW topology directly — do NOT clear to empty
+        // first, so a racing `speaker_state` never sees topology empty
+        // while a wire is present.
+        *self.topology.write().unwrap_or_else(|p| p.into_inner()) = build_topology_maps(snapshot);
+        new_gen
     }
 
     /// Clear both caches AND topology WITHOUT bumping the generation.
@@ -801,6 +857,42 @@ mod tests {
         assert!(
             st.transport.is_none(),
             "bump_and_clear must wipe topology so a fresh install is required"
+        );
+    }
+
+    /// L5: `bump_clear_and_install` must bump the generation, clear the
+    /// property caches, AND install the new topology in one call — so a
+    /// speaker present in both the old and new topology is NEVER seen as
+    /// unknown (which would make `oto_app::speaker_state` return a
+    /// spurious `NotFound`). Topology goes old → new directly; only the
+    /// property caches blink empty.
+    #[test]
+    fn bump_clear_and_install_keeps_topology_non_empty() {
+        let sm = StateManager::new();
+        let k = SpeakerId::new("RINCON_K");
+
+        // Old era: topology + a cached volume.
+        sm.install_topology(&fake_snapshot_two_speaker_group());
+        sm.apply_event(&ChangeEvent::Volume {
+            speaker: k.clone(),
+            volume: Volume::new(40).unwrap(),
+        });
+        assert!(sm.is_known_speaker(&k));
+        assert!(sm.volume_of(&k).is_some());
+
+        let before = sm.current_generation();
+        // New era via the combined call (same household → kitchen persists).
+        let new_gen = sm.bump_clear_and_install(&fake_snapshot_two_speaker_group());
+
+        assert_eq!(new_gen, before + 1, "returns the bumped generation");
+        assert_eq!(sm.current_generation(), before + 1);
+        assert!(
+            sm.volume_of(&k).is_none(),
+            "property caches are cleared by the bump (honest-partial cold-start)"
+        );
+        assert!(
+            sm.is_known_speaker(&k),
+            "topology installed in the SAME call — never empty, so no spurious NotFound (L5)"
         );
     }
 }

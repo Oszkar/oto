@@ -173,8 +173,11 @@ pub fn set_mute(speaker_id: String, muted: bool) -> Result<(), CommandError> {
     oto_app::set_mute(&id, muted).map_err(crate::map::to_command_error)
 }
 
-/// One-shot read of `speaker_id`'s current volume/mute/transport snapshot.
-/// Blocking SOAP round-trip; Dart `Future`.
+/// One-shot read of `speaker_id`'s current volume/mute/transport
+/// snapshot. **Not a SOAP round-trip** — reads the event-fed
+/// `StateManager` cache in `oto-app` (v0.4 Slice 4); fields are
+/// honest-partial (`None` until that property's first event lands).
+/// Surfaced as a Dart `Future` like the other commands.
 pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError> {
     let id = oto_core::SpeakerId::new(speaker_id);
     let state = oto_app::speaker_state(&id).map_err(crate::map::to_command_error)?;
@@ -366,22 +369,24 @@ impl oto_core::Wire for MockWireArc {
 pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // Body runs on the FRB worker thread (pre-check § 2). Blocking
     // `recv()` here is fine — it blocks the worker, not the UI.
-    let Some(rx) = oto_app::take_event_stream() else {
+    //
+    // Take the receiver and the generation it applies at as ONE atomic
+    // pair (under a single slot lock). A concurrent `discover_with` bumps
+    // the generation together with installing the new wire, so this pair
+    // is always self-consistent: this rx belongs to a wire installed at
+    // exactly `gen`. Once a future `discover_with` bumps past `gen`, our
+    // `apply_event_at_generation` calls no-op, so we cannot pollute the
+    // NEW wire's freshly-seeded cache with leftover events from the OLD
+    // wire's channel. The `sink.add(...)` path still surfaces these events
+    // to the Dart subscriber on the OLD stream until the rx Sender is
+    // dropped and `recv()` returns Err — correct, because the OLD
+    // subscriber is the one listening on this sink.
+    let Some((gen, rx)) = oto_app::take_event_stream_with_generation() else {
         // No wire installed yet, or stream already taken. The Dart
         // provider depends on `discoveryProvider`; once discover()
         // succeeds, this fn will be called again against the new wire.
         return;
     };
-    // Capture the generation this consumer belongs to. If a future
-    // `discover_with` runs concurrently, it bumps the generation; our
-    // `apply_event_at_generation` calls then no-op so we cannot
-    // pollute the NEW wire's freshly-seeded cache with leftover
-    // events from the OLD wire's channel. The `sink.add(...)` path
-    // still surfaces these events to the Dart subscriber on the OLD
-    // stream until the rx Sender is dropped and `recv()` returns
-    // Err — that's correct because the OLD subscriber is the one
-    // listening on this sink.
-    let gen = oto_app::current_generation();
     // Apply one event to the cache + forward it to Dart. Returns `false`
     // if the Dart subscriber cancelled (the caller should then return).
     let emit = |event: oto_core::ChangeEvent| -> bool {

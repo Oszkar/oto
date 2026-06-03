@@ -42,9 +42,18 @@ pub trait Wire {
     ///
     /// Returns `WireError::NoSpeakersDiscovered` if the wire has no
     /// discovery snapshot yet, `WireError::AlreadySubscribed` if
-    /// called twice on the same wire. Runtime per-speaker
-    /// subscription failures surface in-band as
-    /// `ChangeEvent::SubscriptionError`, not via this `Result`.
+    /// called twice on the same wire.
+    ///
+    /// **No in-band subscription-failure signal at the `=0.5.2` pin.**
+    /// The SDK swallows per-speaker SUBSCRIBE failures internally (see
+    /// `oto-wire/src/events.rs::register_watches`), so a silent failure
+    /// just manifests as that speaker's events never arriving. The
+    /// `ChangeEvent::SubscriptionError` / `SubscriptionRecovered`
+    /// variants are emitted instead by `oto-app` from **command-observed
+    /// reachability** (v0.5 S2: a `WireError::Network` on a user command
+    /// flips the speaker to `Errored`; a later `Ok` recovers it) — they
+    /// reflect command reachability, NOT the health of the subscription
+    /// pipeline this call sets up.
     fn subscribe_speakers(&self) -> Result<(), WireError>;
 
     /// Register v0.5 topology-event interest (ZoneGroupTopology /
