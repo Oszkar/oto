@@ -223,8 +223,12 @@ fn main() {
     println!(" SECTION 3 — LEAVE PROBE (BecomeCoordinatorOfStandaloneGroup)");
     println!("========================================================");
 
-    // Pick a non-coordinator member from any multi-member group to test member leave first.
-    let leave_group = snap.groups.iter().find(|g| g.members.len() >= 2);
+    // Re-discover so we see the group just formed in SECTION 2 (the original
+    // `snap` is pre-join). On this 2-zone bonded-satellite LAN the only group
+    // we can form is a 2-member one (Beam + Sonos One) — leaving its
+    // coordinator is the coordinator-leave case we can actually exercise here.
+    let leave_snap = wire.discover().unwrap_or_else(|_| snap.clone());
+    let leave_group = leave_snap.groups.iter().find(|g| g.members.len() >= 2);
     match leave_group {
         Some(g) => {
             // Use the coordinator's IP for the leave command (BCOS is sent to
@@ -295,111 +299,36 @@ fn main() {
         }
         None => {
             println!(
-                "SKIP LEAVE (no multi-member group found at discovery time).  \
-                 Build a 3-member group in the Sonos app, then re-run."
+                "SKIP LEAVE (no multi-member group present after re-discover).  \
+                 Ensure SECTION 2 JOIN succeeded (Beam + Sonos One grouped), then re-run."
             );
         }
     }
 
-    print!(
-        "\n>>> OPERATOR ACTION (coordinator-leave edge-case):\n\
-         >>> Use the Sonos app to build a 3-member group, then press Enter to\n\
-         >>> run BecomeCoordinatorOfStandaloneGroup on the *coordinator* of that\n\
-         >>> group and observe what happens to the remaining 2 members.\n\
-         >>> Press Enter when ready (or 's' + Enter to skip): "
-    );
-    std::io::stdout().flush().unwrap();
-    let mut line = String::new();
-    let _ = std::io::stdin().read_line(&mut line);
-    if !line.trim().eq_ignore_ascii_case("s") {
-        // Re-discover to pick up the new group.
-        match wire.discover() {
-            Ok(fresh_snap) => {
-                let three_member = fresh_snap.groups.iter().find(|g| g.members.len() >= 3);
-                match three_member {
-                    Some(g) => {
-                        let coord_ip3 = match fresh_snap
-                            .speakers
-                            .iter()
-                            .find(|s| s.id == g.coordinator)
-                            .map(|s| match s.ip {
-                                IpAddr::V4(v4) => v4.to_string(),
-                                IpAddr::V6(v6) => v6.to_string(),
-                            }) {
-                            Some(ip) => ip,
-                            None => {
-                                println!(
-                                    "Cannot resolve IP for coordinator {}; skipping.",
-                                    g.coordinator.as_str()
-                                );
-                                String::new()
-                            }
-                        };
-                        if !coord_ip3.is_empty() {
-                            println!(
-                                "  3-member group found: id={}  coord={}  members={:?}",
-                                g.id.as_str(),
-                                g.coordinator.as_str(),
-                                g.members.iter().map(|m| m.as_str()).collect::<Vec<_>>()
-                            );
-                            let op = av_transport::become_coordinator_of_standalone_group()
-                                .build()
-                                .expect("build bcos");
-                            match client.execute_enhanced(&coord_ip3, op) {
-                                Ok(resp) => println!(
-                                    "  BecomeCoordinatorOfStandaloneGroup (3-member coord) → OK  \
-                                     delegated={}  new_group={}",
-                                    resp.delegated_group_coordinator_id, resp.new_group_id
-                                ),
-                                Err(e) => {
-                                    println!("  BecomeCoordinatorOfStandaloneGroup (3-member coord) → ERR: {e:?}")
-                                }
-                            }
-                            // Final topology re-poll.
-                            let aip2 = fresh_snap.speakers.first().map(|s| match s.ip {
-                                IpAddr::V4(v4) => v4.to_string(),
-                                IpAddr::V6(v6) => v6.to_string(),
-                            });
-                            if let Some(ref aip) = aip2 {
-                                if let Ok(op) = zone_group_topology::get_zone_group_state().build()
-                                {
-                                    if let Ok(resp) = client.execute_enhanced(aip, op) {
-                                        if let Ok(groups) =
-                                            zone_group_topology::parse_zone_group_state_xml(
-                                                &resp.zone_group_state,
-                                            )
-                                        {
-                                            println!(
-                                                "  Post 3-member-coord-leave topology ({} groups):",
-                                                groups.len()
-                                            );
-                                            for grp in &groups {
-                                                let mids: Vec<&str> = grp
-                                                    .members
-                                                    .iter()
-                                                    .map(|m| m.uuid.as_str())
-                                                    .collect();
-                                                println!(
-                                                    "    group id={}  coord={}  members={:?}",
-                                                    grp.id, grp.coordinator, mids
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    None => println!(
-                        "  No 3-member group found after re-discover ({} groups present).  \
-                         Skipping coordinator-leave edge-case.",
-                        fresh_snap.groups.len()
-                    ),
-                }
-            }
-            Err(e) => println!("  Re-discover failed: {e}"),
-        }
-    }
+    // ── SECTION 3b — 3+-member coordinator-leave: N/A on this 2-zone LAN ──────
+    //
+    // This household has only 2 *controllable* zones: the Beam (its bonded
+    // surround satellites are Invisible="1" and fold into the Beam — one zone)
+    // and the Sonos One. A 3-member group therefore can't be formed, so the
+    // "coordinator leaves, 2+ members remain and re-elect" case is not
+    // exercisable here.
+    //
+    // It does NOT need a probe to de-risk the design: `leave_group(speaker)`
+    // issues the SAME `BecomeCoordinatorOfStandaloneGroup` primitive regardless
+    // of whether `speaker` coordinates a group. When a coordinator of a
+    // multi-member group leaves, the Sonos household firmware elects the new
+    // coordinator for the remaining members (standard Sonos behaviour); oto
+    // simply re-pulls topology afterward and reflects whatever the household
+    // decided. So there is no special-case branch to design — the 2-member
+    // coordinator-leave above already confirms the BCOS-on-a-coordinator path.
+    // The 3+-member re-election is firmware-handled and untested on this
+    // hardware; revisit only if a user with 3+ independent zones reports an
+    // issue.
+    println!("\n========================================================");
+    println!(" SECTION 3b — 3+-member coordinator-leave: N/A on this 2-zone LAN");
+    println!("   bonded surrounds are not independent zones; firmware handles");
+    println!("   re-election for 3+ members. See the leave_group design note.");
+    println!("========================================================");
 
     // =========================================================================
     // SECTION 4 — GROUP-VOLUME COMMAND PROBE
