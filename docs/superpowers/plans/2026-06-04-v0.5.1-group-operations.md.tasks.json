@@ -26,7 +26,7 @@
     {
       "id": 4,
       "subject": "Task 4: Option D — topology fast-path (pump rebuild on refresh)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1, 3],
       "description": "**Goal:** refresh_topology() rebuilds pump routing (spike-chosen approach) so group events route to the new coordinator; full re-discover stays as fallback. ESCAPE HATCH: slip to v0.5.2 if hard.\n\n**Verify:** `just check && just test`; live regroup->fast-refresh->Playback routes (no drop).\n\n```json:metadata\n{\"files\": [\"native/crates/wire/src/adapter.rs\", \"native/crates/wire/src/events.rs\", \"native/crates/app/src/lib.rs\", \"native/src/api.rs\", \"app/lib/src/state/topology.dart\", \"app/lib/src/state/grouping.dart\", \"native/crates/wire/tests/live_grouping.rs\"], \"verifyCommand\": \"just check && just test\", \"acceptanceCriteria\": [\"refresh_topology rebuilds pump routing; group events route to new coordinator no-drop\", \"refresh_topology error falls back to full re-discover\", \"Dart TopologyController + GroupingCommands use refresh_topology with fallback\", \"just check + just test green; hardware regroup->fast-refresh->Playback routes\"]}\n```"
     },
