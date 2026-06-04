@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -2129328059;
+  int get rustContentHash => -1748234268;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -107,6 +107,16 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiPlay({required String groupId});
 
   Future<void> crateApiPrevious({required String groupId});
+
+  Future<void> crateApiSetGroupMute({
+    required String groupId,
+    required bool muted,
+  });
+
+  Future<void> crateApiSetGroupVolume({
+    required String groupId,
+    required int volume,
+  });
 
   Future<void> crateApiSetMute({
     required String speakerId,
@@ -474,6 +484,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "previous", argNames: ["groupId"]);
 
   @override
+  Future<void> crateApiSetGroupMute({
+    required String groupId,
+    required bool muted,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(groupId, serializer);
+          sse_encode_bool(muted, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_command_error,
+        ),
+        constMeta: kCrateApiSetGroupMuteConstMeta,
+        argValues: [groupId, muted],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSetGroupMuteConstMeta => const TaskConstMeta(
+    debugName: "set_group_mute",
+    argNames: ["groupId", "muted"],
+  );
+
+  @override
+  Future<void> crateApiSetGroupVolume({
+    required String groupId,
+    required int volume,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(groupId, serializer);
+          sse_encode_i_32(volume, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_command_error,
+        ),
+        constMeta: kCrateApiSetGroupVolumeConstMeta,
+        argValues: [groupId, volume],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSetGroupVolumeConstMeta => const TaskConstMeta(
+    debugName: "set_group_volume",
+    argNames: ["groupId", "volume"],
+  );
+
+  @override
   Future<void> crateApiSetMute({
     required String speakerId,
     required bool muted,
@@ -487,7 +565,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 15,
             port: port_,
           );
         },
@@ -521,7 +599,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 16,
             port: port_,
           );
         },
@@ -551,7 +629,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 17,
             port: port_,
           );
         },
@@ -581,7 +659,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 16,
+              funcId: 18,
               port: port_,
             );
           },
@@ -685,15 +763,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           track: dco_decode_box_autoadd_track_dto(raw[2]),
         );
       case 4:
+        return ChangeEventDto_GroupVolume(
+          groupId: dco_decode_String(raw[1]),
+          volume: dco_decode_u_32(raw[2]),
+        );
+      case 5:
+        return ChangeEventDto_GroupMute(
+          groupId: dco_decode_String(raw[1]),
+          muted: dco_decode_bool(raw[2]),
+        );
+      case 6:
         return ChangeEventDto_SubscriptionError(
           speakerId: dco_decode_String(raw[1]),
           message: dco_decode_String(raw[2]),
         );
-      case 5:
+      case 7:
         return ChangeEventDto_SubscriptionRecovered(
           speakerId: dco_decode_String(raw[1]),
         );
-      case 6:
+      case 8:
         return ChangeEventDto_TopologyChanged();
       default:
         throw Exception("unreachable");
@@ -995,16 +1083,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_track = sse_decode_box_autoadd_track_dto(deserializer);
         return ChangeEventDto_Track(groupId: var_groupId, track: var_track);
       case 4:
+        var var_groupId = sse_decode_String(deserializer);
+        var var_volume = sse_decode_u_32(deserializer);
+        return ChangeEventDto_GroupVolume(
+          groupId: var_groupId,
+          volume: var_volume,
+        );
+      case 5:
+        var var_groupId = sse_decode_String(deserializer);
+        var var_muted = sse_decode_bool(deserializer);
+        return ChangeEventDto_GroupMute(groupId: var_groupId, muted: var_muted);
+      case 6:
         var var_speakerId = sse_decode_String(deserializer);
         var var_message = sse_decode_String(deserializer);
         return ChangeEventDto_SubscriptionError(
           speakerId: var_speakerId,
           message: var_message,
         );
-      case 5:
+      case 7:
         var var_speakerId = sse_decode_String(deserializer);
         return ChangeEventDto_SubscriptionRecovered(speakerId: var_speakerId);
-      case 6:
+      case 8:
         return ChangeEventDto_TopologyChanged();
       default:
         throw UnimplementedError('');
@@ -1388,18 +1487,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(3, serializer);
         sse_encode_String(groupId, serializer);
         sse_encode_box_autoadd_track_dto(track, serializer);
+      case ChangeEventDto_GroupVolume(
+        groupId: final groupId,
+        volume: final volume,
+      ):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(groupId, serializer);
+        sse_encode_u_32(volume, serializer);
+      case ChangeEventDto_GroupMute(groupId: final groupId, muted: final muted):
+        sse_encode_i_32(5, serializer);
+        sse_encode_String(groupId, serializer);
+        sse_encode_bool(muted, serializer);
       case ChangeEventDto_SubscriptionError(
         speakerId: final speakerId,
         message: final message,
       ):
-        sse_encode_i_32(4, serializer);
+        sse_encode_i_32(6, serializer);
         sse_encode_String(speakerId, serializer);
         sse_encode_String(message, serializer);
       case ChangeEventDto_SubscriptionRecovered(speakerId: final speakerId):
-        sse_encode_i_32(5, serializer);
+        sse_encode_i_32(7, serializer);
         sse_encode_String(speakerId, serializer);
       case ChangeEventDto_TopologyChanged():
-        sse_encode_i_32(6, serializer);
+        sse_encode_i_32(8, serializer);
     }
   }
 

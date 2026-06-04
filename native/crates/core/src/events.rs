@@ -33,6 +33,14 @@ pub enum ChangeEvent {
     /// A group's current track changed. Carries the full `Track` so a
     /// Slice 4 cache reader gets metadata + URI in one event.
     Track { group: GroupId, track: Track },
+    /// A group's volume changed (per-group — group-scoped, coordinator-routed,
+    /// like `Playback`/`Track`). Distinct from per-speaker `Volume`: this is
+    /// the GroupRenderingControl group master level. Added in v0.5.1.
+    GroupVolume { group: GroupId, volume: Volume },
+    /// A group's mute state changed (per-group — coordinator-routed). The
+    /// GroupRenderingControl group master mute, distinct from per-speaker
+    /// `Mute`. Added in v0.5.1.
+    GroupMute { group: GroupId, muted: bool },
     /// A per-speaker subscription failed and recovery is being
     /// attempted. The stream itself is still alive; the UI may show
     /// "stale" for that speaker. Reserve `sink.add_error` for fatal
@@ -134,6 +142,39 @@ mod tests {
                 assert_eq!(state, PlaybackState::Playing);
             }
             _ => panic!("expected Playback variant"),
+        }
+    }
+
+    #[test]
+    fn group_volume_variant_round_trips_group_id() {
+        let gid = GroupId::new("RINCON_KITCHEN:1");
+        let v = Volume::new(40).unwrap();
+        let ev = ChangeEvent::GroupVolume {
+            group: gid.clone(),
+            volume: v,
+        };
+        match ev {
+            ChangeEvent::GroupVolume { group, volume } => {
+                assert_eq!(group, gid);
+                assert_eq!(volume, v);
+            }
+            _ => panic!("expected GroupVolume variant"),
+        }
+    }
+
+    #[test]
+    fn group_mute_variant_round_trips_group_id() {
+        let gid = GroupId::new("RINCON_KITCHEN:1");
+        let ev = ChangeEvent::GroupMute {
+            group: gid.clone(),
+            muted: true,
+        };
+        match ev {
+            ChangeEvent::GroupMute { group, muted } => {
+                assert_eq!(group, gid);
+                assert!(muted);
+            }
+            _ => panic!("expected GroupMute variant"),
         }
     }
 

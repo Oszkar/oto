@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2129328059;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1748234268;
 
 // Section: executor
 
@@ -441,6 +441,74 @@ fn wire__crate__api__previous_impl(
         },
     )
 }
+fn wire__crate__api__set_group_mute_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "set_group_mute",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_group_id = <String>::sse_decode(&mut deserializer);
+            let api_muted = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::CommandError>((move || {
+                    let output_ok = crate::api::set_group_mute(api_group_id, api_muted)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__set_group_volume_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "set_group_volume",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_group_id = <String>::sse_decode(&mut deserializer);
+            let api_volume = <i32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::CommandError>((move || {
+                    let output_ok = crate::api::set_group_volume(api_group_id, api_volume)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__set_mute_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -654,6 +722,22 @@ impl SseDecode for crate::api::ChangeEventDto {
                 };
             }
             4 => {
+                let mut var_groupId = <String>::sse_decode(deserializer);
+                let mut var_volume = <u32>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::GroupVolume {
+                    group_id: var_groupId,
+                    volume: var_volume,
+                };
+            }
+            5 => {
+                let mut var_groupId = <String>::sse_decode(deserializer);
+                let mut var_muted = <bool>::sse_decode(deserializer);
+                return crate::api::ChangeEventDto::GroupMute {
+                    group_id: var_groupId,
+                    muted: var_muted,
+                };
+            }
+            6 => {
                 let mut var_speakerId = <String>::sse_decode(deserializer);
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::ChangeEventDto::SubscriptionError {
@@ -661,13 +745,13 @@ impl SseDecode for crate::api::ChangeEventDto {
                     message: var_message,
                 };
             }
-            5 => {
+            7 => {
                 let mut var_speakerId = <String>::sse_decode(deserializer);
                 return crate::api::ChangeEventDto::SubscriptionRecovered {
                     speaker_id: var_speakerId,
                 };
             }
-            6 => {
+            8 => {
                 return crate::api::ChangeEventDto::TopologyChanged;
             }
             _ => {
@@ -1009,10 +1093,12 @@ fn pde_ffi_dispatcher_primary_impl(
         10 => wire__crate__api__pause_impl(port, ptr, rust_vec_len, data_len),
         11 => wire__crate__api__play_impl(port, ptr, rust_vec_len, data_len),
         12 => wire__crate__api__previous_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__set_mute_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__set_volume_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__speaker_state_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__subscribe_change_events_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__set_group_mute_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__set_group_volume_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__set_mute_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__set_volume_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__speaker_state_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__subscribe_change_events_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1060,19 +1146,31 @@ impl flutter_rust_bridge::IntoDart for crate::api::ChangeEventDto {
                 track.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            crate::api::ChangeEventDto::GroupVolume { group_id, volume } => [
+                4.into_dart(),
+                group_id.into_into_dart().into_dart(),
+                volume.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::ChangeEventDto::GroupMute { group_id, muted } => [
+                5.into_dart(),
+                group_id.into_into_dart().into_dart(),
+                muted.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             crate::api::ChangeEventDto::SubscriptionError {
                 speaker_id,
                 message,
             } => [
-                4.into_dart(),
+                6.into_dart(),
                 speaker_id.into_into_dart().into_dart(),
                 message.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
-                [5.into_dart(), speaker_id.into_into_dart().into_dart()].into_dart()
+                [7.into_dart(), speaker_id.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::ChangeEventDto::TopologyChanged => [6.into_dart()].into_dart(),
+            crate::api::ChangeEventDto::TopologyChanged => [8.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -1321,20 +1419,30 @@ impl SseEncode for crate::api::ChangeEventDto {
                 <String>::sse_encode(group_id, serializer);
                 <crate::api::TrackDto>::sse_encode(track, serializer);
             }
+            crate::api::ChangeEventDto::GroupVolume { group_id, volume } => {
+                <i32>::sse_encode(4, serializer);
+                <String>::sse_encode(group_id, serializer);
+                <u32>::sse_encode(volume, serializer);
+            }
+            crate::api::ChangeEventDto::GroupMute { group_id, muted } => {
+                <i32>::sse_encode(5, serializer);
+                <String>::sse_encode(group_id, serializer);
+                <bool>::sse_encode(muted, serializer);
+            }
             crate::api::ChangeEventDto::SubscriptionError {
                 speaker_id,
                 message,
             } => {
-                <i32>::sse_encode(4, serializer);
+                <i32>::sse_encode(6, serializer);
                 <String>::sse_encode(speaker_id, serializer);
                 <String>::sse_encode(message, serializer);
             }
             crate::api::ChangeEventDto::SubscriptionRecovered { speaker_id } => {
-                <i32>::sse_encode(5, serializer);
+                <i32>::sse_encode(7, serializer);
                 <String>::sse_encode(speaker_id, serializer);
             }
             crate::api::ChangeEventDto::TopologyChanged => {
-                <i32>::sse_encode(6, serializer);
+                <i32>::sse_encode(8, serializer);
             }
             _ => {
                 unimplemented!("");

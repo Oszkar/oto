@@ -279,6 +279,22 @@ pub fn set_mute(speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
     result
 }
 
+/// v0.5.1: set `group`'s master volume (routed to its coordinator). Health is
+/// attributed to the coordinator the command was routed to.
+pub fn set_group_volume(group: &GroupId, volume: Volume) -> Result<(), WireError> {
+    let result = with_wire(|w| w.set_group_volume(group, volume));
+    observe_group_health(group, &result);
+    result
+}
+
+/// v0.5.1: set `group`'s master mute state (routed to its coordinator). Health
+/// is attributed to the coordinator the command was routed to.
+pub fn set_group_mute(group: &GroupId, muted: bool) -> Result<(), WireError> {
+    let result = with_wire(|w| w.set_group_mute(group, muted));
+    observe_group_health(group, &result);
+    result
+}
+
 /// v0.5.1: fold `speaker` into `coordinator`'s group. Additive; the settled
 /// topology surfaces via the debounced `GroupMembership` topology-event path
 /// (no self-trigger here). Health is attributed to the joiner — the speaker
@@ -403,6 +419,18 @@ pub fn cached_transport(group: &GroupId) -> Option<oto_core::TransportState> {
 /// Read a group's cached current track. Slice 4 read surface.
 pub fn cached_track(group: &GroupId) -> Option<oto_core::Track> {
     state_manager().track_of(group)
+}
+
+/// Read a group's cached GroupRenderingControl volume (v0.5.1). Event-fed;
+/// `None` until the first GroupVolume event lands for that group.
+pub fn cached_group_volume(group: &GroupId) -> Option<Volume> {
+    state_manager().group_volume_of(group)
+}
+
+/// Read a group's cached GroupRenderingControl mute state (v0.5.1). Event-fed;
+/// `None` until the first GroupMute event lands for that group.
+pub fn cached_group_muted(group: &GroupId) -> Option<bool> {
+    state_manager().group_muted_of(group)
 }
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
@@ -608,6 +636,12 @@ mod tests {
         }
         fn set_mute(&self, s: &SpeakerId, m: bool) -> Result<(), WireError> {
             self.0.set_mute(s, m)
+        }
+        fn set_group_volume(&self, g: &GroupId, v: Volume) -> Result<(), WireError> {
+            self.0.set_group_volume(g, v)
+        }
+        fn set_group_mute(&self, g: &GroupId, m: bool) -> Result<(), WireError> {
+            self.0.set_group_mute(g, m)
         }
         fn join_group(&self, s: &SpeakerId, c: &SpeakerId) -> Result<(), WireError> {
             self.0.join_group(s, c)

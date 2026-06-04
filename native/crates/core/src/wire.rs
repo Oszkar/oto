@@ -34,6 +34,15 @@ pub trait Wire {
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError>;
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
 
+    /// v0.5.1 — group volume/mute (GroupRenderingControl). Group-scoped, so
+    /// addressed by `GroupId` and routed to the group's coordinator (exactly
+    /// like AVTransport `play`/`pause`). The impl resolves `group` →
+    /// coordinator → IP from the topology cache; an unknown/stale `group` →
+    /// `WireError::NotFound`. `volume` is clamped to `0..=100` by
+    /// `oto_core::Volume` before the SOAP call. All methods block (SOAP).
+    fn set_group_volume(&self, group: &GroupId, volume: Volume) -> Result<(), WireError>;
+    fn set_group_mute(&self, group: &GroupId, muted: bool) -> Result<(), WireError>;
+
     /// v0.5.1 — group form/break (additive). Both are addressed per-speaker
     /// and mutate household topology; the settled result surfaces via the
     /// debounced `GroupMembership` topology-event path (a regroup fires the
