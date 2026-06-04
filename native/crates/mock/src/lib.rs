@@ -442,7 +442,9 @@ impl Wire for MockWire {
             return Err(err.clone());
         }
         // Auto-emit a per-group GroupVolume event (mirrors real Sonos:
-        // SetGroupVolume SOAP success → group_volume NOTIFY).
+        // SetGroupVolume SOAP success → group_volume NOTIFY). Group volume is
+        // event-fed only — there is no `Model` field to round-trip (unlike the
+        // per-speaker `set_volume`); the emitted event is the read path.
         if let Some(tx) = &guard.tx {
             let _ = tx.send(ChangeEvent::GroupVolume {
                 group: group.clone(),
@@ -1244,6 +1246,11 @@ mod tests {
         w.set_command_error(&kitchen, WireError::Network("unreachable".into()));
         assert_eq!(
             w.set_group_volume(&GroupId::new("RINCON_KITCHEN:1"), Volume::new(50).unwrap()),
+            Err(WireError::Network("unreachable".into()))
+        );
+        // set_group_mute routes to the same coordinator → same forced error.
+        assert_eq!(
+            w.set_group_mute(&GroupId::new("RINCON_KITCHEN:1"), true),
             Err(WireError::Network("unreachable".into()))
         );
     }

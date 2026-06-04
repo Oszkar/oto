@@ -1040,13 +1040,21 @@ mod tests {
     }
 
     #[test]
-    fn group_volume_event_clamps_at_100() {
+    fn group_volume_event_clamps_out_of_range_value() {
+        // Bypass GroupVolume::new (which itself clamps) via the public tuple
+        // field, so the value reaching group_volume_event is genuinely > 100 —
+        // this exercises oto's belt-and-braces Volume::clamped guard, not the
+        // SDK's own clamp.
         let g = gid("RINCON_K:1");
-        let ev = group_volume_event(g, sonos_state::GroupVolume::new(255));
+        let ev = group_volume_event(g, sonos_state::GroupVolume(200));
         let ChangeEvent::GroupVolume { volume, .. } = ev else {
             panic!("expected GroupVolume")
         };
-        assert_eq!(volume.get(), 100);
+        assert_eq!(
+            volume.get(),
+            100,
+            "Volume::clamped must cap an out-of-range group volume at 100"
+        );
     }
 
     #[test]

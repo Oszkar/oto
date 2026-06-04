@@ -287,7 +287,8 @@ pub fn set_group_volume(group: &GroupId, volume: Volume) -> Result<(), WireError
     result
 }
 
-/// v0.5.1: set `group`'s master mute state (routed to its coordinator).
+/// v0.5.1: set `group`'s master mute state (routed to its coordinator). Health
+/// is attributed to the coordinator the command was routed to.
 pub fn set_group_mute(group: &GroupId, muted: bool) -> Result<(), WireError> {
     let result = with_wire(|w| w.set_group_mute(group, muted));
     observe_group_health(group, &result);
