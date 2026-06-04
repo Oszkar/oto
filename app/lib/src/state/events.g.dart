@@ -16,7 +16,7 @@ part of 'events.dart';
 /// rebuild only on a real new wire — not on a loading/failed re-discover.
 
 @ProviderFor(wireGeneration)
-const wireGenerationProvider = WireGenerationProvider._();
+final wireGenerationProvider = WireGenerationProvider._();
 
 /// The current wire generation, or `null` until the first successful
 /// discovery. `currentWireGeneration()` bumps only on a successful
@@ -34,7 +34,7 @@ final class WireGenerationProvider
   /// transition, its VALUE only changes when a new wire is actually installed.
   /// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
   /// rebuild only on a real new wire — not on a loading/failed re-discover.
-  const WireGenerationProvider._()
+  WireGenerationProvider._()
     : super(
         from: null,
         argument: null,
@@ -91,7 +91,7 @@ String _$wireGenerationHash() => r'6dba8cada3a1a86e67a56791020803b1cc38c96e';
 /// wire replacement — the intended lifecycle boundary.
 
 @ProviderFor(changeEvents)
-const changeEventsProvider = ChangeEventsProvider._();
+final changeEventsProvider = ChangeEventsProvider._();
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
 /// **new wire** — keyed on [wireGenerationProvider], which only changes on a
@@ -144,7 +144,7 @@ final class ChangeEventsProvider
   /// Keeping it alive for the app lifetime avoids that class of bug; it still
   /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
   /// wire replacement — the intended lifecycle boundary.
-  const ChangeEventsProvider._()
+  ChangeEventsProvider._()
     : super(
         from: null,
         argument: null,
