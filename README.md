@@ -31,7 +31,7 @@ oto/
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml
-├─ docs/                 # ARCHITECTURE, ROADMAP, sonos-notes + evidence/
+├─ docs/                 # ARCHITECTURE.md, ROADMAP.md, sonos-notes.md + evidence/
 ├─ scripts/
 ├─ .github/workflows/
 ├─ rust-toolchain.toml
