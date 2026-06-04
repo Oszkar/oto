@@ -101,6 +101,36 @@ impl Model {
             command_errors: HashMap::new(),
         }
     }
+
+    /// Re-home members left behind when `departed` stops coordinating its
+    /// group (it joined another group, or went standalone). Mirrors the Sonos
+    /// firmware delegating coordination to a remaining member, so the mock
+    /// never holds an impossible topology — a member pointing at a coordinator
+    /// that now follows someone else. Keeps `member_to_coord` and `coords`
+    /// mutually consistent. The caller must already have re-pointed `departed`
+    /// itself.
+    fn reelect_orphans(&mut self, departed: &SpeakerId) {
+        let mut orphans: Vec<SpeakerId> = self
+            .member_to_coord
+            .iter()
+            .filter(|(member, coord)| *coord == departed && *member != departed)
+            .map(|(member, _)| member.clone())
+            .collect();
+        // Any group `departed` used to coordinate is stale now — drop it.
+        self.coords.retain(|_gid, coord| coord != departed);
+        if orphans.is_empty() {
+            return;
+        }
+        // Deterministic new coordinator (lowest id) so tests are stable.
+        orphans.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        let new_coord = orphans[0].clone();
+        for member in &orphans {
+            self.member_to_coord
+                .insert(member.clone(), new_coord.clone());
+        }
+        self.coords
+            .insert(GroupId::new(format!("{}:0", new_coord.as_str())), new_coord);
+    }
 }
 
 // ── MockWire ─────────────────────────────────────────────────────────────────
@@ -411,17 +441,13 @@ impl Wire for MockWire {
             return Err(err.clone());
         }
         // Fold `speaker` into `coordinator`'s group: it now follows that
-        // coordinator. If `speaker` had been coordinating its own group,
-        // that group dissolves — `speaker` is no longer a member of it, so
-        // drop any group whose coordinator is `speaker` and which no
-        // remaining member points at.
+        // coordinator. If `speaker` had been coordinating a group, re-home the
+        // members it leaves behind (and drop its now-stale group) so they don't
+        // end up pointing at a coordinator that itself follows another group.
         guard
             .member_to_coord
             .insert(speaker.clone(), coordinator.clone());
-        let speaker_still_coordinates = guard.member_to_coord.values().any(|c| c == speaker);
-        if !speaker_still_coordinates {
-            guard.coords.retain(|_gid, coord| coord != speaker);
-        }
+        guard.reelect_orphans(speaker);
         Ok(())
     }
 
@@ -433,10 +459,13 @@ impl Wire for MockWire {
         if let Some(err) = guard.command_errors.get(speaker) {
             return Err(err.clone());
         }
-        // `speaker` becomes its own standalone group: it coordinates itself
-        // and gets a fresh solo GroupId. Uniform — no branch on whether it
-        // was previously a coordinator (the firmware re-elects for any
-        // members left behind; the mock just detaches `speaker`).
+        // Uniform — no branch on whether `speaker` coordinated a group. First
+        // re-home any members it was coordinating (the firmware delegates the
+        // old group to a remaining member); this also drops `speaker`'s stale
+        // old group. THEN `speaker` becomes its own standalone group with a
+        // fresh solo GroupId. Order matters: re-election must run before the
+        // standalone insert, since it prunes every group `speaker` coordinates.
+        guard.reelect_orphans(speaker);
         guard
             .member_to_coord
             .insert(speaker.clone(), speaker.clone());
@@ -1161,6 +1190,61 @@ mod tests {
         assert_eq!(
             w.leave_group(&dining),
             Err(WireError::Network("unreachable".into()))
+        );
+    }
+
+    #[test]
+    fn leave_group_reelects_members_left_behind() {
+        // Kitchen COORDINATES [Kitchen, Dining]. When the coordinator leaves,
+        // the remaining member must be re-homed (off Kitchen) — never left
+        // pointing at the departed coordinator (an impossible topology).
+        let w = MockWire::default();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        let dining = SpeakerId::new("RINCON_DINING");
+
+        // Kitchen playing → Dining (follower) reflects it via D2.
+        w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap();
+        assert_eq!(
+            w.speaker_state(&dining).unwrap().transport.unwrap().state,
+            PlaybackState::Playing
+        );
+
+        // The coordinator leaves. Dining must now read its OWN state (Stopped
+        // seed), proving it was re-homed off Kitchen rather than orphaned
+        // still pointing at the now-departed Kitchen.
+        w.leave_group(&kitchen).unwrap();
+        assert_eq!(
+            w.speaker_state(&dining).unwrap().transport.unwrap().state,
+            PlaybackState::Stopped,
+            "a left-behind member must be re-homed off the departed coordinator"
+        );
+    }
+
+    #[test]
+    fn join_group_reelects_old_group_when_coordinator_moves() {
+        // Kitchen COORDINATES [Kitchen, Dining]. When Kitchen joins Office's
+        // group, the left-behind Dining must be re-homed — not left pointing
+        // at Kitchen, which now follows Office.
+        let w = MockWire::default();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        let dining = SpeakerId::new("RINCON_DINING");
+        let office = SpeakerId::new("RINCON_OFFICE");
+
+        w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap(); // Kitchen playing, Dining follows
+        w.join_group(&kitchen, &office).unwrap(); // Kitchen now follows Office
+
+        // Dining is re-homed off Kitchen → independent → its own Stopped seed.
+        assert_eq!(
+            w.speaker_state(&dining).unwrap().transport.unwrap().state,
+            PlaybackState::Stopped,
+            "left-behind member must be re-homed when its coordinator joins elsewhere"
+        );
+        // Kitchen now follows Office (D2): playing Office's group makes Kitchen Playing.
+        w.play(&GroupId::new("RINCON_OFFICE:0")).unwrap();
+        assert_eq!(
+            w.speaker_state(&kitchen).unwrap().transport.unwrap().state,
+            PlaybackState::Playing,
+            "the moved coordinator now follows its new group (Office)"
         );
     }
 }
