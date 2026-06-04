@@ -81,6 +81,31 @@ fn discover_ungrouped(wire: &SonosWire) -> DiscoverySnapshot {
     wire.discover().expect("re-discover after ungroup-setup")
 }
 
+/// Drive a GUARANTEED group-volume change and assert a `GroupVolume` event fires
+/// on `rx`. Sonos suppresses the `group_volume` NOTIFY when the value doesn't
+/// change, so a single `set_group_volume(X)` is flaky if the group is already at
+/// X (e.g. a re-run that left it there — observed on hardware). Priming with one
+/// value, then setting a DIFFERENT one, makes the second a guaranteed change
+/// (the command sets the device value regardless of whether a NOTIFY fires).
+fn assert_group_volume_event(
+    wire: &SonosWire,
+    rx: &std::sync::mpsc::Receiver<ChangeEvent>,
+    group_id: &GroupId,
+) {
+    // Prime to 20 (forces the current value), then 40 is a guaranteed 20→40 change.
+    wire.set_group_volume(group_id, Volume::new(20).expect("20 in range"))
+        .expect("set_group_volume (prime) must succeed");
+    drain_until_quiet(rx, Duration::from_millis(750)); // swallow the prime's event
+    println!("set_group_volume(40) on group {}", group_id.as_str());
+    wire.set_group_volume(group_id, Volume::new(40).expect("40 in range"))
+        .expect("set_group_volume must succeed");
+    assert!(
+        wait_for_group_volume(rx, group_id, Duration::from_secs(10)),
+        "expected a GroupVolume event for group {} after a guaranteed volume change",
+        group_id.as_str()
+    );
+}
+
 /// Find the group containing `speaker` in a snapshot, if any.
 fn group_of<'a>(snap: &'a DiscoverySnapshot, speaker: &SpeakerId) -> Option<&'a GroupIdentity> {
     snap.groups.iter().find(|g| g.members.contains(speaker))
@@ -264,19 +289,7 @@ fn live_group_volume_command_and_event_round_trip() {
     drain_until_quiet(&rx, Duration::from_millis(500));
 
     // ── SET GROUP VOLUME → expect a GroupVolume event for this group ────────
-    let target = Volume::new(35).expect("35 in range");
-    println!("set_group_volume({}) on group {}", 35, group_id.as_str());
-    wire.set_group_volume(&group_id, target)
-        .expect("set_group_volume must succeed");
-
-    // A single group-volume change fires one or more group_volume NOTIFYs;
-    // wait for the first GroupVolume event addressed to our group.
-    let saw_group_volume = wait_for_group_volume(&rx, &group_id, Duration::from_secs(10));
-    assert!(
-        saw_group_volume,
-        "expected a GroupVolume event for group {} after set_group_volume",
-        group_id.as_str()
-    );
+    assert_group_volume_event(&wire, &rx, &group_id);
 
     // ── RESTORE: leave the group so the LAN is left as we found it ──────────
     wire.leave_group(&joiner).expect("leave_group must succeed");
@@ -373,17 +386,7 @@ fn live_seeded_fast_rediscover() {
         .expect("event stream available after subscribe_speakers");
     drain_until_quiet(&rx, Duration::from_millis(500));
 
-    let target = Volume::new(35).expect("35 in range");
-    println!("set_group_volume({}) on group {}", 35, group_id.as_str());
-    wire2
-        .set_group_volume(&group_id, target)
-        .expect("set_group_volume must succeed");
-    let saw_group_volume = wait_for_group_volume(&rx, &group_id, Duration::from_secs(10));
-    assert!(
-        saw_group_volume,
-        "expected a GroupVolume event for group {} on wire2's fresh pump",
-        group_id.as_str()
-    );
+    assert_group_volume_event(&wire2, &rx, &group_id);
 
     // ── RESTORE: leave the group so the LAN is left as we found it ──────────
     wire2
