@@ -14,7 +14,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.6   | next | The designed Flutter UI |
 | v1.0   | future | Stable — externally tested, packaged |
 
-v0.1–v0.4 are verified on Windows. **v0.5 hardware acceptance — PASS** (2026-06-02/03, 2-speaker LAN + a real Android device): live topology events (regroup → `TopologyChanged` + refresh, no rediscover loop), speaker-model repopulation, the v0.4 regression suite (incl. a 28.5 min renewal cycle), and **Android *release* discovery** working via the held `WifiManager.MulticastLock` (it was non-functional before). Evidence at [docs/evidence/v0.5-release/](evidence/v0.5-release/README.md). Earlier: v0.4 full evidence at [docs/evidence/v0.4-release/](evidence/v0.4-release/README.md); the Android debug-APK smoke at [docs/evidence/v0.5-android-debug.md](evidence/v0.5-android-debug.md).
+v0.1–v0.4 are verified on Windows. **v0.5 hardware acceptance — PASS** (2026-06-02/03, 2-speaker LAN + a real Android device): live topology events (regroup → `TopologyChanged`; validated with a `refresh_topology` re-pull; no seed-induced rediscover loop), speaker-model repopulation, the v0.4 regression suite (incl. a 28.5 min renewal cycle), and **Android *release* discovery** working via the held `WifiManager.MulticastLock` (it was non-functional before). Evidence at [docs/evidence/v0.5-release/](evidence/v0.5-release/README.md). Earlier: v0.4 full evidence at [docs/evidence/v0.4-release/](evidence/v0.4-release/README.md); the Android debug-APK smoke at [docs/evidence/v0.5-android-debug.md](evidence/v0.5-android-debug.md).
 
 ## v0.4 — Live property events (released)
 
