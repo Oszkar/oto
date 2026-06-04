@@ -179,17 +179,13 @@ fn live_group_volume_command_and_event_round_trip() {
     };
     let joiner = joiner_group.coordinator.clone();
 
-    // Subscribe BEFORE forming the group (topology must precede speakers —
-    // discover_with enforces this in production; here we order it manually).
-    wire.subscribe_topology()
-        .expect("subscribe_topology before the pump");
-    wire.subscribe_speakers()
-        .expect("subscribe_speakers spawns the pump");
-    let rx = wire
-        .take_event_stream()
-        .expect("event stream available after subscribe_speakers");
-
-    // Form the group and wait for the settled topology.
+    // Form the group FIRST, then build the subscription against the SETTLED,
+    // grouped topology — mirroring production, where a regroup triggers a
+    // re-discover that rebuilds the pump with a clean TopologyFilter. Subscribing
+    // BEFORE joining (an earlier version did) makes the pump observe the regroup,
+    // mark its TopologyFilter dirty, and drop group-addressed events (incl.
+    // GroupVolume) until rebuilt — so the wait below would time out even though
+    // the command succeeded (codex review of PR #73, finding 2).
     wire.join_group(&joiner, &coordinator)
         .expect("join_group must succeed");
     let joined_into = poll_until_settled(&wire, "join", |snap| {
@@ -203,6 +199,19 @@ fn live_group_volume_command_and_event_round_trip() {
         group_id.as_str(),
         coordinator.as_str()
     );
+
+    // Re-pull the settled grouped topology into the wire's caches, then spawn a
+    // FRESH pump (clean TopologyFilter) that watches the coordinator's
+    // GroupRenderingControl — exactly what a production re-discover does.
+    wire.discover()
+        .expect("re-discover the settled grouped topology");
+    wire.subscribe_topology()
+        .expect("subscribe_topology before the pump");
+    wire.subscribe_speakers()
+        .expect("subscribe_speakers spawns the pump");
+    let rx = wire
+        .take_event_stream()
+        .expect("event stream available after subscribe_speakers");
 
     // Drain any seed / settle events already queued so the assertion below
     // observes the event caused by OUR command, not a leftover seed.

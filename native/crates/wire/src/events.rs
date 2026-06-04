@@ -566,12 +566,19 @@ fn map_upstream_event(
         // exactly like per-speaker `volume`.
         "group_volume" => {
             let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            let v: GroupVolume = manager.get_property::<GroupVolume>(&sdk_sid)?;
+            // GroupRenderingControl values are `Scope::Group` — the SDK stores
+            // them in `group_props` keyed by GroupId, NOT in the coordinator's
+            // `speaker_props` (sonos-sdk-state state.rs:182-187). `get_property`
+            // reads speaker_props and would return None here, silently dropping
+            // every group event; read via `get_group_property` by GroupId.
+            let sdk_gid = sonos_state::GroupId::new(group.as_str());
+            let v: GroupVolume = manager.get_group_property::<GroupVolume>(&sdk_gid)?;
             Some(group_volume_event(group, v))
         }
         "group_mute" => {
             let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            let m: GroupMute = manager.get_property::<GroupMute>(&sdk_sid)?;
+            let sdk_gid = sonos_state::GroupId::new(group.as_str());
+            let m: GroupMute = manager.get_group_property::<GroupMute>(&sdk_gid)?;
             Some(group_mute_event(group, m))
         }
         // v0.5 (S1): ZoneGroupTopology change. The SDK emits one
