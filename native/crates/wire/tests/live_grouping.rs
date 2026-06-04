@@ -22,6 +22,7 @@
 #![cfg(feature = "live-tests")]
 
 use std::{
+    net::IpAddr,
     sync::mpsc::RecvTimeoutError,
     thread::sleep,
     time::{Duration, Instant},
@@ -239,6 +240,123 @@ fn live_group_volume_command_and_event_round_trip() {
             .filter(|g| g.coordinator == joiner && g.members == vec![joiner.clone()])
             .cloned()
     });
+}
+
+#[test]
+#[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 Option D acceptance"]
+fn live_seeded_fast_rediscover() {
+    // v0.5.1 (Option D): proves the SSDP-skipped fast re-discover.
+    //   (a) `SonosWire::new_seeded(ips).discover()` returns the grouped
+    //       topology WITHOUT running SSDP, and does so FAST (< 2 s — an SSDP
+    //       sweep alone is ~3 s), and
+    //   (b) the seeded wire's FRESH pump routes a `GroupVolume` event for the
+    //       grouped coordinator (same lifecycle a production refresh installs).
+    //
+    // Mirrors `refresh_topology()`: re-pull IPs from the current wire, then
+    // build a seeded wire from them and discover() through it (minus SSDP).
+    let wire = SonosWire::new();
+    let snap = wire.discover().expect("discover() against the real LAN");
+    println!(
+        "discover(): {} group(s), {} speaker(s)",
+        snap.groups.len(),
+        snap.speakers.len()
+    );
+
+    // Form a real (multi-member) group so the seeded discover has a grouped
+    // topology to return — pick a coordinator + a joiner from a DIFFERENT
+    // group, like the other tests.
+    let coordinator_group = snap.groups.first().expect("expected >= 1 group on the LAN");
+    let coordinator = coordinator_group.coordinator.clone();
+    let joiner_group = snap
+        .groups
+        .iter()
+        .find(|g| g.members.len() == 1 && g.coordinator != coordinator)
+        .or_else(|| snap.groups.iter().find(|g| g.coordinator != coordinator));
+    let Some(joiner_group) = joiner_group else {
+        println!(
+            "SKIP: need >= 2 independent zones to form a group (found {} group(s)).",
+            snap.groups.len()
+        );
+        return;
+    };
+    let joiner = joiner_group.coordinator.clone();
+
+    wire.join_group(&joiner, &coordinator)
+        .expect("join_group must succeed");
+    let joined_into = poll_until_settled(&wire, "join", |snap| {
+        group_of(snap, &joiner)
+            .filter(|g| g.coordinator == coordinator && g.members.contains(&coordinator))
+            .cloned()
+    });
+    let group_id: GroupId = joined_into.id.clone();
+    println!(
+        "  settled: group {} (coord {})",
+        group_id.as_str(),
+        coordinator.as_str()
+    );
+
+    // ── (a) SEEDED FAST RE-DISCOVER ─────────────────────────────────────────
+    // Collect the reachable speaker IPs from the settled topology (what
+    // refresh_topology() does), then build a seeded wire and time its
+    // SSDP-skipped discover().
+    let ips: Vec<IpAddr> = joined_into_speakers_ips(&wire);
+    let wire2 = SonosWire::new_seeded(ips);
+    let start = Instant::now();
+    let snap2 = wire2.discover().expect("seeded discover() must succeed");
+    let elapsed = start.elapsed();
+    println!("seeded discover() took {elapsed:?} (no SSDP)");
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "seeded discover() must skip SSDP and be fast (< 2 s); took {elapsed:?}"
+    );
+    assert!(
+        snap2.groups.iter().any(|g| g.id == group_id),
+        "seeded discover() must return the grouped topology (group {})",
+        group_id.as_str()
+    );
+
+    // ── (b) FRESH PUMP ROUTES A GroupVolume EVENT ───────────────────────────
+    wire2
+        .subscribe_topology()
+        .expect("subscribe_topology before the pump");
+    wire2
+        .subscribe_speakers()
+        .expect("subscribe_speakers spawns the pump");
+    let rx = wire2
+        .take_event_stream()
+        .expect("event stream available after subscribe_speakers");
+    drain_until_quiet(&rx, Duration::from_millis(500));
+
+    let target = Volume::new(35).expect("35 in range");
+    println!("set_group_volume({}) on group {}", 35, group_id.as_str());
+    wire2
+        .set_group_volume(&group_id, target)
+        .expect("set_group_volume must succeed");
+    let saw_group_volume = wait_for_group_volume(&rx, &group_id, Duration::from_secs(10));
+    assert!(
+        saw_group_volume,
+        "expected a GroupVolume event for group {} on wire2's fresh pump",
+        group_id.as_str()
+    );
+
+    // ── RESTORE: leave the group so the LAN is left as we found it ──────────
+    wire2
+        .leave_group(&joiner)
+        .expect("leave_group must succeed");
+    let _ = poll_until_settled(&wire2, "leave", |snap| {
+        group_of(snap, &joiner)
+            .filter(|g| g.coordinator == joiner && g.members == vec![joiner.clone()])
+            .cloned()
+    });
+}
+
+/// Re-pull the settled topology from `wire` and collect every speaker IP —
+/// the seed set a production `refresh_topology()` hands to `new_seeded()`.
+fn joined_into_speakers_ips(wire: &SonosWire) -> Vec<IpAddr> {
+    let snap = wire
+        .refresh_topology()
+        .expect("refresh_topology to collect seed IPs");
+    snap.speakers.iter().map(|s| s.ip).collect()
 }
 
 /// Drain events for up to `budget`, ignoring them — used to flush seeds/settle

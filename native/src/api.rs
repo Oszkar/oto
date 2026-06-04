@@ -1,4 +1,5 @@
 use oto_app::discover as app_discover;
+use oto_app::refresh_topology as app_refresh_topology;
 
 use crate::frb_generated::StreamSink;
 
@@ -134,6 +135,19 @@ pub fn discover() -> Result<Topology, DiscoveryError> {
     // Glue only: delegate inward, then the representational map (tested
     // LAN-free in `native/tests/`; see `crate::map`).
     let snap = app_discover().map_err(crate::map::to_discovery_error)?;
+    Ok(crate::map::to_topology(snap))
+}
+
+/// v0.5.1 (Option D): the topology fast-path — a re-discover that SKIPS SSDP.
+/// Re-pulls authoritative topology from the current wire (no SSDP, ~50 ms) and
+/// installs a fresh wire seeded from the reachable speaker IPs, through the same
+/// wire-replacement lifecycle as `discover()` (gen bump → Dart re-subscribes).
+/// Called by the Dart `Discovery.refreshTopology` on a debounced
+/// `TopologyChanged`. Glue only — delegates inward, then the `crate::map`
+/// representational map, mirroring `discover()` exactly. Blocking SOAP
+/// round-trip; FRB surfaces this as a Dart `Future`.
+pub fn refresh_topology() -> Result<Topology, DiscoveryError> {
+    let snap = app_refresh_topology().map_err(crate::map::to_discovery_error)?;
     Ok(crate::map::to_topology(snap))
 }
 

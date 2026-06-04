@@ -1,9 +1,9 @@
-/// v0.5 (S1) — topology-change controller.
+/// v0.5 (S1) — topology-change controller. Fast-path (Option D) since v0.5.1.
 ///
 /// Listens on the unified [changeEventsProvider] for
 /// [rust_api.ChangeEventDto_TopologyChanged] notifications (emitted when
 /// the Sonos household is regrouped) and, after a 250 ms debounce window,
-/// invalidates [discoveryProvider] to re-pull the authoritative topology.
+/// re-pulls the authoritative topology.
 ///
 /// **Debounce rationale.** A single regroup fires one `GroupMembership`
 /// NOTIFY per affected speaker (see docs/sonos-notes.md § "Topology change
@@ -11,17 +11,15 @@
 /// The 250 ms window coalesces the burst into exactly one re-pull once the
 /// household settles.
 ///
-/// **Why a full re-discover (Option A) rather than a lightweight refresh.**
-/// v0.5 S1 deliberately uses the proven cold-start path: invalidating
-/// [discoveryProvider] re-runs `discover()`, which rebuilds the wire +
-/// event pump + topology + caches from scratch — correct by construction,
-/// with no risk of stale event-routing after a regroup (the pump's
-/// coordinator→group maps are frozen at subscribe time). The lightweight
-/// SOAP-only fast path (`refresh_topology`, ~50 ms, no SSDP) is deferred to
-/// v0.6 when the UI makes the ~3-5 s re-discover latency user-visible; the
-/// controller's contract (TopologyChanged → debounce → re-pull) is
-/// identical, so that future swap is a one-line change. See the v0.5 plan
-/// Task 5 (Option A).
+/// **Fast re-discover (Option D).** The debounce body calls
+/// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~50 ms vs the
+/// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
+/// the same wire-replacement lifecycle. That is a genuine `discoveryProvider`
+/// transition, so the event stream re-subscribes against the new wire's fresh
+/// pump (clean `TopologyFilter`) — events keep flowing after a regroup,
+/// without the latency of a full SSDP sweep. If the fast re-pull throws (e.g.
+/// every cached speaker is now unreachable), it falls back to a full
+/// re-discover via `ref.invalidate(discoveryProvider)`.
 ///
 /// Activated by watching [topologyControllerProvider]. The v0.6 UI watches
 /// it once the app shell exists (the same way it will watch
@@ -60,8 +58,15 @@ void topologyController(Ref ref) {
         // (Re)arm the debounce: each TopologyChanged within the window
         // resets it, so a per-speaker NOTIFY burst yields one re-pull.
         debounce?.cancel();
-        debounce = Timer(_debounceWindow, () {
-          ref.invalidate(discoveryProvider);
+        debounce = Timer(_debounceWindow, () async {
+          // Option D: fast re-discover (no SSDP). On failure (e.g. every
+          // cached speaker is now unreachable) fall back to a full
+          // re-discover, which re-runs SSDP.
+          try {
+            await ref.read(discoveryProvider.notifier).refreshTopology();
+          } catch (_) {
+            ref.invalidate(discoveryProvider);
+          }
         });
       }
     });
