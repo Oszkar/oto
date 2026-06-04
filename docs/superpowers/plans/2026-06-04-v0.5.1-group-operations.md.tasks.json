@@ -19,7 +19,7 @@
     {
       "id": 3,
       "subject": "Task 3: Group volume/mute — commands + read/event",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1, 2],
       "description": "**Goal:** set_group_volume/set_group_mute commands + GroupVolume/GroupMute read+event on the existing single FRB stream.\n\n**Verify:** `just check && just test`; live command+event round-trip.\n\n```json:metadata\n{\"files\": [\"native/crates/core/src/events.rs\", \"native/crates/core/src/wire.rs\", \"native/crates/wire/src/grouping.rs\", \"native/crates/wire/src/adapter.rs\", \"native/crates/wire/src/events.rs\", \"native/crates/app/src/lib.rs\", \"native/crates/app/src/state_manager.rs\", \"native/src/api.rs\", \"native/src/map.rs\", \"app/lib/src/state/playback.dart\", \"native/crates/wire/tests/live_grouping.rs\"], \"verifyCommand\": \"just check && just test\", \"acceptanceCriteria\": [\"set_group_volume/set_group_mute on all 4 impls coordinator-routed\", \"ChangeEvent + ChangeEventDto GroupVolume/GroupMute; map.rs maps them\", \"pump watches GroupVolume/GroupMute on coordinators; TopologyFilter dirty-drops them\", \"StateManager per-GroupId group cache + apply + readers\", \"MockWire set_group_* auto-emit events\", \"just check + just test green; hardware command+event round-trip\"]}\n```"
     },
