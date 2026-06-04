@@ -22,9 +22,9 @@ Cargo.lock.bak
 .pub/
 build/
 *.log
-# Spike evidence logs are intentionally checked in — they're durable
+# Hardware evidence logs are intentionally checked in — they're durable
 # protocol observations, not transient build output. Override *.log.
-!docs/superpowers/specs/**/*.log
+!docs/evidence/**/*.log
 
 # Coverage
 coverage/

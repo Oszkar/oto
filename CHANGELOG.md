@@ -6,147 +6,110 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-06-02
+## [0.5.0] - 2026-06-03
 
-v0.5 — Hardening before the v0.6 UI. Topology change events, in-band subscription-failure surfacing, Android release discovery, and speaker-model repopulation — built on the capability layers v0.4 proved, so the UI is a pure design+build problem. All event additions ride the single v0.4 FRB `Stream<ChangeEventDto>`; no FRB stream-surface redesign.
+v0.5 — Hardening before the v0.6 UI: live topology events, subscription-failure surfacing, Android release discovery, and speaker-model names. All event additions ride the single v0.4 `Stream<ChangeEventDto>` — no stream-surface redesign.
 
 ### Added
 
-- **Topology change events (S1).** Live ZoneGroupTopology via a per-speaker `GroupMembership` watch in the event pump → payload-less `ChangeEvent::TopologyChanged` on the v0.4 stream. The Dart `TopologyController` debounces 250 ms then re-discovers (Option A — a full wire+pump+cache rebuild, correct by construction; the lightweight SOAP `refresh_topology` fast-path is deferred to v0.6). `Wire` trait grown additively with `subscribe_topology(&self) -> Result<(), WireError>` (must precede `subscribe_speakers`; `discover_with` enforces it) + `refresh_topology(&self) -> Result<DiscoverySnapshot, WireError>` (`GetZoneGroupState` SOAP, no SSDP). Mechanism: ZoneGroupTopology is a *service*, not a watchable property — the change surfaces via the speaker-scoped `GroupMembership` property (P0c hardware finding, [`docs/sonos-notes.md`](docs/sonos-notes.md)).
-- **Subscription-failure surfacing (S2).** `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` (carried on the surface since v0.4, never emitted — the SDK at `=0.5.2` swallows subscription failures) now emit **reactively from command dispatch**: `oto-app` tracks per-speaker `Healthy ↔ Errored` and emits on the edge — `WireError::Network` from a Healthy speaker → `SubscriptionError`; `Ok` from an Errored speaker → `SubscriptionRecovered` (`Backend`/`NotFound` don't flip health). Events ride a sibling app-event channel the FRB consumer drains alongside the wire channel.
-- **Android `MulticastLock` (S3).** A `WifiManager.MulticastLock` (Kotlin `MulticastLockHandler` over the `me.oszkar.oto/multicast_lock` MethodChannel) is held around `discover()`'s SSDP window — Android silently drops inbound SSDP multicast without it, so release-build discovery found nothing. Acquired/released best-effort from the Dart `discoveryProvider` (a lock failure doesn't abort discovery); refresh paths don't take the lock.
-- **Speaker `model` repopulate (S4).** `SpeakerIdentity.model` (always `None` since v0.3 — ZoneGroupTopology carries no model) is repopulated by a bounded, parallel per-member `device_description.xml` fetch (`<modelName>`) inside `discover()` + `refresh_topology()`, best-effort (a failed/timed-out fetch leaves `model = None`; discovery still succeeds). `ureq` promoted to a direct `oto-wire` dep (already in the locked graph transitively via `sonos-api`).
+- **Topology change events.** Grouping or ungrouping speakers in the Sonos app now updates oto live: a regroup surfaces as a `TopologyChanged` event on the existing change-event stream, and the app re-discovers to pick up the new grouping. The controller is implemented and tested but dormant until the v0.6 UI watches it. The `Wire` trait grows additively with `subscribe_topology` + `refresh_topology`.
+- **Subscription-failure surfacing.** `SubscriptionError` / `SubscriptionRecovered` (on the API since v0.4 but never emitted — the SDK at `=0.5.2` swallows subscription failures) now emit when a command to a speaker fails with a network error, and again when it recovers, so the UI can show a speaker as unreachable.
+- **Android release discovery.** Discovery now works in release builds on Android by holding a `WifiManager.MulticastLock` around the SSDP window — without it Android silently drops the discovery multicast, so release builds found nothing.
+- **Speaker model names.** `SpeakerIdentity.model` (empty since v0.3, because the topology XML carries no model) is repopulated — e.g. "Sonos Beam" — via a best-effort per-speaker `device_description.xml` fetch during discovery.
 
 ### Changed
 
-- **`discover_with` ordering:** calls `wire.subscribe_topology()` before `wire.subscribe_speakers()` so the pump registers the `GroupMembership` watch at spawn.
-- **FRB consumer (`subscribe_change_events`) is dual-channel:** drains the wire channel (whose `Disconnected` drives teardown) AND the app-event bus; idle poll bounded.
-- **Event-stream re-subscribe is generation-gated:** the Dart `changeEventsProvider` keys re-subscription on `current_wire_generation()` (bumped on a *successful* `discover_with` only), so a failed re-discover doesn't tear the live stream down onto a one-shot receiver.
-- **`docs/ARCHITECTURE.md`:** `Wire` trait listing grown with `subscribe_topology`/`refresh_topology`; v0.5 event-flow section (topology path + pump guards + app-event bus + generation-gated re-subscribe).
+- The Dart event-stream provider re-subscribes only on a *successful* re-discovery, so a failed re-discover no longer tears the live stream down onto a dead receiver.
 
 ### Fixed
 
-- **SSDP multicast egress interface ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)).** `discover_locations` now pins each per-NIC socket's outgoing multicast interface with `socket2::set_multicast_if_v4` before sending the M-SEARCH (previously left egress to the OS routing table, so on a multi-NIC host the M-SEARCH could leave the *default* interface). Hardware-validated non-regressive on the 4-speaker LAN. `socket2` promoted to a direct `oto-wire` dep; `examples/ssdp_multicast_if_probe.rs` added as the A/B diagnostic.
-- **Cumulative-review fixes** (post-merge `/codex` review of the S1–S4 series): the **seed → rediscover infinite loop** (the pump now suppresses the per-speaker subscribe seed and only emits `TopologyChanged` on real regroups); **frozen pump routing** after a regroup (group-addressed events dropped until the pump is rebuilt); **failed-rediscover event stranding** (generation-gated re-subscribe, above); **app-bus event generation-stamping** (stale old-wire events dropped, not surfaced on the new stream); plus `subscribe_topology` lock race, the consumer idle busy-poll, and a `device_description` thread-fan-out cap.
-- **Pre-release review follow-up (S1–S4).** The FRB event consumer now takes its receiver and wire generation as one atomic pair (`take_event_stream_with_generation`), closing a narrow rediscover TOCTOU that could apply an old wire's buffered events into the new wire's cache; the topology install is folded into the generation bump (`StateManager::bump_clear_and_install`) so a concurrent re-discover can't make `speaker_state` transiently return `NotFound`. Plus a v0.5 doc-accuracy sweep (`speaker_state` documented as a cache read, not SOAP; the Dart `TopologyController` noted as implemented + tested but dormant until the v0.6 UI activates it; `SubscriptionError` clarified as command-observed reachability) and an SSDP-response-validation `TODO(v0.6)` (accepted risk: LAN-local, port-1400-only).
-
-### Known issues / deferred
-
-- **Lightweight SOAP topology refresh (Option D)** is deferred to v0.6: v0.5 re-discovers on a regroup (~3–5 s). The fast-path must not ship until it rebuilds/atomically updates the pump's coordinator→group routing.
-- **Group form/break** commands → v0.5.1 (mutating SOAP; own spike + design).
-- **Subscription-failure surfacing is command-driven (Approach A):** a speaker that goes silent *while idle* isn't flagged until the next command to it fails. Approaches B (tracing capture) and C (heartbeat probe) are recorded post-1.0 candidates.
-- **Residual app-bus race:** a command spanning a rediscover's generation bump can stamp an event with the new generation or contaminate the post-reset health tracker — a transient, self-correcting spurious flag; a full fix would rework the v0.4 generation/slot dual-lock protocol (v0.6 note).
-- **S5 (lock-granularity revisit):** evaluated and **closed — not triggered.** No contention or latency observed across the acceptance live suite (incl. a 28.5 min renewal cycle); no lock narrowing needed (matches the v0.4 finding).
-
-### Housekeeping
-
-- **CI:** compile-only `clippy -p oto-wire --features live-tests --tests` step so the hardware-gated live tests can't bit-rot (never runs them; LAN untouched).
-- **`scripts/verify_generated.dart`:** dropped two non-existent `frb_generated.{io,web}.rs` pathspecs; fixed stale doc comments.
-- **Dependency hygiene:** Dependabot ignores `dtolnay/rust-toolchain`, `quick-xml` (track `sonos-api`'s `=0.31.0`), and `socket2`; dropped the inert auto-merge workflow (merges to `main` are manual, gated by `ci`).
-
-### Hardware acceptance
-
-Validated on a 2-speaker LAN (Sonos Beam + Sonos One) and a real Android device — full evidence in [`docs/superpowers/specs/2026-06-02-v0.5-release-evidence/`](docs/superpowers/specs/2026-06-02-v0.5-release-evidence/README.md):
-
-- **S1** — operator regroup → `TopologyChanged` + `refresh_topology` re-pull reflects the new grouping; **zero spurious events in the pre-regroup window** (seed-suppression fix confirmed live — no rediscover loop).
-- **S4** — `model` populated for both speakers (Beam / One) after discover + refresh.
-- **v0.4 regression** — `live_events` 5/5: per-group play/pause, volume, seeds, double-discover, and a 28.5 min renewal cycle (renewals clean, no disconnect).
-- **S3** — release APK discovers the household on a real Android device (the held `MulticastLock` makes release SSDP work).
-- **Dogfood / S5** — idle health via the 28.5 min renewal cycle; active + topology behavior via the operator/S1 tests; no contention/stutter → S5 closed.
-
-## [0.4.0] - 2026-05-26
-
-### Added
-
-v0.4 — Live property events. Reactive state via GENA: Rust → Dart event stream with no oto-owned polling. Property events only (volume, mute, transport state, current track) — topology change events and group form/break stay v0.5.
-
-- **`oto-core` events surface:** `ChangeEvent { Volume, Mute, Playback, Track, SubscriptionError, SubscriptionRecovered }` — per-speaker for Volume/Mute, per-group for Playback/Track. `Wire` trait grown with `subscribe_speakers(&self) -> Result<(), WireError>` + `take_event_stream(&self) -> Option<Receiver<ChangeEvent>>`. New `WireError::NoSpeakersDiscovered` + `WireError::AlreadySubscribed` variants. `Wire::speaker_state` signature unchanged across the v0.4 swap — designed in v0.2 for this.
-- **`oto-app` StateManager:** event-fed per-speaker (Volume / Mute) + per-group (Playback / Track) cache, populated by `apply_event_at_generation` from the FRB-worker consumer loop. Generation token (`AtomicU64`) lets `discover_with` bump + clear before installing the new wire, making stale-OLD-consumer writes a no-op against the freshly-seeded cache (race-closed under-lock per /copilot review on PR #44). Topology map installed per-discover so cache-backed `speaker_state` resolves speaker → group → group cache.
-- **`oto-app::speaker_state` swap (Slice 4):** reads `StateManager` cache, not the wire. Preserves the v0.3 error contract — unknown id (not in topology) still returns `WireError::NotFound`. Honest-partial for cold-start: fields with no event seen yet are `None`. `Wire::speaker_state` trait method retained for hardware-baseline reads (`live_events` tests) and `MockWire` unit tests; no longer dispatched in production.
-- **`oto-wire` pump thread:** one OS thread per active wire, wrapping the SDK reactive stack (`sonos-sdk-state` / `sonos-sdk-event-manager` / `sonos-sdk-stream` / `sonos-sdk-callback-server`, all pinned `=0.5.2`). Per-property `watch_property_with_subscription` for every known speaker; coordinator-only AVTransport filter so Playback/Track events carry a `GroupId`. `manager.initialize(topology)` is non-optional for AVTransport routing — captured in [`docs/sonos-notes.md § Ergonomic footgun`](docs/sonos-notes.md#ergonomic-footgun-bare-statemanagernew). Drop-safe via `Arc<AtomicBool>` stop flag + `recv_timeout` polling: the SDK's `StateManager::Clone` fans out independent senders, so sender-close is not a viable shutdown signal.
-- **`oto_native` FRB stream surface:** `subscribe_change_events(sink: StreamSink<ChangeEventDto>)` — one unified stream per app instance, completes cleanly on wire replacement (cancel detection via `sink.add(...).is_err()` per FRB pre-check § 3). Dart `subscribeChangeEventsProvider` (Riverpod `StreamProvider`, `@Riverpod(keepAlive: true)`) depends on `discoveryProvider` and auto-rebuilds against the new wire.
-- **`oto-mock` MockWire affordances:** seed-on-subscribe + auto-emit on mutation + `push_event` for adversarial tests; one consumer per wire. `discovered: AtomicBool` lifecycle gate.
-- **Hardware-gated live tests** (`native/crates/wire/tests/live_events.rs`, feature `live-tests`): seed NOTIFYs, operator volume change, per-group play/pause, double-discover deadlock regression, 28-min renewal cycle observation. Renewal verified at ~25.6 min on real hardware (matches the spike's measurement).
-- **`native/examples/event-tail.rs`** — dogfood binary that subscribes to the event stream and prints changes. Long-running runs feed the v0.5 reactive-vs-NOTIFY revisit; not a user-facing CLI.
-
-### Changed
-
-- **`speaker_state` is now a cache read, not a SOAP read** — implementation only. FRB DTO (`SpeakerStateDto`) and the public `Wire` signature are unchanged.
-- **`oto-app::discover_with`** now auto-invokes `wire.subscribe_speakers()` before installing the new wire, so a Dart consumer that calls `subscribe_change_events` sees seed events without driving subscription itself. Also bumps the `StateManager` generation, clears caches, and installs fresh topology before the slot swap.
-- **`docs/ARCHITECTURE.md`** — added event-flow sequence diagram and StateManager state-ownership section; `Wire` trait listing grown with the v0.4 methods; "Watch-after-fetch event suppression" moved from open constraint to resolved (sidestepped by using `.watch()` itself as the seed probe).
-- **`docs/ROADMAP.md`** — v0.4 section rewritten around what shipped (concrete subsystems landed, decisions captured); v0.5 row sharpened with concrete v0.4 carryovers (in-band SubscriptionError surfacing, lock-granularity revisit). Row status flip from `next` → `released` lands together with the version bump in the follow-up release PR.
-
-### Fixed (post-v0.3 review batch, shipped between v0.3 and v0.4)
-
-- **SSDP starvation under many quiet sockets:** `collect_until` now multiplexes on `mio::Poll`, so the Phase-2 wait is collective. The previous per-socket 250 ms read timeout could let 12+ quiet adapters (the multi-NIC Windows worst case: VPN/Hyper-V/WSL/Docker vEthernet enumerated ahead of the LAN) consume the full 3 s bounded window before reaching a responder. Adds a regression test with 13 quiet sockets ahead of the responder. `mio` was already a transitive dep; promoted to a direct one.
-- **All-NIC-fail diagnostic:** when every usable IPv4 interface fails bind/send/register, `discover_locations` now returns `WireError::Network` with the last underlying cause instead of `Ok(vec![])`. The old path mapped that to `NoDevicesFound`, which falsely implied an empty LAN when the real cause was a local socket-stack failure.
-- **Concurrent `discover_with` race:** added a `DISCOVER_LOCK` in `oto-app` that serialises overlapping discoveries end-to-end (make + `wire.discover()` + slot replacement). The slot lock is unchanged; playback commands are still independent of discovery duration. Prevents a slower-but-older `discover_with` from last-writer-wins overwriting a faster newer one.
-
-### Doc / housekeeping
-
-- `app/integration_test/simple_test.dart`: retargeted from the removed v0.1 `greet` scaffold onto the current placeholder `HomePage`. New `just test-integration` recipe (mirrored in `Makefile`) for the manual bridge smoke — not gated by CI yet (Flutter `integration_test` needs a display target).
-- README's `flutter_rust_bridge_codegen` install command pinned to `2.12.0` (matches CI / `native/Cargo.toml` / `CONTRIBUTING.md`'s alignment mandate).
-- Stale `v0.4` UI references swept to `v0.5` (UI = v0.5, events = v0.4) across `app/lib/main.dart`, `app/lib/src/state/playback.dart`, `app/test/playback_provider_test.dart`. `api.rs::discover` doc updated — the snapshot is no longer "identity-only" since v0.3 added groups + coordinators.
+- **SSDP multicast egress on multi-NIC hosts** ([tatimblin/sonos-sdk#76](https://github.com/tatimblin/sonos-sdk/issues/76)): discovery now pins each socket's outgoing multicast interface, so the M-SEARCH leaves the right NIC instead of whatever the OS routing table picks. Hardware-validated non-regressive.
+- Hardened the live event/topology path: a regroup-triggered re-discover loop, stale event routing after a regroup, a failed-rediscover event-stranding case, and several discovery/subscription races found in review.
 
 ### Known issues
 
-- **Per-speaker subscription failures are not surfaced.** SDK at `=0.5.2` swallows them with a `tracing::warn!`. A speaker that becomes unreachable mid-session manifests as the property silently failing to update; production has no in-band signal to the UI. v0.4 carries `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` on the trait so the contract is forward-compatible, but the variants are never emitted today. Tracked for v0.5.
-- **`speaker_state` cold-start window:** the first ~1 s after `discover()` returns honest-partial state with most fields `None` while the SDK's SUBSCRIBE NOTIFYs seed the cache. Production UX consideration only; the Dart layer already handles `Option<T>` field nulls.
+- A speaker that goes silent *while idle* isn't flagged until the next command to it fails (richer detection is a post-1.0 candidate).
+- A regroup triggers a full ~3–5 s re-discover; the fast SOAP-only refresh lands in v0.6.
+- **Group form/break** commands are deferred to v0.5.1.
 
-## [0.3.0] - 2026-05-20
+### Housekeeping
 
-### Added
+- CI compile-guards the hardware-gated live tests so they can't bit-rot (never runs them — the LAN is untouched). Dependabot tuned for the pinned `sonos-api` / `quick-xml` / `socket2` deps.
 
-v0.3 — Real ZoneGroupTopology grouping. Multi-room groups and coordinator election — delivered via direct `sonos_api` SOAP with no `SonosSystem` dependency.
+Validated on real hardware: a 2-speaker LAN (Sonos Beam + Sonos One) and a real Android device. Evidence under [`docs/evidence/v0.5-release/`](docs/evidence/v0.5-release/README.md).
 
-- **Grouping — D1 (speakers from topology):** `discover()` reads `ZoneGroupTopology` directly from a responding speaker; speakers are built from topology members (`model: None` — ZoneGroupTopology carries no model; `TODO(v0.5)` to repopulate). Bonded satellites (`Invisible="1"` child nodes) are folded into their primary and never surfaced as standalone speakers (Open Q4 resolved).
-- **Grouping — D2 (transport at coordinator, `Wire` signature unchanged):** `speaker_state` reads volume/mute per-speaker and transport at the group coordinator via the `speaker_to_coordinator` cache. `Wire` signatures are identical to v0.2 — the addressing seam was designed for this swap.
-- **Grouping — D3 (refresh = re-discover; stale `GroupId` → `NotFound`):** `oto-wire` populates its group→coordinator/speaker→coordinator caches on every `discover()` call; there is no incremental refresh. A `GroupId` that was valid before a re-discover but is absent from the new topology returns `WireError::NotFound` (`TODO(v0.5)` miss-retry).
-- **Open Q1 resolved (v0.3):** real ZoneGroupTopology via direct-SOAP `GetZoneGroupState`; `SonosSystem` / `from_discovered_devices` not needed and never called.
-- **Open Q4 resolved (v0.3):** bonded satellites folded into the primary speaker; not surfaced as standalone players (was the documented v0.1/v0.2 limitation).
-- **Open Q5 closed (v0.3):** `sonos-sdk` umbrella crate (`test-support` feature, `sonos_discovery::DeviceDescription`) removed; `oto-wire` now depends only on `sonos-api =0.5.2` (already a direct dep for v0.2 playback). `quick-xml` (=0.31.0) retained for DIDL-Lite parsing.
+## [0.4.0] - 2026-05-26
 
-## [0.2.0] - 2026-05-18
+v0.4 — Live property events. Reactive state via GENA: a Rust → Dart event stream with no oto-owned polling. Property events only — volume, mute, transport state, current track; topology change events and group form/break stay v0.5.
 
 ### Added
 
-v0.2 — Playback control + one-shot state read. Proven end-to-end through the Rust↔Dart bridge, verifiable LAN-free (stateful mock) and verified against real hardware on Windows.
-
-- `oto-core`: `SpeakerState { volume: Option<Volume>, muted: Option<bool>, transport: Option<TransportState> }` — the v0.2 state DTO (`Option<T>` fields: honest partial failure across ~4 SOAP reads, matches SDK `get()` and the v0.3 cold cache). `WireError::NotFound(String)` variant — unknown speaker/group id or pre-discovery call (precondition error, distinct from transport failures). `Wire` trait grown to 8 methods: discovery (unchanged)
-  + 4 playback commands (`play/pause/next/previous` addressed by `GroupId`)
-  + 2 per-speaker controls (`set_volume`, `set_mute`) + one-shot state read (`speaker_state`).
-- `oto-wire`: direct `sonos_api` (=0.5.2) SOAP control and state reads — no `SonosSystem`, no topology. Interior-mutable id→addr / group→coordinator cache populated by `discover()`; commands before discovery return `WireError::NotFound`. `quick-xml` (=0.31.0) DIDL-Lite parser for track metadata (`parse_track_didl`). The `sonos-sdk` `test-support` umbrella is retained for the `sonos_discovery` discovery path (now confirmed load-bearing, not transitional).
-- `oto-mock`: stateful `MockWire` — in-memory per-speaker model (commands mutate it, `speaker_state` reflects mutations); proves command→state round-trips with zero LAN. `discover()` seeds the model from the fixture.
-- `oto-app`: command-routing fns (`play/pause/next/previous/set_volume/ set_mute/speaker_state`) delegating to the held `Wire`; `Mutex` held across the SOAP call (deliberate serialisation for LAN politeness).
-- `oto_native`: 7 non-sync FRB fns (Dart `Future`) for the playback/state surface; `SpeakerStateDto`, `TransportDto`, `PlaybackStateDto`, `TrackDto` DTOs; `CommandError { NotFound, Network, Sonos }` enum. Representational map (`map.rs`) extended with `to_command_error` and `to_speaker_state_dto`.
-- Flutter app: Riverpod `speakerStateProvider` (`FutureProvider`) and `playbackCommandsProvider` wired to the FRB bindings; headless Flutter tests proving each provider crosses the bridge.
-- `docs/ARCHITECTURE.md`: non-sync command flow (v0.2 delta from v0.1's sync model); group-of-one addressing + v0.3 seam; concise state-read ADR note (A chosen, revisit v0.3); Crates table + Open Q5 updated (direct `sonos-api`); `native/Cargo.toml` and `native/deny.toml` updated; `TODO(v0.2)` markers swept.
-- New `sonos-api = "=0.5.2"` and `quick-xml = "=0.31.0"` workspace deps (promoted from transitive to direct in `oto-wire`).
+- **Live event stream.** A new FRB `subscribe_change_events` surface delivers a single `Stream<ChangeEventDto>` (`Volume`, `Mute`, `Playback`, `Track`, plus the forward-looking `SubscriptionError` / `SubscriptionRecovered`). One multiplexed event-pump thread per wire in `oto-wire` wraps the upstream reactive SDK stack (all pinned `=0.5.2`); volume/mute are per-speaker, transport/track per group coordinator.
+- **Event-fed state cache.** `oto-app` now holds an event-fed `StateManager` cache (per-speaker volume/mute, per-group playback/track), so `speaker_state` reads the cache instead of issuing a SOAP call per read. State lives in Rust and survives Flutter hot reload.
+- **`native/examples/event-tail.rs`** — a dogfood binary that subscribes to the stream and prints changes (not a user-facing CLI).
+- **Hardware-gated live tests** (`--features live-tests`): seed events, operator volume change, per-group play/pause, a double-discover regression, and a ~28 min renewal-cycle observation.
 
 ### Changed
 
-- **Commands are non-sync Dart `Future`s** — v0.2's deliberate delta from the v0.1 architecture: hardware proved every command is a blocking SOAP round-trip. `discover()` was already non-sync; all playback commands are the same. There are no synchronous FRB commands in the v0.2 surface.
-- `WireError::Network` and `WireError::Backend` `Display` strings generalised (no longer "discovery …" prefix — these variants now occur on commands and state reads too).
-- `greet` demo removed: `api.rs` `greet` fn, `oto_core::greeting`, `app/lib/main.dart` greeting wiring, `app/lib/src/state/greeting.dart` (+ `.g.dart`), and the original smoke test scaffold.
+- `speaker_state` is now a cache read, not a SOAP read — implementation only; the public signature is unchanged.
+- Discovery auto-subscribes the new wire's speakers, so a Dart consumer sees seed events without driving subscription itself.
+- "Watch-after-fetch event suppression" moved from open constraint to resolved (a bare `.watch()` is its own seed probe).
 
-Known v0.2 limitations: group-of-one only — real multi-room ZoneGroupTopology (coordinator election, topology-change events, bonded speakers) is v0.3; live event streams (reactive state without polling) are v0.3; Android **release** discovery still needs a `WifiManager.MulticastLock` (`TODO(v0.5)`).
+### Fixed
 
-## [0.1.0] - 2026-05-17
+- **SSDP starvation under many quiet sockets:** the discovery wait is now collective (multiplexed), so a dozen idle adapters (VPN / Hyper-V / WSL / Docker on Windows) can't consume the whole bounded window before a real responder is reached.
+- **All-NIC-fail diagnostic:** when every interface fails to bind/send, discovery returns a network error with the underlying cause instead of falsely reporting an empty LAN.
+- **Concurrent discovery race:** overlapping discoveries are serialized end-to-end so a slower-older one can't overwrite a faster-newer one.
+
+### Known issues
+
+- Per-speaker subscription failures aren't surfaced yet — the SDK swallows them, so the `SubscriptionError` variants exist but production never emits them (addressed in v0.5).
+- `speaker_state` returns honest-partial state in the first ~1 s after discovery while the cache seeds.
+
+Validated on real hardware (2-speaker LAN, Windows); evidence under [`docs/evidence/v0.4-release/`](docs/evidence/v0.4-release/README.md).
+
+## [0.3.0] - 2026-05-20
+
+v0.3 — Real ZoneGroupTopology grouping. Multi-room groups and coordinator election via direct `sonos_api` SOAP, with no `SonosSystem` dependency.
 
 ### Added
 
+- **Topology-driven discovery.** `discover()` reads `ZoneGroupTopology` directly from a responding speaker and builds groups from topology members. Bonded satellites (surrounds, stereo pairs) are folded into their primary and no longer surface as standalone speakers — fixing the v0.1 bug by construction.
+- **Group-coordinator addressing.** `speaker_state` reads volume/mute per-speaker and transport at the group coordinator. `Wire` signatures are unchanged from v0.2 — the addressing seam was designed for this swap.
+- **Refresh = re-discover.** Caches are repopulated on every `discover()`; a `GroupId` that's gone after a regroup returns `WireError::NotFound`.
+- Dropped the `sonos-sdk` umbrella crate — `oto-wire` now depends only on `sonos-api =0.5.2` (plus `quick-xml` for track metadata).
+
+## [0.2.0] - 2026-05-18
+
+v0.2 — Playback control + one-shot state read. Verifiable LAN-free via a stateful mock, and verified against real hardware on Windows.
+
+### Added
+
+- **Playback, volume, and state.** `play` / `pause` / `next` / `previous` (addressed by group), `set_volume` / `set_mute` (per speaker), and a one-shot `speaker_state` read — all via direct `sonos_api` SOAP. New playback/state DTOs and a `CommandError` enum on the FRB surface.
+- `oto-mock` is now stateful: commands mutate an in-memory model that `speaker_state` reflects, proving command→state round-trips with zero LAN.
+- Riverpod providers for state and playback commands, with headless tests proving each crosses the bridge.
+
+### Changed
+
+- **Commands are non-sync Dart `Future`s** — hardware proved every command is a blocking SOAP round-trip (discovery was already non-sync in v0.1).
+- Removed the `greet` demo scaffolding.
+
+Known v0.2 limitations: group-of-one only (real multi-room topology is v0.3); live event streams are v0.4; Android release discovery still needs a `WifiManager.MulticastLock` (added in v0.5).
+
+## [0.1.0] - 2026-05-17
+
 v0.1 — Foundation + LAN discovery. Identity-only discovery proven end-to-end through the Rust↔Dart bridge, verifiable without a LAN.
 
-- `oto-core`: pure-Rust domain types — `Speaker`, `Group`, `TransportState`, `Track`, `Volume`, typed identifiers — plus the v0.1 identity projections (`SpeakerIdentity`, `GroupIdentity`, `DiscoverySnapshot`) and the `Wire` trait + `WireError`. No networking, async, or third-party deps.
-- `oto-wire`: production `Wire` — own multi-interface SSDP (works around `sonos-sdk`'s `0.0.0.0` bind that fails on multi-NIC hosts, upstream `tatimblin/sonos-sdk#76`), `ureq` device-description fetch (HTTP/1.1-chunked-safe), and the `sonos_discovery::DeviceDescription` adapter. `tatimblin/sonos-sdk` pinned at `=0.5.2` (`test-support`).
-- `oto-mock`: deterministic in-memory `Wire`, so discovery is provable without real hardware.
-- `oto-app`: owns runtime state (the process-global active `Wire`, replace-on-success) and routes the `discover` command.
-- `oto_native`: FRB `discover()` deferred-warm-up command + identity DTOs (`Topology`, `DiscoveredSpeaker`, `DiscoveredGroup`, `DiscoveryError`); representational map covered LAN-free by the `native/tests/` e2e.
-- Flutter app: Riverpod `discovery` `FutureProvider` wired to the FRB binding; app scaffold (`ProviderScope`, demo `greet` surface — removed in v0.2).
-- `docs/ARCHITECTURE.md` — system design (layers, state ownership, command/event flow, open questions) — the discovery spike findings, and the discover-command design + implementation plans.
-- Project infrastructure: versioning/release process (`RELEASING.md`), this changelog, CI (generated-source freshness, lint, tests), Android debug-build workflow, and the `AGENTS.md` operational contract.
+### Added
 
-Known v0.1 limitations: discovery is identity-only (bonded surrounds/stereo pairs appear as standalone players — real ZoneGroupTopology is v0.3); verified on Windows — Android **release** discovery needs a `WifiManager.MulticastLock` (`TODO(v0.5)`).
+- `oto-core`: pure-Rust domain types (`Speaker`, `Group`, `Volume`, typed identifiers, identity projections) plus the `Wire` trait and `WireError`. No networking, async, or third-party deps.
+- `oto-wire`: the production `Wire` — own multi-interface SSDP (works around `sonos-sdk`'s `0.0.0.0` bind that fails on multi-NIC hosts, [tatimblin/sonos-sdk#76](https://github.com/tatimblin/sonos-sdk/issues/76)) plus a device-description fetch.
+- `oto-mock`: a deterministic in-memory `Wire`, so discovery is provable without real hardware.
+- `oto-app` owns the process-global active `Wire` and routes the `discover` command; `oto_native` exposes the FRB `discover()` and identity DTOs.
+- Flutter app scaffold with a Riverpod discovery provider wired to the bridge.
+- Project infrastructure: the release process, this changelog, CI (generated-source freshness, lint, tests), an Android debug-build workflow, and the `AGENTS.md` contract.
+
+Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone — fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
 [Unreleased]: https://github.com/Oszkar/oto/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/Oszkar/oto/compare/v0.4.0...v0.5.0

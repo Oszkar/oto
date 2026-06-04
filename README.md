@@ -31,7 +31,7 @@ oto/
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml
-├─ docs/                 # ARCHITECTURE.md + design docs
+├─ docs/                 # ARCHITECTURE.md, ROADMAP.md, sonos-notes.md + evidence/
 ├─ scripts/
 ├─ .github/workflows/
 ├─ rust-toolchain.toml
@@ -50,7 +50,7 @@ We carry one **local patch** against vendored Cargokit to drop 32-bit Android AB
 
 ## Prerequisites
 
-- Flutter stable (currently 3.38.x)
+- Flutter stable
 - Rust 1.94+ via `rust-toolchain.toml` (auto-installed by rustup)
 - Cargo extensions: `flutter_rust_bridge_codegen`, `cargo-ndk`, `cargo-nextest`, `cargo-deny`
 - Optional: [`lefthook`][lefthook] for local Git hooks
@@ -111,7 +111,7 @@ Pre-1.0 (`0.y.z`) — surface and behavior may change between any releases. Vers
 
 ### Milestones
 
-Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust↔Dart bridge and verifiable without the real UI. `v1.0` is the bounded, externally-tested end state; after it, maintenance only.
+Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust↔Dart bridge and verifiable without the real UI. `v1.0` is the planned bounded, externally-tested end state.
 
 | Version | Capability |
 |---|---|
@@ -123,7 +123,7 @@ Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust�
 | v0.6 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
-Released: `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.4.0`, and `v0.5.0`. Commands are non-sync Dart `Future`s (every command is a blocking SOAP round-trip); live property changes flow as a Dart `Stream` (v0.4), with topology-change events on the same stream (v0.5). Milestone status, forward plan, and known caveats: [docs/ROADMAP.md](docs/ROADMAP.md). System design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Per-release detail: [CHANGELOG.md](CHANGELOG.md).
+See more details in the CHANGELOG file linked above.
 
 ## Development notes
 

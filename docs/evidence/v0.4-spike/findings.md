@@ -1,6 +1,6 @@
 # v0.4 — Pre-milestone spike findings
 
-Status: spike complete. Companion to [`2026-05-21-v0.4-spike-scope.md`](2026-05-21-v0.4-spike-scope.md) (the scoping doc) and [`2026-05-21-v0.4-live-property-events-design.md`](2026-05-21-v0.4-live-property-events-design.md) (the v0.4 design — § 6 placeholder is resolved by this doc).
+Status: spike complete (archived evidence). The scoping/design docs this once accompanied have been retired; the durable findings below now live in [`docs/sonos-notes.md` § Event model](../../sonos-notes.md#event-model-v04-load-bearing).
 
 ## Decision
 
@@ -13,7 +13,7 @@ Hardware: 4-speaker Sonos household; Windows desktop dev box. Two responsive spe
 - `RINCON_542A1B9463A801400` — "Living Room" — Beam, 10.83.0.103 (music playing throughout)
 - `RINCON_7828CAE858CA01400` — "Kitchen" — Sonos One, 10.83.0.105 (idle)
 
-Raw logs: [`2026-05-22-v0.4-spike-evidence/`](2026-05-22-v0.4-spike-evidence/) — four files, ~310 KB total.
+Raw logs: the sibling `path-a-{idle,active}.log` / `path-b-{idle,active}.log` files — four files, ~310 KB total.
 
 | Metric | Path A (`sonos-sdk-state`) | Path B (`callback-server` + own SUBSCRIBE) |
 |---|---|---|

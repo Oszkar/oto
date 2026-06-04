@@ -4,8 +4,8 @@
 //! `std::sync::mpsc::Sender<ChangeEvent>`. The matching `Receiver` is
 //! handed out via `SonosWire::take_event_stream`.
 //!
-//! Per `docs/superpowers/specs/2026-05-21-v0.4-live-property-events-design.md`
-//! § 4 "Concrete shapes" + § 7 "Threading and locking":
+//! Design (see `docs/ARCHITECTURE.md` § Live events + `docs/sonos-notes.md`
+//! § Event model):
 //!   - One thread total (not per-speaker).
 //!   - AVTransport NOTIFYs filtered to coordinator-only; emitted with
 //!     `GroupId` addressing via the wire's discover-built map.
