@@ -173,6 +173,23 @@ pub fn set_mute(speaker_id: String, muted: bool) -> Result<(), CommandError> {
     oto_app::set_mute(&id, muted).map_err(crate::map::to_command_error)
 }
 
+/// v0.5.1: fold `speaker_id` into `coordinator_id`'s group. Blocking SOAP
+/// round-trip; Dart `Future`. The view refreshes off the debounced
+/// topology-event path, NOT a self-trigger here. Unknown id → `NotFound`.
+pub fn join_group(speaker_id: String, coordinator_id: String) -> Result<(), CommandError> {
+    let speaker = oto_core::SpeakerId::new(speaker_id);
+    let coordinator = oto_core::SpeakerId::new(coordinator_id);
+    oto_app::join_group(&speaker, &coordinator).map_err(crate::map::to_command_error)
+}
+
+/// v0.5.1: detach `speaker_id` into its own standalone group. Blocking SOAP
+/// round-trip; Dart `Future`. The view refreshes off the debounced
+/// topology-event path, NOT a self-trigger here. Unknown id → `NotFound`.
+pub fn leave_group(speaker_id: String) -> Result<(), CommandError> {
+    let speaker = oto_core::SpeakerId::new(speaker_id);
+    oto_app::leave_group(&speaker).map_err(crate::map::to_command_error)
+}
+
 /// One-shot read of `speaker_id`'s current volume/mute/transport
 /// snapshot. **Not a SOAP round-trip** — reads the event-fed
 /// `StateManager` cache in `oto-app` (v0.4 Slice 4); fields are
@@ -337,6 +354,16 @@ impl oto_core::Wire for MockWireArc {
         muted: bool,
     ) -> Result<(), oto_core::WireError> {
         self.0.set_mute(speaker, muted)
+    }
+    fn join_group(
+        &self,
+        speaker: &oto_core::SpeakerId,
+        coordinator: &oto_core::SpeakerId,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.join_group(speaker, coordinator)
+    }
+    fn leave_group(&self, speaker: &oto_core::SpeakerId) -> Result<(), oto_core::WireError> {
+        self.0.leave_group(speaker)
     }
     fn speaker_state(
         &self,

@@ -15,7 +15,7 @@ use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::SonosClient;
 
 use crate::events::{EventPump, PumpInputs};
-use crate::{control, ssdp};
+use crate::{control, grouping, ssdp};
 
 const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -387,6 +387,20 @@ impl Wire for SonosWire {
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
         let addr = self.resolve_speaker(speaker)?;
         control::soap_set_mute(&self.client, addr, muted)
+    }
+
+    fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
+        // The join SOAP is sent to the JOINER's IP; confirm the coordinator
+        // is a known speaker first (unknown → NotFound) so a bad coordinator
+        // id fails as a precondition error, not a confusing device fault.
+        let joiner_addr = self.resolve_speaker(speaker)?;
+        self.resolve_speaker(coordinator)?;
+        grouping::join(&self.client, joiner_addr, coordinator.as_str())
+    }
+
+    fn leave_group(&self, speaker: &SpeakerId) -> Result<(), WireError> {
+        let addr = self.resolve_speaker(speaker)?;
+        grouping::leave(&self.client, addr)
     }
 
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError> {

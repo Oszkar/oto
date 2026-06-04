@@ -10,7 +10,7 @@ part 'api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
@@ -53,6 +53,23 @@ Future<void> setVolume({required String speakerId, required int volume}) =>
 /// Set `speaker_id`'s mute state. Blocking SOAP round-trip; Dart `Future`.
 Future<void> setMute({required String speakerId, required bool muted}) =>
     RustLib.instance.api.crateApiSetMute(speakerId: speakerId, muted: muted);
+
+/// v0.5.1: fold `speaker_id` into `coordinator_id`'s group. Blocking SOAP
+/// round-trip; Dart `Future`. The view refreshes off the debounced
+/// topology-event path, NOT a self-trigger here. Unknown id → `NotFound`.
+Future<void> joinGroup({
+  required String speakerId,
+  required String coordinatorId,
+}) => RustLib.instance.api.crateApiJoinGroup(
+  speakerId: speakerId,
+  coordinatorId: coordinatorId,
+);
+
+/// v0.5.1: detach `speaker_id` into its own standalone group. Blocking SOAP
+/// round-trip; Dart `Future`. The view refreshes off the debounced
+/// topology-event path, NOT a self-trigger here. Unknown id → `NotFound`.
+Future<void> leaveGroup({required String speakerId}) =>
+    RustLib.instance.api.crateApiLeaveGroup(speakerId: speakerId);
 
 /// One-shot read of `speaker_id`'s current volume/mute/transport
 /// snapshot. **Not a SOAP round-trip** — reads the event-fed
