@@ -38,6 +38,20 @@ const POLL: Duration = Duration::from_millis(500);
 /// (the expected state never arrives) within the bound.
 const SETTLE_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Serialises the live grouping tests against EACH OTHER. They all mutate the
+/// SAME physical speakers' grouping, so cargo's default parallel test threads
+/// make them collide — concurrent join/leave storms time out the speakers' SOAP
+/// endpoints AND violate the LAN-politeness rule (no command storms; AGENTS §3).
+/// Each test holds this for its whole body, so they run strictly serially even
+/// without `--test-threads=1`.
+static LAN_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Acquire the serial lock, recovering from a poisoned mutex (a prior test
+/// panicking mid-run must not wedge the rest). Hold the guard for the test body.
+fn lan_serial() -> std::sync::MutexGuard<'static, ()> {
+    LAN_SERIAL.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 /// Find the group containing `speaker` in a snapshot, if any.
 fn group_of<'a>(snap: &'a DiscoverySnapshot, speaker: &SpeakerId) -> Option<&'a GroupIdentity> {
     snap.groups.iter().find(|g| g.members.contains(speaker))
@@ -78,6 +92,7 @@ fn poll_until_settled<T>(
 #[test]
 #[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 acceptance"]
 fn live_join_then_leave_round_trip() {
+    let _serial = lan_serial();
     let wire = SonosWire::new();
     let snap = wire.discover().expect("discover() against the real LAN");
     println!(
@@ -151,6 +166,7 @@ fn live_join_then_leave_round_trip() {
 #[test]
 #[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 acceptance"]
 fn live_group_volume_command_and_event_round_trip() {
+    let _serial = lan_serial();
     // Forms a group, then issues `set_group_volume` on the coordinator and
     // drains the event stream asserting a `GroupVolume` event carrying the
     // group's `GroupId`. Mirrors the per-speaker volume command+event path.
@@ -245,6 +261,7 @@ fn live_group_volume_command_and_event_round_trip() {
 #[test]
 #[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 Option D acceptance"]
 fn live_seeded_fast_rediscover() {
+    let _serial = lan_serial();
     // v0.5.1 (Option D): proves the SSDP-skipped fast re-discover.
     //   (a) `SonosWire::new_seeded(ips).discover()` returns the grouped
     //       topology WITHOUT running SSDP, and does so FAST (< 2 s — an SSDP
