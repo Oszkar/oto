@@ -213,7 +213,7 @@ Top-level response fields carry sentinels that must map to `None`, not values:
 
 ## Event model (v0.4 load-bearing)
 
-This section is what v0.4 needs. Authoritative findings live here; the experiment they came from is `docs/superpowers/specs/2026-05-22-v0.4-spike-findings.md` with raw logs in the sibling `2026-05-22-v0.4-spike-evidence/`.
+This section is what v0.4 needs. Authoritative findings live here; the experiment they came from is archived under [`docs/evidence/v0.4-spike/`](evidence/v0.4-spike/findings.md) (findings + raw logs).
 
 **Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`). The raw `sonos-sdk-callback-server` + own change-detection alternative ("Path B") stays a v0.5 reconsideration point.
 

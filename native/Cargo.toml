@@ -36,9 +36,8 @@ sonos-api = "=0.5.2"
 # `sonos-sdk-callback-server` crates. Wrap upstream GENA-driven property
 # events into one `ChangeEvent` stream inside `oto-wire`. Pinned exact
 # (same precedent as `sonos-api`); the v0.4 spike (see
-# `docs/superpowers/specs/2026-05-22-v0.4-spike-findings.md`) validated
-# the 0.5.2 surface on real hardware. Do NOT bump without re-running
-# the v0.4 acceptance gate.
+# `docs/evidence/v0.4-spike/findings.md`) validated the 0.5.2 surface on
+# real hardware. Do NOT bump without re-running the v0.4 acceptance gate.
 sonos-sdk-state = "=0.5.2"
 sonos-sdk-event-manager = "=0.5.2"
 sonos-sdk-stream = "=0.5.2"
