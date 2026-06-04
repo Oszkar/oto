@@ -21,7 +21,7 @@ If requirements are ambiguous, incomplete, or conflicting:
 
 oto = a fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI over a Rust core, bridged with `flutter_rust_bridge` (FRB) v2; discovery / SOAP via the `sonos-api` crate (from the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) plus oto's own multi-NIC SSDP; v0.4 live events use the same SDK family's reactive state/event layer.
 
-This is a **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team. Bounded: once Stable (v1.0, externally tested), expect maintenance only.
+This is a **side project**. Optimize for usefulness, low maintenance, tight scope. Don't over-engineer for scale or a team.
 
 Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household.
 

@@ -6,13 +6,13 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-06-02
+## [0.5.0] - 2026-06-03
 
-v0.5 — Hardening before the v0.6 UI: live topology events, subscription-failure surfacing, Android release discovery, and speaker-model names. Built on the v0.4 capability layers so the UI is a pure design + build problem. All event additions ride the single v0.4 `Stream<ChangeEventDto>` — no stream-surface redesign.
+v0.5 — Hardening before the v0.6 UI: live topology events, subscription-failure surfacing, Android release discovery, and speaker-model names. All event additions ride the single v0.4 `Stream<ChangeEventDto>` — no stream-surface redesign.
 
 ### Added
 
-- **Topology change events.** Grouping or ungrouping speakers in the Sonos app now updates oto live: a regroup surfaces as a `TopologyChanged` event on the existing change-event stream, and the app re-discovers to pick up the new grouping. The controller is implemented and tested but dormant until the v0.6 UI watches it; the lightweight SOAP-only refresh is deferred to v0.6. The `Wire` trait grows additively with `subscribe_topology` + `refresh_topology`.
+- **Topology change events.** Grouping or ungrouping speakers in the Sonos app now updates oto live: a regroup surfaces as a `TopologyChanged` event on the existing change-event stream, and the app re-discovers to pick up the new grouping. The controller is implemented and tested but dormant until the v0.6 UI watches it. The `Wire` trait grows additively with `subscribe_topology` + `refresh_topology`.
 - **Subscription-failure surfacing.** `SubscriptionError` / `SubscriptionRecovered` (on the API since v0.4 but never emitted — the SDK at `=0.5.2` swallows subscription failures) now emit when a command to a speaker fails with a network error, and again when it recovers, so the UI can show a speaker as unreachable.
 - **Android release discovery.** Discovery now works in release builds on Android by holding a `WifiManager.MulticastLock` around the SSDP window — without it Android silently drops the discovery multicast, so release builds found nothing.
 - **Speaker model names.** `SpeakerIdentity.model` (empty since v0.3, because the topology XML carries no model) is repopulated — e.g. "Sonos Beam" — via a best-effort per-speaker `device_description.xml` fetch during discovery.
@@ -20,7 +20,6 @@ v0.5 — Hardening before the v0.6 UI: live topology events, subscription-failur
 ### Changed
 
 - The Dart event-stream provider re-subscribes only on a *successful* re-discovery, so a failed re-discover no longer tears the live stream down onto a dead receiver.
-- `docs/ARCHITECTURE.md` updated for the v0.5 event flow (topology path + subscription-health bus).
 
 ### Fixed
 
@@ -67,7 +66,7 @@ v0.4 — Live property events. Reactive state via GENA: a Rust → Dart event st
 - Per-speaker subscription failures aren't surfaced yet — the SDK swallows them, so the `SubscriptionError` variants exist but production never emits them (addressed in v0.5).
 - `speaker_state` returns honest-partial state in the first ~1 s after discovery while the cache seeds.
 
-Validated on real hardware (2-speaker LAN, Windows); evidence under [`docs/evidence/v0.4-release/`](docs/evidence/v0.4-release/README.md). One Android debug-APK criterion was deferred to v0.5 for a toolchain-prerequisite reason and [retired then](docs/evidence/v0.5-android-debug.md).
+Validated on real hardware (2-speaker LAN, Windows); evidence under [`docs/evidence/v0.4-release/`](docs/evidence/v0.4-release/README.md).
 
 ## [0.3.0] - 2026-05-20
 
