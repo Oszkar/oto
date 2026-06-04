@@ -12,7 +12,7 @@
 /// household settles.
 ///
 /// **Fast re-discover (Option D).** The debounce body calls
-/// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~50 ms vs the
+/// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~tens of ms vs the
 /// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
 /// the same wire-replacement lifecycle. That is a genuine `discoveryProvider`
 /// transition, so the event stream re-subscribes against the new wire's fresh

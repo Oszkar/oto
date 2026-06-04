@@ -67,9 +67,9 @@ void main() {
         (_, next) => last = next,
         fireImmediately: true,
       );
-      for (var i = 0; i < 5 && (last == null || last!.isLoading); i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      // Drain all pending microtasks so the Notifier's build() future settles
+      // (success → AsyncData, throw → AsyncError) before we read the state.
+      await pumpEventQueue();
       return last!;
     }
 

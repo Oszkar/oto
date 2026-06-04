@@ -250,6 +250,11 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
 /// would never re-take the new receiver and events would silently stop after
 /// the first regroup.
 pub fn refresh_topology() -> Result<DiscoverySnapshot, WireError> {
+    // `with_wire` releases SLOT before returning; `refresh_topology_with` →
+    // `discover_with` then acquires DISCOVER_LOCK → SLOT independently — no lock
+    // inversion. Two GetZoneGroupState SOAP calls happen (one here for the IPs,
+    // one in the seeded `discover()`), each ~tens of ms — still far under the
+    // ~3-5 s SSDP sweep this replaces.
     let snapshot = with_wire(|w| w.refresh_topology())?;
     let ips: Vec<std::net::IpAddr> = snapshot.speakers.iter().map(|s| s.ip).collect();
     refresh_topology_with(move || Box::new(SonosWire::new_seeded(ips)))
