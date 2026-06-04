@@ -279,6 +279,25 @@ pub fn set_mute(speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
     result
 }
 
+/// v0.5.1: fold `speaker` into `coordinator`'s group. Additive; the settled
+/// topology surfaces via the debounced `GroupMembership` topology-event path
+/// (no self-trigger here). Health is attributed to the joiner — the speaker
+/// the join SOAP is sent to.
+pub fn join_group(speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
+    let result = with_wire(|w| w.join_group(speaker, coordinator));
+    observe_speaker_health(speaker, &result);
+    result
+}
+
+/// v0.5.1: detach `speaker` into its own standalone group. Additive; the
+/// settled topology surfaces via the debounced `GroupMembership`
+/// topology-event path (no self-trigger here).
+pub fn leave_group(speaker: &SpeakerId) -> Result<(), WireError> {
+    let result = with_wire(|w| w.leave_group(speaker));
+    observe_speaker_health(speaker, &result);
+    result
+}
+
 /// One-shot read of `speaker`'s current volume/mute/transport snapshot.
 ///
 /// **Slice 4:** reads from the `StateManager` cache instead of
@@ -589,6 +608,12 @@ mod tests {
         }
         fn set_mute(&self, s: &SpeakerId, m: bool) -> Result<(), WireError> {
             self.0.set_mute(s, m)
+        }
+        fn join_group(&self, s: &SpeakerId, c: &SpeakerId) -> Result<(), WireError> {
+            self.0.join_group(s, c)
+        }
+        fn leave_group(&self, s: &SpeakerId) -> Result<(), WireError> {
+            self.0.leave_group(s)
         }
         fn speaker_state(&self, s: &SpeakerId) -> Result<SpeakerState, WireError> {
             self.0.speaker_state(s)

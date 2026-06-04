@@ -34,6 +34,23 @@ pub trait Wire {
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError>;
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
 
+    /// v0.5.1 — group form/break (additive). Both are addressed per-speaker
+    /// and mutate household topology; the settled result surfaces via the
+    /// debounced `GroupMembership` topology-event path (a regroup fires the
+    /// same NOTIFYs as a Sonos-app regroup), NOT a self-triggered re-poll.
+    ///
+    /// Fold `speaker` into `coordinator`'s group. The impl resolves both
+    /// ids → IP (the join SOAP is sent to `speaker`'s IP, carrying the
+    /// coordinator's bare `RINCON_…` id); an unknown `speaker` or
+    /// `coordinator` → `WireError::NotFound`.
+    fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError>;
+
+    /// Make `speaker` a standalone (single-member) group, leaving whatever
+    /// group it was in. Uniform — the impl does NOT branch on whether
+    /// `speaker` coordinates a group; the Sonos firmware handles
+    /// re-election. Unknown `speaker` → `WireError::NotFound`.
+    fn leave_group(&self, speaker: &SpeakerId) -> Result<(), WireError>;
+
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError>;
 
     /// Register v0.4 property-event interest for all currently-known

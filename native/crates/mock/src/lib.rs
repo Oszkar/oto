@@ -398,6 +398,55 @@ impl Wire for MockWire {
         Ok(())
     }
 
+    fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
+        let mut guard = lock!(self);
+        // Both ids must be known (mirrors SonosWire resolving both → IP).
+        if !guard.speakers.contains_key(speaker) {
+            return Err(WireError::NotFound(speaker.to_string()));
+        }
+        if !guard.speakers.contains_key(coordinator) {
+            return Err(WireError::NotFound(coordinator.to_string()));
+        }
+        if let Some(err) = guard.command_errors.get(speaker) {
+            return Err(err.clone());
+        }
+        // Fold `speaker` into `coordinator`'s group: it now follows that
+        // coordinator. If `speaker` had been coordinating its own group,
+        // that group dissolves — `speaker` is no longer a member of it, so
+        // drop any group whose coordinator is `speaker` and which no
+        // remaining member points at.
+        guard
+            .member_to_coord
+            .insert(speaker.clone(), coordinator.clone());
+        let speaker_still_coordinates = guard.member_to_coord.values().any(|c| c == speaker);
+        if !speaker_still_coordinates {
+            guard.coords.retain(|_gid, coord| coord != speaker);
+        }
+        Ok(())
+    }
+
+    fn leave_group(&self, speaker: &SpeakerId) -> Result<(), WireError> {
+        let mut guard = lock!(self);
+        if !guard.speakers.contains_key(speaker) {
+            return Err(WireError::NotFound(speaker.to_string()));
+        }
+        if let Some(err) = guard.command_errors.get(speaker) {
+            return Err(err.clone());
+        }
+        // `speaker` becomes its own standalone group: it coordinates itself
+        // and gets a fresh solo GroupId. Uniform — no branch on whether it
+        // was previously a coordinator (the firmware re-elects for any
+        // members left behind; the mock just detaches `speaker`).
+        guard
+            .member_to_coord
+            .insert(speaker.clone(), speaker.clone());
+        guard.coords.insert(
+            GroupId::new(format!("{}:0", speaker.as_str())),
+            speaker.clone(),
+        );
+        Ok(())
+    }
+
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
         let guard = lock!(self);
         let own = guard
@@ -986,5 +1035,132 @@ mod tests {
                 .unwrap(),
             ChangeEvent::TopologyChanged
         ));
+    }
+
+    // ── v0.5.1 group form/break ───────────────────────────────────────────
+
+    /// join_group updates `speaker`'s coordinator mapping so its
+    /// `speaker_state` transport now reflects the target coordinator (D2).
+    #[test]
+    fn join_group_updates_membership() {
+        let w = MockWire::default();
+        let office = SpeakerId::new("RINCON_OFFICE"); // solo group coordinator
+        let kitchen = SpeakerId::new("RINCON_KITCHEN"); // another group's coordinator
+
+        // Office joins Kitchen's group; play Kitchen and confirm Office's
+        // transport now follows the Kitchen coordinator (D2 routing).
+        w.join_group(&office, &kitchen).unwrap();
+        w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap();
+        let st = w.speaker_state(&office).unwrap();
+        assert_eq!(
+            st.transport.unwrap().state,
+            PlaybackState::Playing,
+            "after join, Office's transport must follow the Kitchen coordinator (D2)"
+        );
+    }
+
+    /// join_group dissolves the joiner's former solo group from `coords`.
+    #[test]
+    fn join_group_dissolves_empty_source_group() {
+        let w = MockWire::default();
+        let office = SpeakerId::new("RINCON_OFFICE");
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        w.join_group(&office, &kitchen).unwrap();
+        // The old solo group (RINCON_OFFICE:0) must no longer route, while
+        // the Kitchen group is unaffected.
+        assert_eq!(
+            w.play(&GroupId::new("RINCON_OFFICE:0")),
+            Err(WireError::NotFound("RINCON_OFFICE:0".into())),
+            "joiner's former solo group must dissolve"
+        );
+        assert!(w.play(&GroupId::new("RINCON_KITCHEN:1")).is_ok());
+    }
+
+    /// leave_group makes `speaker` its own standalone coordinator.
+    #[test]
+    fn leave_group_makes_standalone() {
+        let w = MockWire::default();
+        let dining = SpeakerId::new("RINCON_DINING"); // member of Kitchen group, not coordinator
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        // Before: Dining follows Kitchen. Play Kitchen → Dining shows Playing.
+        w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap();
+        assert_eq!(
+            w.speaker_state(&dining).unwrap().transport.unwrap().state,
+            PlaybackState::Playing
+        );
+
+        // Dining leaves → its own standalone group; its transport now comes
+        // from itself (Stopped seed), independent of Kitchen.
+        w.leave_group(&dining).unwrap();
+        assert_eq!(
+            w.speaker_state(&dining).unwrap().transport.unwrap().state,
+            PlaybackState::Stopped,
+            "after leave, Dining's transport is its own (no longer Kitchen's)"
+        );
+        // The fresh solo group routes.
+        assert!(
+            w.play(&GroupId::new("RINCON_DINING:0")).is_ok(),
+            "leave creates a routable standalone group for the leaver"
+        );
+        // Kitchen's own group still works for its coordinator.
+        let _ = kitchen;
+        assert!(w.play(&GroupId::new("RINCON_KITCHEN:1")).is_ok());
+    }
+
+    #[test]
+    fn join_group_unknown_speaker_is_not_found() {
+        let w = MockWire::default();
+        assert_eq!(
+            w.join_group(
+                &SpeakerId::new("RINCON_NOPE"),
+                &SpeakerId::new("RINCON_KITCHEN")
+            ),
+            Err(WireError::NotFound("RINCON_NOPE".into()))
+        );
+    }
+
+    #[test]
+    fn join_group_unknown_coordinator_is_not_found() {
+        let w = MockWire::default();
+        assert_eq!(
+            w.join_group(
+                &SpeakerId::new("RINCON_OFFICE"),
+                &SpeakerId::new("RINCON_NOPE")
+            ),
+            Err(WireError::NotFound("RINCON_NOPE".into()))
+        );
+    }
+
+    #[test]
+    fn leave_group_unknown_speaker_is_not_found() {
+        let w = MockWire::default();
+        assert_eq!(
+            w.leave_group(&SpeakerId::new("RINCON_NOPE")),
+            Err(WireError::NotFound("RINCON_NOPE".into()))
+        );
+    }
+
+    #[test]
+    fn join_group_honors_command_error() {
+        let w = MockWire::default();
+        let office = SpeakerId::new("RINCON_OFFICE");
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        w.set_command_error(&office, WireError::Network("unreachable".into()));
+        assert_eq!(
+            w.join_group(&office, &kitchen),
+            Err(WireError::Network("unreachable".into()))
+        );
+    }
+
+    #[test]
+    fn leave_group_honors_command_error() {
+        let w = MockWire::default();
+        let dining = SpeakerId::new("RINCON_DINING");
+        w.set_command_error(&dining, WireError::Network("unreachable".into()));
+        assert_eq!(
+            w.leave_group(&dining),
+            Err(WireError::Network("unreachable".into()))
+        );
     }
 }
