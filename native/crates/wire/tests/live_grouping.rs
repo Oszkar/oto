@@ -221,6 +221,14 @@ fn live_join_then_leave_round_trip() {
 #[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 acceptance"]
 fn live_group_volume_command_and_event_round_trip() {
     let _serial = lan_serial();
+    // KNOWN FLAKY on the shared 2-zone dev LAN, NOT root-caused: the GroupVolume
+    // event intermittently fails to arrive here even on a fresh wire, while the
+    // structurally-identical check in `live_seeded_fast_rediscover` (the
+    // production fresh-wire path) is reliable. THAT seeded test is the group
+    // volume command+event coverage to trust; this one is an isolated probe and
+    // is not chased further (PR #74 offramp — see CHANGELOG known-issues if it
+    // recurs).
+    //
     // Forms a group, then issues `set_group_volume` on the coordinator and
     // drains the event stream asserting a `GroupVolume` event carrying the
     // group's `GroupId`. Mirrors the per-speaker volume command+event path.
