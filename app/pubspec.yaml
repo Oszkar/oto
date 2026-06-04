@@ -31,8 +31,8 @@ dependencies:
   flutter_rust_bridge: 2.12.0
 
   # State management — Riverpod 3 with code generation.
-  flutter_riverpod: ^3.0.0
-  riverpod_annotation: ^3.0.0
+  flutter_riverpod: ^3.3.1
+  riverpod_annotation: ^4.0.2
   freezed_annotation: ^3.1.0
 
 dev_dependencies:
@@ -51,8 +51,8 @@ dev_dependencies:
   # Base `flutter analyze` + `flutter_lints` covers everything else. Can
   # re-add when upstream stabilizes lockfile handling.
   build_runner: ^2.6.0
-  riverpod_generator: ^3.0.0
-  freezed: ^3.2.3
+  riverpod_generator: ^4.0.3
+  freezed: ^3.2.5
 
 flutter:
   uses-material-design: true

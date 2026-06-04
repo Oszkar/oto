@@ -14,7 +14,7 @@ part of 'topology.dart';
 /// not rebuild it).
 
 @ProviderFor(topologyController)
-const topologyControllerProvider = TopologyControllerProvider._();
+final topologyControllerProvider = TopologyControllerProvider._();
 
 /// Side-effect controller (no exposed state). `keepAlive` so the
 /// subscription + debounce timer live for the app lifetime once activated;
@@ -28,7 +28,7 @@ final class TopologyControllerProvider
   /// subscription + debounce timer live for the app lifetime once activated;
   /// builds once (uses `ref.listen`, never `ref.watch`, so a new event does
   /// not rebuild it).
-  const TopologyControllerProvider._()
+  TopologyControllerProvider._()
     : super(
         from: null,
         argument: null,

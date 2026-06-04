@@ -12,7 +12,7 @@ part of 'playback.dart';
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 
 @ProviderFor(speakerState)
-const speakerStateProvider = SpeakerStateFamily._();
+final speakerStateProvider = SpeakerStateFamily._();
 
 /// One-shot read of a speaker's current volume/mute/transport snapshot.
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
@@ -29,7 +29,7 @@ final class SpeakerStateProvider
         $FutureProvider<rust_api.SpeakerStateDto> {
   /// One-shot read of a speaker's current volume/mute/transport snapshot.
   /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
-  const SpeakerStateProvider._({
+  SpeakerStateProvider._({
     required SpeakerStateFamily super.from,
     required String super.argument,
   }) : super(
@@ -80,7 +80,7 @@ String _$speakerStateHash() => r'23b8036eb487c907ce8691053f04ec1904435a72';
 
 final class SpeakerStateFamily extends $Family
     with $FunctionalFamilyOverride<FutureOr<rust_api.SpeakerStateDto>, String> {
-  const SpeakerStateFamily._()
+  SpeakerStateFamily._()
     : super(
         retry: null,
         name: r'speakerStateProvider',
@@ -104,7 +104,7 @@ final class SpeakerStateFamily extends $Family
 /// layer (error handling, optimistic UI) is deferred to v0.6.
 
 @ProviderFor(playbackCommands)
-const playbackCommandsProvider = PlaybackCommandsProvider._();
+final playbackCommandsProvider = PlaybackCommandsProvider._();
 
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
@@ -121,7 +121,7 @@ final class PlaybackCommandsProvider
   /// Facade for the six transport/volume commands. Methods are thin pass-throughs
   /// to the FRB-generated Dart bindings; no state is held here. A real command
   /// layer (error handling, optimistic UI) is deferred to v0.6.
-  const PlaybackCommandsProvider._()
+  PlaybackCommandsProvider._()
     : super(
         from: null,
         argument: null,

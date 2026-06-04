@@ -24,7 +24,7 @@ part of 'discovery.dart';
 /// error), we still attempt discovery rather than hard-failing.
 
 @ProviderFor(discovery)
-const discoveryProvider = DiscoveryProvider._();
+final discoveryProvider = DiscoveryProvider._();
 
 /// Deferred LAN discovery. The Rust `discover()` blocks ~3–5 s and FRB
 /// runs it off the UI isolate, so this is a Future provider: AsyncValue
@@ -65,7 +65,7 @@ final class DiscoveryProvider
   /// dropping SSDP replies, not a precondition. If acquire fails (no Wi-Fi
   /// service, permission denied — the native handler returns a structured
   /// error), we still attempt discovery rather than hard-failing.
-  const DiscoveryProvider._()
+  DiscoveryProvider._()
     : super(
         from: null,
         argument: null,
