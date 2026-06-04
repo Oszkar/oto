@@ -434,3 +434,31 @@ Two captured topologies:
 - **Ungrouped (`.103` view):** 2 groups (Living Room with bonded RR satellite; Kitchen standalone), `<VanishedDevices>` contains LR.
 - **Grouped (`.103` view):** 1 group containing both Living Room (with satellite) and Kitchen, coordinator = Living Room; vanished LR still present.
 - **Coordinator-not-first (`.105` view of the grouped topology):** member order is `[Kitchen, Living Room(coordinator)]` — exercises the D3 reorder.
+
+## Group operations (v0.5.1 spike) — hardware-confirmed 2026-06-04
+
+Confirmed on the 2-zone LAN (Beam "Living Room" `.103` = `RINCON_542A1B9463A801400`; Sonos One "Kitchen" `.105` = `RINCON_7828CAE858CA01400`; the Beam's bonded surrounds fold in → only **2 controllable zones**, so a 3+-member group can't be formed here). Probe: `cargo run -p oto-wire --example group_ops_probe --features live-tests`.
+
+### Form a group — `SetAVTransportURI` x-rincon
+
+To make speaker X join coordinator C's group: `av_transport::set_av_transport_uri(format!("x-rincon:{C_uuid}"), String::new())` (two `String` args: current_uri, current_uri_meta_data) on **X's** IP. Confirmed: Living Room joined Kitchen → one group `RINCON_7828CAE858CA01400:386373682`, coord=Kitchen, members=[Living Room, Kitchen]. **The joiner folds into the coordinator's existing group** — the result carries the **coordinator's** GroupId (here unchanged); the joiner's old standalone group dissolves.
+
+### Break / leave — `BecomeCoordinatorOfStandaloneGroup`
+
+`av_transport::become_coordinator_of_standalone_group()` (no args) on **the leaving speaker's** IP. Returns a **structured** response `{ delegated_group_coordinator_id, new_group_id }` (NOT `()`). Sent to the **coordinator** of a 2-member group (Kitchen) → OK, `delegated_group_coordinator_id=Living Room`, `new_group_id=…:386373683`: the leaver delegates the old group's coordination to a remaining member and forms its own new standalone group. **`leave_group(speaker)` is uniform** — same primitive whether or not the speaker coordinates; firmware delegates coordination; no oto-side branch. The 3+-member re-election path is firmware-handled and untested on this 2-zone LAN.
+
+### ⚠ Topology settle latency (load-bearing for the refresh design)
+
+The probe's **immediate** post-BCOS `GetZoneGroupState` re-poll returned a **transitional** state (old group `…682`, coordinator flipped to Living Room, Kitchen still listed — the split had not propagated). The post-JOIN re-poll happened to catch the settled state; the post-leave one did not. **Lesson: do not trust an immediate post-mutation topology re-pull.** Drive the view refresh off the settled `GroupMembership` event (debounced 250 ms), which fires after the household settles. Consequence for v0.5.1: a Dart-side *self-triggered* refresh right after a form/break command would race the settle — so form/break relies on the existing topology-event path instead (the mutation fires `GroupMembership` NOTIFYs exactly like a Sonos-app regroup). Integration/live tests must assert the **settled** topology (await the event or a short settle delay), never an immediate re-poll.
+
+### Group volume / mute — `GroupRenderingControl`
+
+`group_rendering_control::{get_group_volume, set_group_volume(u16), set_relative_group_volume(i16), get_group_mute, set_group_mute(bool)}` on the **coordinator** IP. Confirmed: GetGroupVolume=18; Set 30/50 OK; SetRelative +5→55 / −5→50 (returns the new volume); GetGroupMute=false; SetGroupMute true/false OK. **`set_group_volume(101)` is rejected at `.build()`** with `RangeError { parameter: "desired_volume", min:0, max:100 }` — client-side, like per-speaker `set_volume`. The FRB shim must clamp BEFORE the call (signed i32 → `Volume::clamped`), same pattern as `set_volume`.
+
+### Group volume / mute events
+
+`sonos_state::{GroupVolume, GroupMute}` (need `use sonos_state::property::Property` in scope for `::KEY`), watched per **coordinator** via `watch_property_with_subscription`, fire correctly. A single group-volume drag produced **23 `group_volume` events** (rapid-fire — **last-wins dedup needed**, ~200 ms window, same as Track / per-speaker Volume). Events arrive stamped with the **coordinator's** `speaker_id` → route via `av_transport_group_id` (coordinator → GroupId). `group_mute` *events* were not exercised this run (operator changed volume only); the `set_group_mute` command works and the watch is registered identically — confirm the mute event in the Task 3 live test.
+
+### Option D — in-place `manager.initialize()` on a live StateManager
+
+Calling `manager.initialize(new_topology)` a **second time on the running manager** after a regroup returned OK (no panic) and group_volume events kept flowing, routing to the new topology's coordinators. **But this exercised only GroupRenderingControl events — NOT AVTransport (Playback/Track) re-routing, and not the hardest case (a speaker becoming a NEW coordinator needing a fresh AVTransport SUBSCRIBE).** AVTransport is the load-bearing routing (`resolve_subscription_target` fixed at `initialize`). **Decision: Option D = Approach 2 (SSDP-skipped pump RESPAWN)** — drop the `EventPump` + `EventPump::spawn` a fresh one from refreshed caches (no SSDP), reusing the already-hardened spawn/drop machinery; it definitively rebuilds ALL subscriptions (incl. AVTransport for new coordinators) with a clean `TopologyFilter`. In-place re-initialize is a viable future optimization (doesn't crash) but is unverified for AVTransport new-coordinator routing, so it is not the v0.5.1 default.

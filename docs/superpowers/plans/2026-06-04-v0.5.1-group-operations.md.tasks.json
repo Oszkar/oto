@@ -6,7 +6,7 @@
     {
       "id": 1,
       "subject": "Task 1: Spike — mutating group SOAP + Option D feasibility",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** On the 4-speaker LAN, prove form/break + group-volume SOAP and choose Option D's approach before any production code. USER-ORDERED GATE — non-skippable (user said 'spike-first').\n\n**Verify:** `cargo run -p oto-wire --example group_ops_probe --features live-tests` on the LAN; findings appended to sonos-notes.md.\n\n```json:metadata\n{\"userGate\": true, \"tags\": [\"user-gate\"], \"requiresUserSpecification\": false, \"files\": [\"native/crates/wire/examples/group_ops_probe.rs\", \"docs/sonos-notes.md\"], \"verifyCommand\": \"cargo run -p oto-wire --example group_ops_probe --features live-tests\", \"acceptanceCriteria\": [\"x-rincon join makes joiner a group member; GroupId captured\", \"BecomeCoordinatorOfStandaloneGroup splits member out; coordinator-leave recorded\", \"SetGroupVolume/Relative/Mute confirmed + clamp + GetGroupVolume\", \"GroupVolume/GroupMute watch emits seed+change NOTIFYs; cadence/dedup captured\", \"Option D approach chosen with reason\", \"findings appended to sonos-notes.md; go/no-go recorded\"]}\n```"
     },
     {
@@ -38,5 +38,5 @@
       "description": "**Goal:** Docs match the shipped v0.5.1 surface; retire the milestone spec + plan post-release.\n\n**Verify:** `just check`; manual read-through; git grep for stale 'deferred to v0.5.1'.\n\n```json:metadata\n{\"files\": [\"docs/ARCHITECTURE.md\", \"docs/ROADMAP.md\", \"docs/sonos-notes.md\", \"CHANGELOG.md\"], \"verifyCommand\": \"just check\", \"acceptanceCriteria\": [\"ARCHITECTURE Wire block + event path + refresh updated\", \"ROADMAP v0.5.1 status + deferred items resolved\", \"CHANGELOG [0.5.1] jargon-free entry + compare links\", \"internal links resolve; milestone spec+plan retired\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-06-04"
+  "lastUpdated": "2026-06-04T12:00:00Z"
 }
