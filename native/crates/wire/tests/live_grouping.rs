@@ -271,16 +271,24 @@ fn live_group_volume_command_and_event_round_trip() {
         coordinator.as_str()
     );
 
-    // Re-pull the settled grouped topology into the wire's caches, then spawn a
-    // FRESH pump (clean TopologyFilter) that watches the coordinator's
-    // GroupRenderingControl — exactly what a production re-discover does.
-    wire.discover()
-        .expect("re-discover the settled grouped topology");
-    wire.subscribe_topology()
+    // Subscribe on a FRESH wire that discovers the settled grouped topology —
+    // exactly what a production re-discover installs (and what the Option-D
+    // seeded test does). Re-subscribing the SAME `wire` after it has discovered
+    // several times (discover_ungrouped + join settle) intermittently failed to
+    // deliver group events on hardware; a fresh wire is reliable. Production
+    // never re-subscribes a used wire — it always installs a fresh one via
+    // discover_with.
+    let sub_wire = SonosWire::new();
+    sub_wire
+        .discover()
+        .expect("fresh discover of the settled grouped topology");
+    sub_wire
+        .subscribe_topology()
         .expect("subscribe_topology before the pump");
-    wire.subscribe_speakers()
+    sub_wire
+        .subscribe_speakers()
         .expect("subscribe_speakers spawns the pump");
-    let rx = wire
+    let rx = sub_wire
         .take_event_stream()
         .expect("event stream available after subscribe_speakers");
 
@@ -289,7 +297,7 @@ fn live_group_volume_command_and_event_round_trip() {
     drain_until_quiet(&rx, Duration::from_millis(500));
 
     // ── SET GROUP VOLUME → expect a GroupVolume event for this group ────────
-    assert_group_volume_event(&wire, &rx, &group_id);
+    assert_group_volume_event(&sub_wire, &rx, &group_id);
 
     // ── RESTORE: leave the group so the LAN is left as we found it ──────────
     wire.leave_group(&joiner).expect("leave_group must succeed");
