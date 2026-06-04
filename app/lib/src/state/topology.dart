@@ -14,12 +14,15 @@
 /// **Fast re-discover (Option D).** The debounce body calls
 /// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~tens of ms vs the
 /// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
-/// the same wire-replacement lifecycle. That is a genuine `discoveryProvider`
-/// transition, so the event stream re-subscribes against the new wire's fresh
-/// pump (clean `TopologyFilter`) — events keep flowing after a regroup,
-/// without the latency of a full SSDP sweep. If the fast re-pull throws (e.g.
-/// every cached speaker is now unreachable), it falls back to a full
-/// re-discover via `ref.invalidate(discoveryProvider)`.
+/// the same wire-replacement lifecycle. The Rust generation always bumps, so
+/// the controller invalidates [wireGenerationProvider] to force the event
+/// stream to re-subscribe against the new wire's fresh pump (clean
+/// `TopologyFilter`) — even when the new `Topology` is value-equal to the old
+/// (a no-op `TopologyChanged`), which would otherwise suppress the
+/// `discoveryProvider` transition (FRB `Topology` has value equality) and
+/// silently strand the new receiver. If the fast re-pull throws (e.g. every
+/// cached speaker is now unreachable), it falls back to a full re-discover via
+/// `ref.invalidate(discoveryProvider)`.
 ///
 /// Activated by watching [topologyControllerProvider]. The v0.6 UI watches
 /// it once the app shell exists (the same way it will watch
@@ -64,6 +67,16 @@ void topologyController(Ref ref) {
           // re-discover, which re-runs SSDP.
           try {
             await ref.read(discoveryProvider.notifier).refreshTopology();
+            // refresh_topology() ALWAYS replaces the Rust wire + bumps the
+            // generation, but if the new Topology VALUE equals the current one
+            // (a no-op / duplicate TopologyChanged) the discoveryProvider state
+            // does NOT transition — FRB `Topology` has value equality — so
+            // wireGenerationProvider wouldn't recompute and changeEventsProvider
+            // wouldn't re-take the new wire's receiver, while the OLD receiver
+            // has already ended: events would silently stop. Invalidate the
+            // generation provider to force the re-subscribe regardless of
+            // value-equality (codex review of PR #74).
+            ref.invalidate(wireGenerationProvider);
           } catch (_) {
             ref.invalidate(discoveryProvider);
           }
