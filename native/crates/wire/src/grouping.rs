@@ -8,8 +8,11 @@
 
 use std::net::SocketAddr;
 
-use oto_core::WireError;
-use sonos_api::{services::av_transport, SonosClient};
+use oto_core::{Volume, WireError};
+use sonos_api::{
+    services::{av_transport, group_rendering_control},
+    SonosClient,
+};
 
 use crate::control::map_sdk_err;
 
@@ -47,6 +50,44 @@ pub(crate) fn leave(client: &SonosClient, leaver_addr: SocketAddr) -> Result<(),
         .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
     client
         .execute_enhanced(&leaver_addr.ip().to_string(), op)
+        .map(|_| ())
+        .map_err(map_sdk_err)
+}
+
+/// Set the group's master volume (GroupRenderingControl `SetGroupVolume`).
+///
+/// `SetGroupVolume` is sent to the group COORDINATOR's IP (`coord_addr`).
+/// `volume` is already `0..=100` (`oto_core::Volume`), so the SDK's
+/// `.build()` range-check (rejects > 100, hardware-validated probe Section 4)
+/// can never trip here — the FRB shim clamps a signed `i32` via
+/// `Volume::clamped` before this call, exactly like per-speaker `set_volume`.
+pub(crate) fn set_group_volume(
+    client: &SonosClient,
+    coord_addr: SocketAddr,
+    volume: Volume,
+) -> Result<(), WireError> {
+    let op = group_rendering_control::set_group_volume(u16::from(volume.get()))
+        .build()
+        .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
+    client
+        .execute_enhanced(&coord_addr.ip().to_string(), op)
+        .map(|_| ())
+        .map_err(map_sdk_err)
+}
+
+/// Set the group's master mute state (GroupRenderingControl `SetGroupMute`).
+///
+/// Sent to the group COORDINATOR's IP (`coord_addr`), like `set_group_volume`.
+pub(crate) fn set_group_mute(
+    client: &SonosClient,
+    coord_addr: SocketAddr,
+    muted: bool,
+) -> Result<(), WireError> {
+    let op = group_rendering_control::set_group_mute(muted)
+        .build()
+        .map_err(|e| WireError::Backend(format!("build error: {e}")))?;
+    client
+        .execute_enhanced(&coord_addr.ip().to_string(), op)
         .map(|_| ())
         .map_err(map_sdk_err)
 }

@@ -342,7 +342,9 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
 /// failure manifests as the speaker's Volume/Mute/Playback events
 /// simply never arriving (and the UI shows the last-known value).
 fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
-    use sonos_state::{CurrentTrack, GroupMembership, Mute, PlaybackState, Volume};
+    use sonos_state::{
+        CurrentTrack, GroupMembership, GroupMute, GroupVolume, Mute, PlaybackState, Volume,
+    };
 
     let sdk_id = |sid: &SpeakerId| sonos_state::SpeakerId::new(sid.as_str());
 
@@ -363,6 +365,12 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
         if inputs.coord_to_group.contains_key(sid) {
             let _ = manager.watch_property_with_subscription::<PlaybackState>(&sdk_sid);
             let _ = manager.watch_property_with_subscription::<CurrentTrack>(&sdk_sid);
+            // v0.5.1: GroupRenderingControl group master volume/mute are
+            // `Scope::Group`, coordinator-routed (sonos-notes § Group
+            // operations) — watch on coordinators only, same gate as
+            // AVTransport above.
+            let _ = manager.watch_property_with_subscription::<GroupVolume>(&sdk_sid);
+            let _ = manager.watch_property_with_subscription::<GroupMute>(&sdk_sid);
         }
 
         // v0.5 (S1): ZoneGroupTopology / GroupMembership is `Scope::Speaker`
@@ -489,7 +497,15 @@ impl TopologyFilter {
             }
             // Group-addressed events carry a GroupId routed via the frozen
             // maps; after a regroup that routing is stale — drop until rebuild.
-            ChangeEvent::Playback { .. } | ChangeEvent::Track { .. } if self.dirty => None,
+            // GroupVolume/GroupMute (v0.5.1) are group-addressed too — same drop.
+            ChangeEvent::Playback { .. }
+            | ChangeEvent::Track { .. }
+            | ChangeEvent::GroupVolume { .. }
+            | ChangeEvent::GroupMute { .. }
+                if self.dirty =>
+            {
+                None
+            }
             // Volume/Mute (per-speaker) and the surface events are
             // grouping-independent — always forward.
             _ => Some(event),
@@ -511,7 +527,9 @@ fn map_upstream_event(
     coord_to_group: &HashMap<SpeakerId, GroupId>,
     speaker_to_coord: &HashMap<SpeakerId, SpeakerId>,
 ) -> Option<ChangeEvent> {
-    use sonos_state::{CurrentTrack, Mute, PlaybackState as SdkPlaybackState, Volume};
+    use sonos_state::{
+        CurrentTrack, GroupMute, GroupVolume, Mute, PlaybackState as SdkPlaybackState, Volume,
+    };
 
     let sdk_sid = sonos_state::SpeakerId::new(speaker.as_str());
 
@@ -539,6 +557,22 @@ fn map_upstream_event(
                 group,
                 track: map_current_track(t),
             })
+        }
+        // v0.5.1: GroupRenderingControl group volume/mute. Group-scoped,
+        // coordinator-routed — same coordinator-only filter as AVTransport
+        // (events arrive stamped with the coordinator's speaker_id;
+        // sonos-notes § Group operations). No dedup: a volume drag fires
+        // ~23 distinct events and the StateManager cache is last-wins,
+        // exactly like per-speaker `volume`.
+        "group_volume" => {
+            let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
+            let v: GroupVolume = manager.get_property::<GroupVolume>(&sdk_sid)?;
+            Some(group_volume_event(group, v))
+        }
+        "group_mute" => {
+            let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
+            let m: GroupMute = manager.get_property::<GroupMute>(&sdk_sid)?;
+            Some(group_mute_event(group, m))
         }
         // v0.5 (S1): ZoneGroupTopology change. The SDK emits one
         // `group_membership` event per affected speaker on a regroup
@@ -618,6 +652,24 @@ fn volume_event(speaker: SpeakerId, v: sonos_state::Volume) -> ChangeEvent {
 fn mute_event(speaker: SpeakerId, m: sonos_state::Mute) -> ChangeEvent {
     ChangeEvent::Mute {
         speaker,
+        muted: m.is_muted(),
+    }
+}
+
+/// SDK `GroupVolume`(u16) → `oto_core::ChangeEvent::GroupVolume` for `group`.
+/// The SDK's `GroupVolume::new` clamps at 100; `Volume::clamped` here is
+/// belt-and-braces against any future shape drift (mirrors `volume_event`).
+fn group_volume_event(group: GroupId, v: sonos_state::GroupVolume) -> ChangeEvent {
+    ChangeEvent::GroupVolume {
+        group,
+        volume: oto_core::Volume::clamped(i32::from(v.value())),
+    }
+}
+
+/// SDK `GroupMute` → `oto_core::ChangeEvent::GroupMute` for `group`.
+fn group_mute_event(group: GroupId, m: sonos_state::GroupMute) -> ChangeEvent {
+    ChangeEvent::GroupMute {
+        group,
         muted: m.is_muted(),
     }
 }
@@ -720,6 +772,12 @@ mod tests {
             volume: oto_core::Volume::new(40).unwrap(),
         }
     }
+    fn group_volume_ev(g: &str) -> ChangeEvent {
+        ChangeEvent::GroupVolume {
+            group: gid(g),
+            volume: oto_core::Volume::new(40).unwrap(),
+        }
+    }
 
     #[test]
     fn first_topology_event_per_speaker_is_suppressed_as_seed() {
@@ -794,6 +852,58 @@ mod tests {
                 &sid("RINCON_K"),
                 ChangeEvent::Mute {
                     speaker: sid("RINCON_K"),
+                    muted: true
+                }
+            )
+            .is_some());
+    }
+
+    #[test]
+    fn group_volume_and_mute_dropped_while_dirty_but_volume_passes() {
+        // v0.5.1: GroupVolume/GroupMute are group-addressed via the frozen
+        // maps — they must be dropped after a regroup (stale routing), like
+        // Playback/Track. Per-speaker Volume/Mute keep flowing.
+        let mut f = TopologyFilter::new();
+        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
+        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // real → dirty
+        assert!(
+            f.admit(&sid("RINCON_K"), group_volume_ev("G:stale"))
+                .is_none(),
+            "GroupVolume must be dropped while dirty (stale group routing)"
+        );
+        assert!(
+            f.admit(
+                &sid("RINCON_K"),
+                ChangeEvent::GroupMute {
+                    group: gid("G:stale"),
+                    muted: true
+                }
+            )
+            .is_none(),
+            "GroupMute must be dropped while dirty (stale group routing)"
+        );
+        // Per-speaker Volume/Mute are grouping-independent → still flow.
+        assert!(f.admit(&sid("RINCON_K"), volume_ev("RINCON_K")).is_some());
+        assert!(f
+            .admit(
+                &sid("RINCON_K"),
+                ChangeEvent::Mute {
+                    speaker: sid("RINCON_K"),
+                    muted: false
+                }
+            )
+            .is_some());
+    }
+
+    #[test]
+    fn group_volume_passes_before_a_regroup() {
+        let mut f = TopologyFilter::new();
+        assert!(f.admit(&sid("RINCON_K"), group_volume_ev("G:1")).is_some());
+        assert!(f
+            .admit(
+                &sid("RINCON_K"),
+                ChangeEvent::GroupMute {
+                    group: gid("G:1"),
                     muted: true
                 }
             )
@@ -911,6 +1021,50 @@ mod tests {
                 assert!(!muted);
             }
             other => panic!("expected Mute, got {other:?}"),
+        }
+    }
+
+    // ── group volume / mute event constructors (v0.5.1) ───────────────
+
+    #[test]
+    fn group_volume_event_clamps_and_carries_group_id() {
+        let g = gid("RINCON_K:1");
+        let ev = group_volume_event(g.clone(), sonos_state::GroupVolume::new(73));
+        match ev {
+            ChangeEvent::GroupVolume { group, volume } => {
+                assert_eq!(group, g);
+                assert_eq!(volume.get(), 73);
+            }
+            other => panic!("expected GroupVolume, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn group_volume_event_clamps_at_100() {
+        let g = gid("RINCON_K:1");
+        let ev = group_volume_event(g, sonos_state::GroupVolume::new(255));
+        let ChangeEvent::GroupVolume { volume, .. } = ev else {
+            panic!("expected GroupVolume")
+        };
+        assert_eq!(volume.get(), 100);
+    }
+
+    #[test]
+    fn group_mute_event_round_trips_both_bool_states() {
+        let g = gid("RINCON_K:1");
+        match group_mute_event(g.clone(), sonos_state::GroupMute::new(true)) {
+            ChangeEvent::GroupMute { group, muted } => {
+                assert_eq!(group, g);
+                assert!(muted);
+            }
+            other => panic!("expected GroupMute, got {other:?}"),
+        }
+        match group_mute_event(g.clone(), sonos_state::GroupMute::new(false)) {
+            ChangeEvent::GroupMute { group, muted } => {
+                assert_eq!(group, g);
+                assert!(!muted);
+            }
+            other => panic!("expected GroupMute, got {other:?}"),
         }
     }
 

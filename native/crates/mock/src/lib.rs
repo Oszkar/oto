@@ -428,6 +428,49 @@ impl Wire for MockWire {
         Ok(())
     }
 
+    fn set_group_volume(&self, group: &GroupId, volume: Volume) -> Result<(), WireError> {
+        let guard = lock!(self);
+        // Group volume is coordinator-routed (like play/pause): resolve
+        // group → coordinator. Unknown group → NotFound; honor a forced
+        // command error on the coordinator (models an unreachable device).
+        let coord = guard
+            .coords
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        if let Some(err) = guard.command_errors.get(&coord) {
+            return Err(err.clone());
+        }
+        // Auto-emit a per-group GroupVolume event (mirrors real Sonos:
+        // SetGroupVolume SOAP success → group_volume NOTIFY).
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::GroupVolume {
+                group: group.clone(),
+                volume,
+            });
+        }
+        Ok(())
+    }
+
+    fn set_group_mute(&self, group: &GroupId, muted: bool) -> Result<(), WireError> {
+        let guard = lock!(self);
+        let coord = guard
+            .coords
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        if let Some(err) = guard.command_errors.get(&coord) {
+            return Err(err.clone());
+        }
+        if let Some(tx) = &guard.tx {
+            let _ = tx.send(ChangeEvent::GroupMute {
+                group: group.clone(),
+                muted,
+            });
+        }
+        Ok(())
+    }
+
     fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
         let mut guard = lock!(self);
         // Both ids must be known (mirrors SonosWire resolving both → IP).
@@ -1135,6 +1178,74 @@ mod tests {
         // Kitchen's own group still works for its coordinator.
         let _ = kitchen;
         assert!(w.play(&GroupId::new("RINCON_KITCHEN:1")).is_ok());
+    }
+
+    // ── v0.5.1 group volume/mute ──────────────────────────────────────────
+
+    #[test]
+    fn set_group_volume_auto_emits() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_KITCHEN:1");
+        w.set_group_volume(&g, Volume::new(65).unwrap()).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::GroupVolume { group, volume } => {
+                assert_eq!(group, g);
+                assert_eq!(volume, Volume::new(65).unwrap());
+            }
+            other => panic!("expected GroupVolume from set_group_volume, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_group_mute_auto_emits() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        let g = GroupId::new("RINCON_OFFICE:0");
+        w.set_group_mute(&g, true).unwrap();
+        match rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap()
+        {
+            ChangeEvent::GroupMute { group, muted } => {
+                assert_eq!(group, g);
+                assert!(muted);
+            }
+            other => panic!("expected GroupMute from set_group_mute, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_group_volume_unknown_group_not_found() {
+        let w = MockWire::default();
+        assert_eq!(
+            w.set_group_volume(&GroupId::new("RINCON_GHOST:0"), Volume::new(50).unwrap()),
+            Err(WireError::NotFound("RINCON_GHOST:0".into()))
+        );
+        assert_eq!(
+            w.set_group_mute(&GroupId::new("RINCON_GHOST:0"), true),
+            Err(WireError::NotFound("RINCON_GHOST:0".into()))
+        );
+    }
+
+    #[test]
+    fn set_group_volume_honors_command_error_on_coordinator() {
+        let w = MockWire::default();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN"); // coordinator of RINCON_KITCHEN:1
+        w.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+        assert_eq!(
+            w.set_group_volume(&GroupId::new("RINCON_KITCHEN:1"), Volume::new(50).unwrap()),
+            Err(WireError::Network("unreachable".into()))
+        );
     }
 
     #[test]

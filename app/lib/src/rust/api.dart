@@ -10,7 +10,7 @@ part 'api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_group_mute`, `set_group_volume`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
@@ -53,6 +53,23 @@ Future<void> setVolume({required String speakerId, required int volume}) =>
 /// Set `speaker_id`'s mute state. Blocking SOAP round-trip; Dart `Future`.
 Future<void> setMute({required String speakerId, required bool muted}) =>
     RustLib.instance.api.crateApiSetMute(speakerId: speakerId, muted: muted);
+
+/// v0.5.1: set `group_id`'s master volume, clamped to `0..=100` by
+/// `oto_core::Volume`. Coordinator-routed (group-scoped). The param is
+/// **signed** so a negative Dart `int` clamps to 0 in Rust rather than
+/// throwing at the FRB encoder — exactly like `set_volume`; clamping before
+/// the SOAP call also avoids the SDK's `.build()` RangeError on > 100.
+/// Blocking SOAP round-trip; Dart `Future`. Unknown group → `NotFound`.
+Future<void> setGroupVolume({required String groupId, required int volume}) =>
+    RustLib.instance.api.crateApiSetGroupVolume(
+      groupId: groupId,
+      volume: volume,
+    );
+
+/// v0.5.1: set `group_id`'s master mute state. Coordinator-routed.
+/// Blocking SOAP round-trip; Dart `Future`. Unknown group → `NotFound`.
+Future<void> setGroupMute({required String groupId, required bool muted}) =>
+    RustLib.instance.api.crateApiSetGroupMute(groupId: groupId, muted: muted);
 
 /// v0.5.1: fold `speaker_id` into `coordinator_id`'s group. Blocking SOAP
 /// round-trip; Dart `Future`. The view refreshes off the debounced
@@ -145,6 +162,18 @@ sealed class ChangeEventDto with _$ChangeEventDto {
     required String groupId,
     required TrackDto track,
   }) = ChangeEventDto_Track;
+
+  /// v0.5.1 — group master volume changed (per-group, coordinator-routed).
+  const factory ChangeEventDto.groupVolume({
+    required String groupId,
+    required int volume,
+  }) = ChangeEventDto_GroupVolume;
+
+  /// v0.5.1 — group master mute changed (per-group, coordinator-routed).
+  const factory ChangeEventDto.groupMute({
+    required String groupId,
+    required bool muted,
+  }) = ChangeEventDto_GroupMute;
   const factory ChangeEventDto.subscriptionError({
     required String speakerId,
     required String message,

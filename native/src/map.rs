@@ -159,6 +159,15 @@ pub fn to_change_event_dto(event: ChangeEvent) -> ChangeEventDto {
             group_id: group.to_string(),
             track: to_track_dto(track),
         },
+        // v0.5.1 group volume widens u8 → u32 for the bridge (matches Volume).
+        ChangeEvent::GroupVolume { group, volume } => ChangeEventDto::GroupVolume {
+            group_id: group.to_string(),
+            volume: u32::from(volume.get()),
+        },
+        ChangeEvent::GroupMute { group, muted } => ChangeEventDto::GroupMute {
+            group_id: group.to_string(),
+            muted,
+        },
         ChangeEvent::SubscriptionError { speaker, message } => ChangeEventDto::SubscriptionError {
             speaker_id: speaker.to_string(),
             message,
@@ -398,6 +407,36 @@ mod tests {
                 assert_eq!(track.uri.as_deref(), Some("x-rincon-mp3radio://belfast"));
             }
             _ => panic!("expected Track DTO"),
+        }
+    }
+
+    #[test]
+    fn change_event_group_volume_maps() {
+        let ev = ChangeEvent::GroupVolume {
+            group: oto_core::GroupId::new("RINCON_KITCHEN:1"),
+            volume: Volume::new(45).unwrap(),
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::GroupVolume { group_id, volume } => {
+                assert_eq!(group_id, "RINCON_KITCHEN:1");
+                assert_eq!(volume, 45u32);
+            }
+            _ => panic!("expected GroupVolume DTO"),
+        }
+    }
+
+    #[test]
+    fn change_event_group_mute_maps() {
+        let ev = ChangeEvent::GroupMute {
+            group: oto_core::GroupId::new("RINCON_OFFICE:0"),
+            muted: true,
+        };
+        match to_change_event_dto(ev) {
+            ChangeEventDto::GroupMute { group_id, muted } => {
+                assert_eq!(group_id, "RINCON_OFFICE:0");
+                assert!(muted);
+            }
+            _ => panic!("expected GroupMute DTO"),
         }
     }
 

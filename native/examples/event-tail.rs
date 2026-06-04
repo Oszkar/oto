@@ -99,6 +99,12 @@ fn print_event(t: u64, event: &ChangeEvent) {
                 track.artist.as_deref().unwrap_or("(no artist)"),
             );
         }
+        ChangeEvent::GroupVolume { group, volume } => {
+            println!("[{t:>5}s] GrpVol   {group}  → {}", volume.get());
+        }
+        ChangeEvent::GroupMute { group, muted } => {
+            println!("[{t:>5}s] GrpMute  {group}  → {muted}");
+        }
         ChangeEvent::SubscriptionError { speaker, message } => {
             // To stderr so it doesn't get lost in a stdout-redirected
             // session capture, and so the production-vs-failure

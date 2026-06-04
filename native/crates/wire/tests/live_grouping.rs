@@ -22,11 +22,12 @@
 #![cfg(feature = "live-tests")]
 
 use std::{
+    sync::mpsc::RecvTimeoutError,
     thread::sleep,
     time::{Duration, Instant},
 };
 
-use oto_core::{DiscoverySnapshot, GroupIdentity, SpeakerId, Wire};
+use oto_core::{ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, Volume, Wire};
 use oto_wire::SonosWire;
 
 /// How often to re-pull topology while waiting for the household to settle.
@@ -144,4 +145,135 @@ fn live_join_then_leave_round_trip() {
         joiner.as_str(),
         standalone.id.as_str()
     );
+}
+
+#[test]
+#[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 acceptance"]
+fn live_group_volume_command_and_event_round_trip() {
+    // Forms a group, then issues `set_group_volume` on the coordinator and
+    // drains the event stream asserting a `GroupVolume` event carrying the
+    // group's `GroupId`. Mirrors the per-speaker volume command+event path.
+    let wire = SonosWire::new();
+    let snap = wire.discover().expect("discover() against the real LAN");
+    println!(
+        "discover(): {} group(s), {} speaker(s)",
+        snap.groups.len(),
+        snap.speakers.len()
+    );
+
+    // Pick a coordinator + a joiner from a DIFFERENT group, like the
+    // join/leave test, so we exercise a real (multi-member) group.
+    let coordinator_group = snap.groups.first().expect("expected >= 1 group on the LAN");
+    let coordinator = coordinator_group.coordinator.clone();
+    let joiner_group = snap
+        .groups
+        .iter()
+        .find(|g| g.members.len() == 1 && g.coordinator != coordinator)
+        .or_else(|| snap.groups.iter().find(|g| g.coordinator != coordinator));
+    let Some(joiner_group) = joiner_group else {
+        println!(
+            "SKIP: need >= 2 independent zones to form a group (found {} group(s)).",
+            snap.groups.len()
+        );
+        return;
+    };
+    let joiner = joiner_group.coordinator.clone();
+
+    // Subscribe BEFORE forming the group (topology must precede speakers —
+    // discover_with enforces this in production; here we order it manually).
+    wire.subscribe_topology()
+        .expect("subscribe_topology before the pump");
+    wire.subscribe_speakers()
+        .expect("subscribe_speakers spawns the pump");
+    let rx = wire
+        .take_event_stream()
+        .expect("event stream available after subscribe_speakers");
+
+    // Form the group and wait for the settled topology.
+    wire.join_group(&joiner, &coordinator)
+        .expect("join_group must succeed");
+    let joined_into = poll_until_settled(&wire, "join", |snap| {
+        group_of(snap, &joiner)
+            .filter(|g| g.coordinator == coordinator && g.members.contains(&coordinator))
+            .cloned()
+    });
+    let group_id: GroupId = joined_into.id.clone();
+    println!(
+        "  settled: group {} (coord {})",
+        group_id.as_str(),
+        coordinator.as_str()
+    );
+
+    // Drain any seed / settle events already queued so the assertion below
+    // observes the event caused by OUR command, not a leftover seed.
+    drain_until_quiet(&rx, Duration::from_millis(500));
+
+    // ── SET GROUP VOLUME → expect a GroupVolume event for this group ────────
+    let target = Volume::new(35).expect("35 in range");
+    println!("set_group_volume({}) on group {}", 35, group_id.as_str());
+    wire.set_group_volume(&group_id, target)
+        .expect("set_group_volume must succeed");
+
+    // A single group-volume change fires one or more group_volume NOTIFYs;
+    // wait for the first GroupVolume event addressed to our group.
+    let saw_group_volume = wait_for_group_volume(&rx, &group_id, Duration::from_secs(10));
+    assert!(
+        saw_group_volume,
+        "expected a GroupVolume event for group {} after set_group_volume",
+        group_id.as_str()
+    );
+
+    // ── RESTORE: leave the group so the LAN is left as we found it ──────────
+    wire.leave_group(&joiner).expect("leave_group must succeed");
+    let _ = poll_until_settled(&wire, "leave", |snap| {
+        group_of(snap, &joiner)
+            .filter(|g| g.coordinator == joiner && g.members == vec![joiner.clone()])
+            .cloned()
+    });
+}
+
+/// Drain events for up to `budget`, ignoring them — used to flush seeds/settle
+/// noise before asserting on a command-caused event.
+fn drain_until_quiet(rx: &std::sync::mpsc::Receiver<ChangeEvent>, budget: Duration) {
+    let deadline = Instant::now() + budget;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return;
+        }
+        match rx.recv_timeout(remaining.min(Duration::from_millis(100))) {
+            Ok(_) => continue,
+            Err(RecvTimeoutError::Timeout) => return,
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+    }
+}
+
+/// Block until a `GroupVolume` event addressed to `group` arrives, or `budget`
+/// elapses. Returns whether one was seen.
+fn wait_for_group_volume(
+    rx: &std::sync::mpsc::Receiver<ChangeEvent>,
+    group: &GroupId,
+    budget: Duration,
+) -> bool {
+    let deadline = Instant::now() + budget;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        match rx.recv_timeout(remaining.min(Duration::from_millis(250))) {
+            Ok(ChangeEvent::GroupVolume { group: g, volume }) if g == *group => {
+                println!(
+                    "  got GroupVolume {{ group: {}, volume: {} }}",
+                    g.as_str(),
+                    volume.get()
+                );
+                return true;
+            }
+            Ok(_) => continue,
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Disconnected) => return false,
+        }
+    }
 }

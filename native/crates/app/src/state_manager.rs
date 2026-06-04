@@ -42,6 +42,18 @@ pub(crate) struct GroupCache {
     pub track: Option<Track>,
 }
 
+/// Per-group cached GroupRenderingControl values (v0.5.1). Distinct from the
+/// per-speaker `Volume`/`Mute` on `SpeakerCache` and from the transport/track
+/// on `GroupCache` — group volume/mute are their own evented properties. Kept
+/// in a separate cache (its own `RwLock`) so a group-volume drag's ~23 events
+/// don't contend with transport writes. Last-wins (no dedup — see the `apply`
+/// arms): each event overwrites the prior value, matching per-speaker `Volume`.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GroupRenderCache {
+    pub volume: Option<Volume>,
+    pub muted: Option<bool>,
+}
+
 /// Speaker→group mapping installed by `install_topology` from each
 /// `discover_with` snapshot. Reads in `speaker_state` use it to resolve
 /// a speaker's transport from its group's cache. One map (not the full
@@ -74,6 +86,11 @@ fn build_topology_maps(snapshot: &DiscoverySnapshot) -> TopologyMaps {
 pub struct StateManager {
     speakers: RwLock<HashMap<SpeakerId, SpeakerCache>>,
     groups: RwLock<HashMap<GroupId, GroupCache>>,
+    /// Per-group GroupRenderingControl volume/mute (v0.5.1). Its own lock so
+    /// the high-frequency group-volume event stream doesn't contend with the
+    /// transport/track writes on `groups`. Cleared alongside `groups` on every
+    /// generation bump.
+    group_render: RwLock<HashMap<GroupId, GroupRenderCache>>,
     /// Speaker→group resolution used by Slice 4's cache-backed
     /// `speaker_state`. Refreshed by `bump_clear_and_install` on every
     /// successful `discover_with` — atomically with the generation bump +
@@ -93,6 +110,7 @@ impl Default for StateManager {
         Self {
             speakers: RwLock::new(HashMap::new()),
             groups: RwLock::new(HashMap::new()),
+            group_render: RwLock::new(HashMap::new()),
             topology: RwLock::new(TopologyMaps::default()),
             generation: AtomicU64::new(0),
         }
@@ -183,6 +201,22 @@ impl StateManager {
                     });
                 }
             }
+            ChangeEvent::GroupVolume { group, volume } => {
+                let mut guard = self.group_render.write().unwrap_or_else(|p| p.into_inner());
+                if self.generation.load(Ordering::Acquire) != gen {
+                    return;
+                }
+                // Last-wins (no dedup): a group-volume drag fires ~23 events;
+                // each overwrites the cached value, like per-speaker Volume.
+                guard.entry(group.clone()).or_default().volume = Some(*volume);
+            }
+            ChangeEvent::GroupMute { group, muted } => {
+                let mut guard = self.group_render.write().unwrap_or_else(|p| p.into_inner());
+                if self.generation.load(Ordering::Acquire) != gen {
+                    return;
+                }
+                guard.entry(group.clone()).or_default().muted = Some(*muted);
+            }
             // SubscriptionError / SubscriptionRecovered / TopologyChanged
             // have no cache effect here — they're surface events. The Dart
             // TopologyController reacts to TopologyChanged by re-pulling
@@ -244,6 +278,26 @@ impl StateManager {
             .unwrap_or_else(|p| p.into_inner())
             .get(group)
             .and_then(|c| c.track.clone())
+    }
+
+    /// Read a group's cached GroupRenderingControl volume (None if no
+    /// GroupVolume event seen yet for that group). v0.5.1 read surface.
+    pub fn group_volume_of(&self, group: &GroupId) -> Option<Volume> {
+        self.group_render
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(group)
+            .and_then(|c| c.volume)
+    }
+
+    /// Read a group's cached GroupRenderingControl mute state (None if no
+    /// GroupMute event seen yet for that group). v0.5.1 read surface.
+    pub fn group_muted_of(&self, group: &GroupId) -> Option<bool> {
+        self.group_render
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(group)
+            .and_then(|c| c.muted)
     }
 
     /// True if the speaker is in the current topology. Used by
@@ -373,6 +427,10 @@ impl StateManager {
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
+        self.group_render
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
         *self.topology.write().unwrap_or_else(|p| p.into_inner()) = TopologyMaps::default();
     }
 
@@ -409,6 +467,10 @@ impl StateManager {
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
+        self.group_render
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
         // Install the NEW topology directly — do NOT clear to empty
         // first, so a racing `speaker_state` never sees topology empty
         // while a wire is present.
@@ -426,6 +488,10 @@ impl StateManager {
             .unwrap_or_else(|p| p.into_inner())
             .clear();
         self.groups
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
+        self.group_render
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
@@ -588,6 +654,70 @@ mod tests {
         // Slice 4 read of transport.current_track is coherent.
         let t = sm.transport_of(&g).unwrap();
         assert_eq!(t.current_track, Some(track));
+    }
+
+    // ── v0.5.1 group volume/mute cache ───────────────────────────────────
+
+    #[test]
+    fn apply_group_volume_event_populates_cache() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        assert!(sm.group_volume_of(&g).is_none());
+        sm.apply_event(&ChangeEvent::GroupVolume {
+            group: g.clone(),
+            volume: Volume::new(42).unwrap(),
+        });
+        assert_eq!(sm.group_volume_of(&g), Some(Volume::new(42).unwrap()));
+    }
+
+    #[test]
+    fn apply_group_mute_event_populates_cache() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        assert!(sm.group_muted_of(&g).is_none());
+        sm.apply_event(&ChangeEvent::GroupMute {
+            group: g.clone(),
+            muted: true,
+        });
+        assert_eq!(sm.group_muted_of(&g), Some(true));
+    }
+
+    #[test]
+    fn group_volume_is_last_wins() {
+        // No dedup: each event overwrites the prior value (mirrors a
+        // group-volume drag's ~23 events landing last-wins in the cache).
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        for v in [10u8, 20, 30, 55] {
+            sm.apply_event(&ChangeEvent::GroupVolume {
+                group: g.clone(),
+                volume: Volume::new(v).unwrap(),
+            });
+        }
+        assert_eq!(sm.group_volume_of(&g), Some(Volume::new(55).unwrap()));
+    }
+
+    #[test]
+    fn bump_clear_and_install_clears_group_render_cache() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:0");
+        sm.apply_event(&ChangeEvent::GroupVolume {
+            group: g.clone(),
+            volume: Volume::new(60).unwrap(),
+        });
+        sm.apply_event(&ChangeEvent::GroupMute {
+            group: g.clone(),
+            muted: true,
+        });
+        assert!(sm.group_volume_of(&g).is_some());
+        assert!(sm.group_muted_of(&g).is_some());
+
+        sm.bump_clear_and_install(&fake_snapshot_two_speaker_group());
+        assert!(
+            sm.group_volume_of(&g).is_none(),
+            "group_render cache must be cleared by the generation bump"
+        );
+        assert!(sm.group_muted_of(&g).is_none());
     }
 
     // ── Generation token coverage (PR #43 Codex P2 #5 / Important #4) ─

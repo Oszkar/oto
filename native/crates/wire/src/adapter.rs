@@ -389,6 +389,18 @@ impl Wire for SonosWire {
         control::soap_set_mute(&self.client, addr, muted)
     }
 
+    fn set_group_volume(&self, group: &GroupId, volume: Volume) -> Result<(), WireError> {
+        // Group volume is coordinator-routed (like play/pause): resolve
+        // group → coordinator → IP. Unknown/stale group → NotFound.
+        let addr = self.resolve_group(group)?;
+        grouping::set_group_volume(&self.client, addr, volume)
+    }
+
+    fn set_group_mute(&self, group: &GroupId, muted: bool) -> Result<(), WireError> {
+        let addr = self.resolve_group(group)?;
+        grouping::set_group_mute(&self.client, addr, muted)
+    }
+
     fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
         // The join SOAP is sent to the JOINER's IP; confirm the coordinator
         // is a known speaker first (unknown → NotFound) so a bad coordinator

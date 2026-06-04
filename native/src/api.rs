@@ -93,6 +93,16 @@ pub enum ChangeEventDto {
         group_id: String,
         track: TrackDto,
     },
+    /// v0.5.1 — group master volume changed (per-group, coordinator-routed).
+    GroupVolume {
+        group_id: String,
+        volume: u32,
+    },
+    /// v0.5.1 — group master mute changed (per-group, coordinator-routed).
+    GroupMute {
+        group_id: String,
+        muted: bool,
+    },
     SubscriptionError {
         speaker_id: String,
         message: String,
@@ -171,6 +181,25 @@ pub fn set_volume(speaker_id: String, volume: i32) -> Result<(), CommandError> {
 pub fn set_mute(speaker_id: String, muted: bool) -> Result<(), CommandError> {
     let id = oto_core::SpeakerId::new(speaker_id);
     oto_app::set_mute(&id, muted).map_err(crate::map::to_command_error)
+}
+
+/// v0.5.1: set `group_id`'s master volume, clamped to `0..=100` by
+/// `oto_core::Volume`. Coordinator-routed (group-scoped). The param is
+/// **signed** so a negative Dart `int` clamps to 0 in Rust rather than
+/// throwing at the FRB encoder — exactly like `set_volume`; clamping before
+/// the SOAP call also avoids the SDK's `.build()` RangeError on > 100.
+/// Blocking SOAP round-trip; Dart `Future`. Unknown group → `NotFound`.
+pub fn set_group_volume(group_id: String, volume: i32) -> Result<(), CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    let vol = oto_core::Volume::clamped(volume);
+    oto_app::set_group_volume(&id, vol).map_err(crate::map::to_command_error)
+}
+
+/// v0.5.1: set `group_id`'s master mute state. Coordinator-routed.
+/// Blocking SOAP round-trip; Dart `Future`. Unknown group → `NotFound`.
+pub fn set_group_mute(group_id: String, muted: bool) -> Result<(), CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    oto_app::set_group_mute(&id, muted).map_err(crate::map::to_command_error)
 }
 
 /// v0.5.1: fold `speaker_id` into `coordinator_id`'s group. Blocking SOAP
@@ -354,6 +383,20 @@ impl oto_core::Wire for MockWireArc {
         muted: bool,
     ) -> Result<(), oto_core::WireError> {
         self.0.set_mute(speaker, muted)
+    }
+    fn set_group_volume(
+        &self,
+        group: &oto_core::GroupId,
+        volume: oto_core::Volume,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.set_group_volume(group, volume)
+    }
+    fn set_group_mute(
+        &self,
+        group: &oto_core::GroupId,
+        muted: bool,
+    ) -> Result<(), oto_core::WireError> {
+        self.0.set_group_mute(group, muted)
     }
     fn join_group(
         &self,

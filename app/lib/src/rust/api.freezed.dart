@@ -55,14 +55,16 @@ extension ChangeEventDtoPatterns on ChangeEventDto {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_Mute value)?  mute,TResult Function( ChangeEventDto_Playback value)?  playback,TResult Function( ChangeEventDto_Track value)?  track,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,TResult Function( ChangeEventDto_TopologyChanged value)?  topologyChanged,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ChangeEventDto_Volume value)?  volume,TResult Function( ChangeEventDto_Mute value)?  mute,TResult Function( ChangeEventDto_Playback value)?  playback,TResult Function( ChangeEventDto_Track value)?  track,TResult Function( ChangeEventDto_GroupVolume value)?  groupVolume,TResult Function( ChangeEventDto_GroupMute value)?  groupMute,TResult Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,TResult Function( ChangeEventDto_TopologyChanged value)?  topologyChanged,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
 return volume(_that);case ChangeEventDto_Mute() when mute != null:
 return mute(_that);case ChangeEventDto_Playback() when playback != null:
 return playback(_that);case ChangeEventDto_Track() when track != null:
-return track(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return track(_that);case ChangeEventDto_GroupVolume() when groupVolume != null:
+return groupVolume(_that);case ChangeEventDto_GroupMute() when groupMute != null:
+return groupMute(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
 return topologyChanged(_that);case _:
@@ -83,14 +85,16 @@ return topologyChanged(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_Mute value)  mute,required TResult Function( ChangeEventDto_Playback value)  playback,required TResult Function( ChangeEventDto_Track value)  track,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,required TResult Function( ChangeEventDto_TopologyChanged value)  topologyChanged,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ChangeEventDto_Volume value)  volume,required TResult Function( ChangeEventDto_Mute value)  mute,required TResult Function( ChangeEventDto_Playback value)  playback,required TResult Function( ChangeEventDto_Track value)  track,required TResult Function( ChangeEventDto_GroupVolume value)  groupVolume,required TResult Function( ChangeEventDto_GroupMute value)  groupMute,required TResult Function( ChangeEventDto_SubscriptionError value)  subscriptionError,required TResult Function( ChangeEventDto_SubscriptionRecovered value)  subscriptionRecovered,required TResult Function( ChangeEventDto_TopologyChanged value)  topologyChanged,}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume():
 return volume(_that);case ChangeEventDto_Mute():
 return mute(_that);case ChangeEventDto_Playback():
 return playback(_that);case ChangeEventDto_Track():
-return track(_that);case ChangeEventDto_SubscriptionError():
+return track(_that);case ChangeEventDto_GroupVolume():
+return groupVolume(_that);case ChangeEventDto_GroupMute():
+return groupMute(_that);case ChangeEventDto_SubscriptionError():
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered():
 return subscriptionRecovered(_that);case ChangeEventDto_TopologyChanged():
 return topologyChanged(_that);}
@@ -107,14 +111,16 @@ return topologyChanged(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_Mute value)?  mute,TResult? Function( ChangeEventDto_Playback value)?  playback,TResult? Function( ChangeEventDto_Track value)?  track,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,TResult? Function( ChangeEventDto_TopologyChanged value)?  topologyChanged,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ChangeEventDto_Volume value)?  volume,TResult? Function( ChangeEventDto_Mute value)?  mute,TResult? Function( ChangeEventDto_Playback value)?  playback,TResult? Function( ChangeEventDto_Track value)?  track,TResult? Function( ChangeEventDto_GroupVolume value)?  groupVolume,TResult? Function( ChangeEventDto_GroupMute value)?  groupMute,TResult? Function( ChangeEventDto_SubscriptionError value)?  subscriptionError,TResult? Function( ChangeEventDto_SubscriptionRecovered value)?  subscriptionRecovered,TResult? Function( ChangeEventDto_TopologyChanged value)?  topologyChanged,}){
 final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
 return volume(_that);case ChangeEventDto_Mute() when mute != null:
 return mute(_that);case ChangeEventDto_Playback() when playback != null:
 return playback(_that);case ChangeEventDto_Track() when track != null:
-return track(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return track(_that);case ChangeEventDto_GroupVolume() when groupVolume != null:
+return groupVolume(_that);case ChangeEventDto_GroupMute() when groupMute != null:
+return groupMute(_that);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
 return topologyChanged(_that);case _:
@@ -134,13 +140,15 @@ return topologyChanged(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  bool muted)?  mute,TResult Function( String groupId,  PlaybackStateDto state)?  playback,TResult Function( String groupId,  TrackDto track)?  track,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,TResult Function()?  topologyChanged,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String speakerId,  int volume)?  volume,TResult Function( String speakerId,  bool muted)?  mute,TResult Function( String groupId,  PlaybackStateDto state)?  playback,TResult Function( String groupId,  TrackDto track)?  track,TResult Function( String groupId,  int volume)?  groupVolume,TResult Function( String groupId,  bool muted)?  groupMute,TResult Function( String speakerId,  String message)?  subscriptionError,TResult Function( String speakerId)?  subscriptionRecovered,TResult Function()?  topologyChanged,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
 return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute() when mute != null:
 return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback() when playback != null:
 return playback(_that.groupId,_that.state);case ChangeEventDto_Track() when track != null:
-return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return track(_that.groupId,_that.track);case ChangeEventDto_GroupVolume() when groupVolume != null:
+return groupVolume(_that.groupId,_that.volume);case ChangeEventDto_GroupMute() when groupMute != null:
+return groupMute(_that.groupId,_that.muted);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that.speakerId);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
 return topologyChanged();case _:
@@ -161,13 +169,15 @@ return topologyChanged();case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  bool muted)  mute,required TResult Function( String groupId,  PlaybackStateDto state)  playback,required TResult Function( String groupId,  TrackDto track)  track,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,required TResult Function()  topologyChanged,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String speakerId,  int volume)  volume,required TResult Function( String speakerId,  bool muted)  mute,required TResult Function( String groupId,  PlaybackStateDto state)  playback,required TResult Function( String groupId,  TrackDto track)  track,required TResult Function( String groupId,  int volume)  groupVolume,required TResult Function( String groupId,  bool muted)  groupMute,required TResult Function( String speakerId,  String message)  subscriptionError,required TResult Function( String speakerId)  subscriptionRecovered,required TResult Function()  topologyChanged,}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume():
 return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute():
 return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback():
 return playback(_that.groupId,_that.state);case ChangeEventDto_Track():
-return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError():
+return track(_that.groupId,_that.track);case ChangeEventDto_GroupVolume():
+return groupVolume(_that.groupId,_that.volume);case ChangeEventDto_GroupMute():
+return groupMute(_that.groupId,_that.muted);case ChangeEventDto_SubscriptionError():
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered():
 return subscriptionRecovered(_that.speakerId);case ChangeEventDto_TopologyChanged():
 return topologyChanged();}
@@ -184,13 +194,15 @@ return topologyChanged();}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  bool muted)?  mute,TResult? Function( String groupId,  PlaybackStateDto state)?  playback,TResult? Function( String groupId,  TrackDto track)?  track,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,TResult? Function()?  topologyChanged,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String speakerId,  int volume)?  volume,TResult? Function( String speakerId,  bool muted)?  mute,TResult? Function( String groupId,  PlaybackStateDto state)?  playback,TResult? Function( String groupId,  TrackDto track)?  track,TResult? Function( String groupId,  int volume)?  groupVolume,TResult? Function( String groupId,  bool muted)?  groupMute,TResult? Function( String speakerId,  String message)?  subscriptionError,TResult? Function( String speakerId)?  subscriptionRecovered,TResult? Function()?  topologyChanged,}) {final _that = this;
 switch (_that) {
 case ChangeEventDto_Volume() when volume != null:
 return volume(_that.speakerId,_that.volume);case ChangeEventDto_Mute() when mute != null:
 return mute(_that.speakerId,_that.muted);case ChangeEventDto_Playback() when playback != null:
 return playback(_that.groupId,_that.state);case ChangeEventDto_Track() when track != null:
-return track(_that.groupId,_that.track);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
+return track(_that.groupId,_that.track);case ChangeEventDto_GroupVolume() when groupVolume != null:
+return groupVolume(_that.groupId,_that.volume);case ChangeEventDto_GroupMute() when groupMute != null:
+return groupMute(_that.groupId,_that.muted);case ChangeEventDto_SubscriptionError() when subscriptionError != null:
 return subscriptionError(_that.speakerId,_that.message);case ChangeEventDto_SubscriptionRecovered() when subscriptionRecovered != null:
 return subscriptionRecovered(_that.speakerId);case ChangeEventDto_TopologyChanged() when topologyChanged != null:
 return topologyChanged();case _:
@@ -467,6 +479,142 @@ class _$ChangeEventDto_TrackCopyWithImpl<$Res>
 groupId: null == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
 as String,track: null == track ? _self.track : track // ignore: cast_nullable_to_non_nullable
 as TrackDto,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_GroupVolume extends ChangeEventDto {
+  const ChangeEventDto_GroupVolume({required this.groupId, required this.volume}): super._();
+  
+
+ final  String groupId;
+ final  int volume;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_GroupVolumeCopyWith<ChangeEventDto_GroupVolume> get copyWith => _$ChangeEventDto_GroupVolumeCopyWithImpl<ChangeEventDto_GroupVolume>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_GroupVolume&&(identical(other.groupId, groupId) || other.groupId == groupId)&&(identical(other.volume, volume) || other.volume == volume));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,groupId,volume);
+
+@override
+String toString() {
+  return 'ChangeEventDto.groupVolume(groupId: $groupId, volume: $volume)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_GroupVolumeCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_GroupVolumeCopyWith(ChangeEventDto_GroupVolume value, $Res Function(ChangeEventDto_GroupVolume) _then) = _$ChangeEventDto_GroupVolumeCopyWithImpl;
+@useResult
+$Res call({
+ String groupId, int volume
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_GroupVolumeCopyWithImpl<$Res>
+    implements $ChangeEventDto_GroupVolumeCopyWith<$Res> {
+  _$ChangeEventDto_GroupVolumeCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_GroupVolume _self;
+  final $Res Function(ChangeEventDto_GroupVolume) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? groupId = null,Object? volume = null,}) {
+  return _then(ChangeEventDto_GroupVolume(
+groupId: null == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
+as String,volume: null == volume ? _self.volume : volume // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ChangeEventDto_GroupMute extends ChangeEventDto {
+  const ChangeEventDto_GroupMute({required this.groupId, required this.muted}): super._();
+  
+
+ final  String groupId;
+ final  bool muted;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ChangeEventDto_GroupMuteCopyWith<ChangeEventDto_GroupMute> get copyWith => _$ChangeEventDto_GroupMuteCopyWithImpl<ChangeEventDto_GroupMute>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ChangeEventDto_GroupMute&&(identical(other.groupId, groupId) || other.groupId == groupId)&&(identical(other.muted, muted) || other.muted == muted));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,groupId,muted);
+
+@override
+String toString() {
+  return 'ChangeEventDto.groupMute(groupId: $groupId, muted: $muted)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ChangeEventDto_GroupMuteCopyWith<$Res> implements $ChangeEventDtoCopyWith<$Res> {
+  factory $ChangeEventDto_GroupMuteCopyWith(ChangeEventDto_GroupMute value, $Res Function(ChangeEventDto_GroupMute) _then) = _$ChangeEventDto_GroupMuteCopyWithImpl;
+@useResult
+$Res call({
+ String groupId, bool muted
+});
+
+
+
+
+}
+/// @nodoc
+class _$ChangeEventDto_GroupMuteCopyWithImpl<$Res>
+    implements $ChangeEventDto_GroupMuteCopyWith<$Res> {
+  _$ChangeEventDto_GroupMuteCopyWithImpl(this._self, this._then);
+
+  final ChangeEventDto_GroupMute _self;
+  final $Res Function(ChangeEventDto_GroupMute) _then;
+
+/// Create a copy of ChangeEventDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? groupId = null,Object? muted = null,}) {
+  return _then(ChangeEventDto_GroupMute(
+groupId: null == groupId ? _self.groupId : groupId // ignore: cast_nullable_to_non_nullable
+as String,muted: null == muted ? _self.muted : muted // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

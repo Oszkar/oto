@@ -27,4 +27,13 @@ class GroupingCommands {
 
   Future<void> leaveGroup(String speakerId) =>
       rust_api.leaveGroup(speakerId: speakerId);
+
+  /// v0.5.1: set the group's master volume (coordinator-routed). Read back via
+  /// the event-fed `changeEventsProvider` (GroupVolume DTOs); no getter here.
+  Future<void> setGroupVolume(String groupId, int volume) =>
+      rust_api.setGroupVolume(groupId: groupId, volume: volume);
+
+  /// v0.5.1: set the group's master mute state (coordinator-routed).
+  Future<void> setGroupMute(String groupId, bool muted) =>
+      rust_api.setGroupMute(groupId: groupId, muted: muted);
 }
