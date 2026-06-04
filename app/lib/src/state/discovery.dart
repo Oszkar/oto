@@ -48,7 +48,7 @@ class Discovery extends _$Discovery {
   }
 
   /// v0.5.1 (Option D): fast topology re-pull (no SSDP). Replaces the wire via
-  /// Rust `refreshTopology()` (re-pull authoritative topology, ~50 ms, then a
+  /// Rust `refreshTopology()` (re-pull authoritative topology, ~tens of ms, then a
   /// fresh seeded wire) and publishes the new `Topology`. Setting `state` to a
   /// new `AsyncValue.data` IS a `discoveryProvider` transition, so
   /// `wireGenerationProvider` recomputes and `changeEventsProvider`

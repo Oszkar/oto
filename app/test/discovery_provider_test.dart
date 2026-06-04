@@ -33,9 +33,9 @@ const _fakeTopology = rust_api.Topology(
   ],
 );
 
-/// Fake [Discovery] whose `build()` returns the fixture synchronously (the
-/// returned value, not a Future, so the container reads `AsyncValue.data`
-/// immediately).
+/// Fake [Discovery] whose `build()` returns a Future that resolves immediately
+/// to the fixture (settles to `AsyncValue.data` after the microtask drain in
+/// `settledState`).
 class _DataDiscovery extends Discovery {
   @override
   Future<rust_api.Topology> build() async => _fakeTopology;

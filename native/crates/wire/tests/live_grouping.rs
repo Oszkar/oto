@@ -52,6 +52,35 @@ fn lan_serial() -> std::sync::MutexGuard<'static, ()> {
     LAN_SERIAL.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Discover, but FIRST split any existing multi-member group so the test starts
+/// from all-standalone zones. A prior test/run (or the Sonos app) may have left
+/// the speakers grouped; without this the "need >= 2 standalone zones" guard
+/// would skip EVERY test — a green-but-did-nothing result that masks whether the
+/// acceptance actually ran. Self-normalizing means the operator no longer has to
+/// manually un-group between runs. Returns the snapshot after normalization.
+/// (Genuinely-single-zone LANs still fall through to the per-test skip guard.)
+fn discover_ungrouped(wire: &SonosWire) -> DiscoverySnapshot {
+    let snap = wire.discover().expect("discover() against the real LAN");
+    // Every non-coordinator member of a multi-member group → make it standalone.
+    let to_split: Vec<SpeakerId> = snap
+        .groups
+        .iter()
+        .flat_map(|g| g.members.iter().filter(|m| **m != g.coordinator).cloned())
+        .collect();
+    if to_split.is_empty() {
+        return snap;
+    }
+    for member in &to_split {
+        wire.leave_group(member)
+            .expect("leave_group during ungroup-setup");
+    }
+    // Wait until every group is a standalone (single-member) group, re-discover.
+    poll_until_settled(wire, "ungroup-setup", |s| {
+        s.groups.iter().all(|g| g.members.len() == 1).then_some(())
+    });
+    wire.discover().expect("re-discover after ungroup-setup")
+}
+
 /// Find the group containing `speaker` in a snapshot, if any.
 fn group_of<'a>(snap: &'a DiscoverySnapshot, speaker: &SpeakerId) -> Option<&'a GroupIdentity> {
     snap.groups.iter().find(|g| g.members.contains(speaker))
@@ -94,7 +123,7 @@ fn poll_until_settled<T>(
 fn live_join_then_leave_round_trip() {
     let _serial = lan_serial();
     let wire = SonosWire::new();
-    let snap = wire.discover().expect("discover() against the real LAN");
+    let snap = discover_ungrouped(&wire);
     println!(
         "discover(): {} group(s), {} speaker(s)",
         snap.groups.len(),
@@ -171,7 +200,7 @@ fn live_group_volume_command_and_event_round_trip() {
     // drains the event stream asserting a `GroupVolume` event carrying the
     // group's `GroupId`. Mirrors the per-speaker volume command+event path.
     let wire = SonosWire::new();
-    let snap = wire.discover().expect("discover() against the real LAN");
+    let snap = discover_ungrouped(&wire);
     println!(
         "discover(): {} group(s), {} speaker(s)",
         snap.groups.len(),
@@ -272,7 +301,7 @@ fn live_seeded_fast_rediscover() {
     // Mirrors `refresh_topology()`: re-pull IPs from the current wire, then
     // build a seeded wire from them and discover() through it (minus SSDP).
     let wire = SonosWire::new();
-    let snap = wire.discover().expect("discover() against the real LAN");
+    let snap = discover_ungrouped(&wire);
     println!(
         "discover(): {} group(s), {} speaker(s)",
         snap.groups.len(),
