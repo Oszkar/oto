@@ -22,7 +22,7 @@ part of 'discovery.dart';
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
 /// retry via `ref.invalidate` / `ref.refresh`.
 ///
-/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
@@ -50,7 +50,7 @@ final discoveryProvider = DiscoveryProvider._();
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
 /// retry via `ref.invalidate` / `ref.refresh`.
 ///
-/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
@@ -76,7 +76,7 @@ final class DiscoveryProvider
   /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
   /// retry via `ref.invalidate` / `ref.refresh`.
   ///
-  /// On Android (v0.5 S3) the SSDP window is wrapped in a held
+  /// On Android the SSDP window is wrapped in a held
   /// `WifiManager.MulticastLock` — without it Android drops the inbound
   /// multicast replies and discovery finds nothing on release builds. The lock
   /// is released in a `finally` so a failed discover still frees it. Other
@@ -121,7 +121,7 @@ String _$discoveryHash() => r'3f8c5a8bd62eee7b8169184b8035ae753eb1ed8d';
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
 /// retry via `ref.invalidate` / `ref.refresh`.
 ///
-/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
