@@ -215,7 +215,7 @@ Top-level response fields carry sentinels that must map to `None`, not values:
 
 This section is what v0.4 needs. Authoritative findings live here; the experiment they came from is archived under [`docs/evidence/v0.4-spike/findings.md`](evidence/v0.4-spike/findings.md) (findings + raw logs).
 
-**Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`). The raw `sonos-sdk-callback-server` + own change-detection alternative ("Path B") stays a v0.5 reconsideration point.
+**Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`). The raw `sonos-sdk-callback-server` + own change-detection alternative stays a v0.5 reconsideration point.
 
 ### Opt-in via `.watch()` — one multiplexed pump thread
 
@@ -240,7 +240,7 @@ subscription_timeout: 1800 s   (UPnP SUBSCRIBE TIMEOUT)
 renewal_threshold:    300 s    (renew 5 min before expiry)
 ```
 
-Implication: Path A surfaces ~2 s `position` cadence on a playing speaker — that's polling, not real GENA. Raw GENA AVTransport NOTIFYs on a playing speaker arrive **~every 3 minutes in bursts of 2–3 messages within ~250 ms** (4-speaker LAN, 27 min idle session, music playing on the Beam). If real-time position matters in a future implementation that doesn't use `sonos-stream`, polling has to come from somewhere.
+Implication: the reactive event stack surfaces ~2 s `position` cadence on a playing speaker — that's polling, not real GENA. Raw GENA AVTransport NOTIFYs on a playing speaker arrive **~every 3 minutes in bursts of 2–3 messages within ~250 ms** (4-speaker LAN, 27 min idle session, music playing on the Beam). If real-time position matters in a future implementation that doesn't use `sonos-stream`, polling has to come from somewhere.
 
 LAN-politeness cost of polling: ~0.5 events/sec/playing-speaker. Trivial in absolute terms but real network traffic. Recorded.
 
@@ -251,7 +251,7 @@ UPnP `LastChange` semantics: each service bundles all changed properties into on
 - **RenderingControl** NOTIFY: Volume (Master / LF / RF), Mute (Master / LF / RF), Bass, Treble, Loudness, OutputFixed, SpeakerSize, SubGain, SubCrossover.
 - **AVTransport** NOTIFY: TransportState, CurrentTrack, CurrentTrackURI, CurrentTrackDuration, CurrentTrackMetaData (DIDL-Lite), CurrentPlayMode, NumberOfTracks, CurrentSection, …
 
-If a Path-B-style implementation is ever written, decompose one NOTIFY into N typed property events before emitting to the rest of the stack.
+If a raw-callback-server implementation is ever written, decompose one NOTIFY into N typed property events before emitting to the rest of the stack.
 
 ### Doubly-escaped `LastChange` XML
 
@@ -279,9 +279,9 @@ When a Sonos client (the official app or oto) issues a group-volume change, the 
 
 ### Subscription renewal
 
-Path A (`sonos-event-manager` + `sonos-stream`) handles GENA renewal automatically per the `renewal_threshold` setting above — observed firing 4 renewals (one per speaker × service) at ~25 min into a 27 min run. Re-verified in v0.4 release acceptance: renewals at 24.6 min in idle dogfood and 24.75 min in active dogfood (music continued playing through the active-session renewal — no event-stream interruption). No intervention required.
+The reactive event stack (`sonos-event-manager` + `sonos-stream`) handles GENA renewal automatically per the `renewal_threshold` setting above — observed firing 4 renewals (one per speaker × service) at ~25 min into a 27 min run. Re-verified in v0.4 release acceptance: renewals at 24.6 min in idle dogfood and 24.75 min in active dogfood (music continued playing through the active-session renewal — no event-stream interruption). No intervention required.
 
-If a future Path-B-style implementation is built, renewal is the implementer's responsibility — UPnP `SUBSCRIBE` returns a `TIMEOUT` (default 1800 s in our spike) and a follow-up `SUBSCRIBE` with the same `SID` header before expiry. Without renewal, all subscriptions silently expire after the timeout.
+If a future raw-callback-server implementation is built, renewal is the implementer's responsibility — UPnP `SUBSCRIBE` returns a `TIMEOUT` (default 1800 s in our spike) and a follow-up `SUBSCRIBE` with the same `SID` header before expiry. Without renewal, all subscriptions silently expire after the timeout.
 
 ### Per-speaker seed NOTIFY behavior is non-uniform
 
@@ -354,13 +354,13 @@ The lower layers under the reactive stack (`soap-client`, `sonos-api`, `callback
 
 ### Reconsideration point — v0.5
 
-Path B (raw `sonos-sdk-callback-server` + own SUBSCRIBE + own XML parsing + own change-detection) was prototyped in the v0.4 spike, ran correctly with zero warnings, and remains a viable alternative. Switch trigger: if v0.5 topology events (which exercise the reactive layer differently — less upstream hardware coverage, lower event frequency) surface reliability issues.
+The raw `sonos-sdk-callback-server` + own SUBSCRIBE + own XML parsing + own change-detection alternative was prototyped in the v0.4 spike, ran correctly with zero warnings, and remains a viable alternative. Switch trigger: if v0.5 topology events (which exercise the reactive layer differently — less upstream hardware coverage, lower event frequency) surface reliability issues.
 
-Migration cost A → B is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB stream surface, `oto-app::StateManager` — is designed for this swap). The spike-callback-server.rs commits in git history are a working starting point.
+Migration cost is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB stream surface, `oto-app::StateManager` — is designed for this swap). The spike-callback-server.rs commits in git history are a working starting point.
 
-### Forward-reference: an alternative Path-B Rust crate
+### Forward-reference: an alternative raw-callback-server Rust crate
 
-**Out of scope for oto** (a side project bounded at v1.0). Recorded here so the work isn't lost: anyone who wants to build a Path-B Rust library (raw GENA + own change-detection, transparent debugging, smaller dep tree) can start from the v0.4 spike binary at the merged spike-findings commit. Add renewal logic, write the doubly-escaped `LastChange` XML parser, add a public API. The case for such a crate gets stronger if upstream `sonos-sdk-*` stops being maintained or if the documented weak spots actually bite users in production.
+**Out of scope for oto** (a side project bounded at v1.0). Recorded here so the work isn't lost: anyone who wants to build a raw-GENA Rust library (own change-detection, transparent debugging, smaller dep tree) can start from the v0.4 spike binary at the merged spike-findings commit. Add renewal logic, write the doubly-escaped `LastChange` XML parser, add a public API. The case for such a crate gets stronger if upstream `sonos-sdk-*` stops being maintained or if the documented weak spots actually bite users in production.
 
 ### Topology change events — how regrouping surfaces (v0.5)
 
@@ -395,7 +395,7 @@ Production data collected 2026-06-01 via `cargo run -p oto_native --example even
 | Idle | ~50 min | 4/4 clean (~1475 s, ~82% of 1800 s TTL) | 0 | 0 |
 | Active | ~28 min | 4/4 clean (~1481 s, same timing) | 0 | 0 |
 
-**Decision: Path A (sonos-sdk-state) confirmed stable. No switch to Path B.**
+**Decision: `sonos-sdk-state` reactive layer confirmed stable. No switch to raw callback-server.**
 
 Active session exercised: play/pause on both speakers independently, 25 volume slider events (rapid-fire), 10+ track skips, Playback state transitions including `Transitioning`. Every action produced the expected event within ~1 s, correct speaker/group IDs, no cross-speaker bleed, no drops.
 
@@ -405,7 +405,7 @@ Active session exercised: play/pause on both speakers independently, 25 volume s
 - **`Transitioning` Playback state.** Appears briefly on track skip and play-start. Map it to a `Loading` variant or suppress; should not reach the UI as "unknown."
 - **Renewal timing.** Both sessions renewed at ~82% of 1800 s TTL (~1475–1481 s). Consistent and predictable.
 
-**Path B reconsideration (updated).** The trigger was "topology events surface new reliability evidence." These traces show no reliability issues on the existing property event stream; the trigger condition is not met. Path B remains an off-ramp if v0.5 topology events surface new problems.
+**Raw callback-server reconsideration (updated).** The trigger was "topology events surface new reliability evidence." These traces show no reliability issues on the existing property event stream; the trigger condition is not met. The raw callback-server alternative remains an off-ramp if v0.5 topology events surface new problems.
 
 ## Concurrency
 
@@ -414,7 +414,7 @@ Active session exercised: play/pause on both speakers independently, 25 volume s
 - **Commands:** non-sync FRB fns (Dart `Future`) into blocking `sonos-api` SOAP. `oto-app` holds a `Mutex<Option<HeldWire>>` **locked across the SOAP call**. Deliberate: commands are user-initiated and low-frequency; serializing them is the LAN-politeness story (no command storms against the user's speakers).
 - **Events (v0.4):** a `ChangeIterator`-equivalent `recv()` blocks. Each event stream exposed to Dart is pumped by a dedicated OS thread that reads the iterator and pushes onto an FRB `Stream`. Revisit lock granularity only if v0.4 event threads contend with command threads on the slot lock.
 
-No async/await in oto's own surface code. `sonos-api` uses async internally via `reqwest`; v0.4 also pulls a tokio runtime transitively via `sonos-event-manager` (Path A's worker thread). Tokio in the lockfile is the cost of any event-stream architecture for Sonos — both Path A and Path B require it. The principle is "no async syntax in oto's own surface code" (commands stay sync; the event-pump thread blocks on `manager.iter()`), not "no tokio in the lockfile."
+No async/await in oto's own surface code. `sonos-api` uses async internally via `reqwest`; v0.4 also pulls a tokio runtime transitively via `sonos-event-manager` (the reactive event stack's worker thread). Tokio in the lockfile is the cost of any event-stream architecture for Sonos — the reactive layer and any raw-callback-server alternative both require it. The principle is "no async syntax in oto's own surface code" (commands stay sync; the event-pump thread blocks on `manager.iter()`), not "no tokio in the lockfile."
 
 ## ZoneGroupState fixture XML
 
@@ -457,7 +457,7 @@ The probe's **immediate** post-BCOS `GetZoneGroupState` re-poll returned a **tra
 
 ### Group volume / mute events
 
-`sonos_state::{GroupVolume, GroupMute}` (need `use sonos_state::property::Property` in scope for `::KEY`), watched per **coordinator** via `watch_property_with_subscription`, fire correctly. A single group-volume drag produced **23 `group_volume` events** (rapid-fire — **last-wins dedup needed**, ~200 ms window, same as Track / per-speaker Volume). Events arrive stamped with the **coordinator's** `speaker_id` → route via `av_transport_group_id` (coordinator → GroupId). `group_mute` *events* were not exercised this run (operator changed volume only); the `set_group_mute` command works and the watch is registered identically — confirm the mute event in the Task 3 live test.
+`sonos_state::{GroupVolume, GroupMute}` (need `use sonos_state::property::Property` in scope for `::KEY`), watched per **coordinator** via `watch_property_with_subscription`, fire correctly. A single group-volume drag produced **23 `group_volume` events** (rapid-fire — **last-wins dedup needed**, ~200 ms window, same as Track / per-speaker Volume). Events arrive stamped with the **coordinator's** `speaker_id` → route via `av_transport_group_id` (coordinator → GroupId). `group_mute` *events* were not exercised this run (operator changed volume only); the `set_group_mute` command works and the watch is registered identically — confirm the mute event in the live grouping test.
 
 **⚠ Read group-scoped values via `get_group_property`, not `get_property`.** `GroupVolume`/`GroupMute` are `Scope::Group` and the SDK stores them in `group_props` keyed by `GroupId`, NOT in the coordinator's `speaker_props` (`sonos-sdk-state-0.5.2/src/state.rs:182-187`). `manager.get_property::<GroupVolume>(&speaker_id)` reads `speaker_props` → returns `None` → the pump silently drops every group event. Use `manager.get_group_property::<GroupVolume>(&GroupId::new(group.as_str()))`. **Unit tests cannot catch this** — `MockWire` auto-emits the `ChangeEvent` directly, bypassing the SDK property lookup; and the spike read `ChangeEvent.property_key` straight off `manager.iter()`, never via `get_property`. Caught only by codex review of PR #73; the corrected `live_grouping.rs` is the sole real-hardware proof. (Per-speaker `volume`/`mute` and coordinator-routed `playback_state`/`current_track` are fine — those live in `speaker_props`.)
 

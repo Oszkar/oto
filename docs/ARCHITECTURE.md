@@ -101,7 +101,7 @@ sequenceDiagram
 
 Commands are non-sync FRB fns (Dart `Future`) into blocking `sonos_api` SOAP calls. `oto-app` holds its `Mutex<Option<…>>` **locked across the SOAP call** — deliberate: commands are user-initiated and low-frequency; serializing all commands is the LAN-politeness story (no command storms against the user's speakers). Revisit only if v0.4 event threads and commands contend on the lock.
 
-No async/await in oto's own surface code. `sonos-api` uses async internally, and v0.4's Path A event stack pulls a tokio runtime transitively via the upstream event manager. The architectural rule is that commands stay sync/blocking at the `Wire` boundary and event delivery is pumped by dedicated threads; tokio in the lockfile is not itself a violation.
+No async/await in oto's own surface code. `sonos-api` uses async internally, and v0.4's reactive event stack pulls a tokio runtime transitively via the upstream event manager. The architectural rule is that commands stay sync/blocking at the `Wire` boundary and event delivery is pumped by dedicated threads; tokio in the lockfile is not itself a violation.
 
 ## The `Wire` seam
 

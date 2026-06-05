@@ -1,5 +1,5 @@
 //! Hardware-gated acceptance for v0.3 real ZoneGroupTopology grouping
-//! (plan Task 8 / spike findings directive-7). Feature-gated AND
+//! Feature-gated AND
 //! `#[ignore]`d so CI cannot accidentally run it (needs a real Sonos LAN).
 //!
 //! User-run procedure:
@@ -14,7 +14,7 @@ use oto_core::Wire;
 use oto_wire::SonosWire;
 
 #[test]
-#[ignore = "requires a real Sonos LAN; user-run v0.3 acceptance (directive-7)"]
+#[ignore = "requires a real Sonos LAN; user-run v0.3 acceptance"]
 fn live_discover_returns_real_groups() {
     let wire = SonosWire::new();
     let snap = wire.discover().expect("discover() against the real LAN");
@@ -56,6 +56,6 @@ fn live_discover_returns_real_groups() {
     let multi = snap.groups.iter().any(|g| g.members.len() >= 2);
     println!(
         "multi-room group present: {multi} \
-         (form a 2-room group in the Sonos app to exercise directive-7)"
+         (form a 2-room group in the Sonos app to validate multi-room grouping)"
     );
 }

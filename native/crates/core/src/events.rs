@@ -1,11 +1,11 @@
 //! Property-change events flowing from `Wire` impls into `oto-app`'s
 //! `StateManager` and on to the FRB stream. Volume is the v0.4 starter
-//! variant; Mute / Playback / Track land in Slice 2 (this plan, Task 2);
-//! `TopologyChanged` is v0.5.
+//! variant; Mute / Playback / Track added in v0.4;
+//! `TopologyChanged` added in v0.5.
 //!
 //! Addressing — per spec § 4 "Concrete shapes":
 //!   - `Volume` / `Mute`: per-speaker (`SpeakerId`).
-//!   - `Playback` / `Track` (Slice 2): per-group (`GroupId`).
+//!   - `Playback` / `Track`: per-group (`GroupId`).
 //!
 //! `SubscriptionError` / `SubscriptionRecovered` are in-band so the
 //! single FRB stream stays alive across recoverable upstream blips —
@@ -30,8 +30,8 @@ pub enum ChangeEvent {
         group: GroupId,
         state: PlaybackState,
     },
-    /// A group's current track changed. Carries the full `Track` so a
-    /// Slice 4 cache reader gets metadata + URI in one event.
+    /// A group's current track changed. Carries the full `Track` so the
+    /// cache reader gets metadata + URI in one event.
     Track { group: GroupId, track: Track },
     /// A group's volume changed (per-group — group-scoped, coordinator-routed,
     /// like `Playback`/`Track`). Distinct from per-speaker `Volume`: this is
@@ -51,10 +51,10 @@ pub enum ChangeEvent {
     SubscriptionRecovered { speaker: SpeakerId },
     /// The household topology changed (speakers regrouped). Payload-less:
     /// the Dart layer re-pulls authoritative topology on receipt (the
-    /// mechanism is a Dart concern — v0.5 S1 uses a debounced full
+    /// mechanism is a Dart concern — v0.5 uses a debounced full
     /// re-discover; v0.6 may swap in a lighter refresh). The app-layer
     /// cache applies this as a no-op — the re-pull drives the update.
-    /// Added in v0.5 (S1).
+    /// Added in v0.5.
     TopologyChanged,
 }
 

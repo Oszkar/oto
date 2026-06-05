@@ -31,7 +31,7 @@ oto-wire = { path = "crates/wire" }
 # See AGENTS.md §4.
 sonos-api = "=0.5.2"
 
-# v0.4 Path A reactive event stack — the `tatimblin/sonos-sdk` family's
+# v0.4 reactive event stack — the `tatimblin/sonos-sdk` family's
 # `sonos-sdk-state` + `sonos-sdk-event-manager` + `sonos-sdk-stream` +
 # `sonos-sdk-callback-server` crates. Wrap upstream GENA-driven property
 # events into one `ChangeEvent` stream inside `oto-wire`. Pinned exact

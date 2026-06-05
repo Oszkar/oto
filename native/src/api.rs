@@ -72,9 +72,8 @@ pub enum CommandError {
 
 // ── v0.4 event DTOs ──────────────────────────────────────────────────────────
 
-/// FRB DTO for `oto_core::ChangeEvent`. Volume + the Subscription*
-/// variants landed in Slice 1; Mute / Playback / Track (Slice 2) cover
-/// the rest of the v0.4 property surface. Per spec § 4:
+/// FRB DTO for `oto_core::ChangeEvent`. Covers the full v0.4 property
+/// surface. Per spec § 4:
 ///   - Volume / Mute are per-speaker (carry `speaker_id`).
 ///   - Playback / Track are per-group (carry `group_id`).
 pub enum ChangeEventDto {

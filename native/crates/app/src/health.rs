@@ -1,11 +1,11 @@
-//! Per-speaker subscription-health tracker (v0.5 S2, Approach A).
+//! Per-speaker subscription-health tracker (v0.5).
 //!
 //! The SDK at the pinned `=0.5.2` does not expose per-speaker subscription
 //! failures (it swallows them internally — see
 //! `oto-wire/src/events.rs::register_watches`), so v0.4 carried
 //! `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` on the surface
-//! but never emitted them. Approach A closes that gap *reactively from
-//! command dispatch*: every user command's `Result` is observed here, and a
+//! but never emitted them. v0.5 closes that gap reactively from command
+//! dispatch: every user command's `Result` is observed here, and a
 //! `Healthy ↔ Errored` edge for a speaker emits the matching event.
 //!
 //! Only `WireError::Network` flips a speaker to `Errored` — it's the

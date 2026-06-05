@@ -1,7 +1,7 @@
-//! Event-fed per-speaker (+ per-group in Task 2) state cache. Mutated
+//! Event-fed per-speaker and per-group state cache. Mutated
 //! by `apply_event` from the FRB-worker consumer loop in
 //! `subscribe_change_events`. Read by `oto_app::speaker_state` (which
-//! in Slice 4 bypasses `Wire::speaker_state` and reads directly here).
+//! bypasses `Wire::speaker_state` and reads directly from this cache).
 //!
 //! v0.5-readiness — per spec § 5.4 (lock-granularity audit at v0.4
 //! end): each cache is its own `RwLock<HashMap<…>>`. Write holds are
@@ -23,19 +23,19 @@ use oto_core::{
     TransportState, Volume,
 };
 
-/// Per-speaker cached property values. v0.4 — Volume + Mute landed in
-/// Task 2. Playback / Track live on the group cache below.
+/// Per-speaker cached property values (v0.4+). Playback / Track live on the
+/// group cache below.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SpeakerCache {
     pub volume: Option<Volume>,
     pub muted: Option<bool>,
 }
 
-/// Per-group cached transport + track values. v0.4 Task 2 shape:
+/// Per-group cached transport + track values (v0.4+).
 /// Playback updates `transport.state` (preserving `current_track` /
 /// `position` if a prior transport snapshot is present); Track updates
-/// `track` AND the cached `transport.current_track` so a one-shot
-/// `speaker_state` read at the Slice 4 cache boundary stays coherent.
+/// `track` AND the cached `transport.current_track` for a coherent
+/// `speaker_state` read.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GroupCache {
     pub transport: Option<TransportState>,
@@ -62,7 +62,7 @@ pub(crate) struct GroupRenderCache {
 #[derive(Default)]
 struct TopologyMaps {
     speaker_to_group: HashMap<SpeakerId, GroupId>,
-    /// `GroupId` → coordinator `SpeakerId`. Used by S2 health tracking to
+    /// `GroupId` → coordinator `SpeakerId`. Used by health tracking to
     /// attribute a group-addressed command's failure to a concrete speaker
     /// (the coordinator the command was routed to).
     group_to_coordinator: HashMap<GroupId, SpeakerId>,
@@ -91,7 +91,7 @@ pub struct StateManager {
     /// transport/track writes on `groups`. Cleared alongside `groups` on every
     /// generation bump.
     group_render: RwLock<HashMap<GroupId, GroupRenderCache>>,
-    /// Speaker→group resolution used by Slice 4's cache-backed
+    /// Speaker→group resolution used by the cache-backed
     /// `speaker_state`. Refreshed by `bump_clear_and_install` on every
     /// successful `discover_with` — atomically with the generation bump +
     /// cache clear, so it is never momentarily empty while a wire is
@@ -187,7 +187,7 @@ impl StateManager {
                 let entry = guard.entry(group.clone()).or_default();
                 entry.track = Some(track.clone());
                 // Keep cached transport.current_track coherent with
-                // the dedicated `track` field — otherwise a Slice 4
+                // the dedicated `track` field — otherwise a
                 // `speaker_state` read could surface a stale title
                 // on the transport while the freshest Track event
                 // sat in `entry.track`.
@@ -220,7 +220,7 @@ impl StateManager {
             // SubscriptionError / SubscriptionRecovered / TopologyChanged
             // have no cache effect here — they're surface events. The Dart
             // TopologyController reacts to TopologyChanged by re-pulling
-            // topology (v0.5 S1: a debounced full re-discover, which
+            // topology (v0.5: a debounced full re-discover, which
             // rebuilds this cache from scratch); nothing to apply here.
             ChangeEvent::SubscriptionError { .. }
             | ChangeEvent::SubscriptionRecovered { .. }
@@ -270,7 +270,7 @@ impl StateManager {
     }
 
     /// Read a group's cached current track (None if no Track event
-    /// seen yet — distinct from `transport.current_track` so a Slice 4
+    /// seen yet — distinct from `transport.current_track` so the
     /// reader can prefer the freshest source).
     pub fn track_of(&self, group: &GroupId) -> Option<Track> {
         self.groups
@@ -326,7 +326,7 @@ impl StateManager {
 
     /// Resolve a group to its coordinator `SpeakerId` from the installed
     /// topology. `None` if the group is unknown (no topology, or a stale id).
-    /// Used by S2 health tracking for group-addressed commands.
+    /// Used by health tracking for group-addressed commands.
     pub fn coordinator_of(&self, group: &GroupId) -> Option<SpeakerId> {
         self.topology
             .read()
@@ -574,7 +574,7 @@ mod tests {
         assert!(sm.volume_of(&SpeakerId::new("RINCON_K")).is_none());
     }
 
-    // ── Slice 2 data-model coverage ──────────────────────────────────────
+    // ── Mute / Playback / Track data-model coverage ──────────────────────
 
     #[test]
     fn apply_mute_event_populates_cache() {
@@ -651,7 +651,7 @@ mod tests {
         });
         assert_eq!(sm.track_of(&g), Some(track.clone()));
         // transport must be synthesised with the same track so a
-        // Slice 4 read of transport.current_track is coherent.
+        // `speaker_state` read of transport.current_track is coherent.
         let t = sm.transport_of(&g).unwrap();
         assert_eq!(t.current_track, Some(track));
     }
@@ -853,7 +853,7 @@ mod tests {
         assert_eq!(sm.volume_of(&k), Some(Volume::new(70).unwrap()));
     }
 
-    // ── Slice 4 cache-backed speaker_state ───────────────────────────────
+    // ── Cache-backed speaker_state ────────────────────────────────────────
 
     #[test]
     fn speaker_state_returns_all_none_when_no_events_seen() {

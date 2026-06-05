@@ -3,7 +3,7 @@
 //!   cargo nextest run -p oto-wire --features live-tests \
 //!     --test live_topology_events --run-ignored ignored-only --nocapture
 //!
-//! Verifies the v0.5 S1 topology-event path end-to-end against a real LAN:
+//! Verifies the v0.5 topology-event path end-to-end against a real LAN:
 //!   1. `subscribe_topology` + `subscribe_speakers` activates the SDK
 //!      `GroupMembership` watch without error (automatic smoke test).
 //!   2. Operator regroups in the Sonos app → `ChangeEvent::TopologyChanged`
@@ -11,7 +11,7 @@
 //!   3. `refresh_topology` re-pulls authoritative topology via SOAP and
 //!      reflects the operator's new grouping (interactive, chained with #2).
 //!
-//! Mechanism (P0c finding, docs/sonos-notes.md § "Topology change events"):
+//! Mechanism (docs/sonos-notes.md § "Topology change events"):
 //! ZoneGroupTopology has no watchable *property*; topology changes surface
 //! via the speaker-scoped `GroupMembership` property. A single regroup fires
 //! one `group_membership` NOTIFY per affected speaker, each mapped to a
@@ -43,7 +43,7 @@ fn flush_prompt(lines: &[&str]) {
 /// without error. Does NOT require a regroup — just proves the wiring is
 /// sound (the watch registers, the pump spawns, the stream is takeable).
 ///
-/// The P0c probe established that `GroupMembership` also seeds on subscribe
+/// Hardware probing established that `GroupMembership` also seeds on subscribe
 /// (one event per speaker before any user action). We don't assert on the
 /// seed here — speaker-scoped seed timing is non-uniform and can exceed a
 /// few seconds (sonos-notes § "Per-speaker seed NOTIFY behavior is
@@ -75,14 +75,14 @@ fn subscribe_topology_then_speakers_activates_stream() {
 /// calls `refresh_topology` and prints the re-pulled grouping so the
 /// operator can eyeball that it reflects reality.
 ///
-/// **What this verifies:** the full S1 chain on real hardware —
+/// **What this verifies:** the full topology event chain on real hardware —
 /// `GroupMembership` SUBSCRIBE → NOTIFY on regroup → pump maps to
 /// `TopologyChanged` → reaches the consumer; and `refresh_topology` SOAP
 /// returns a fresh snapshot (no SSDP).
 ///
 /// **Latency:** not asserted (dominated by human reaction time). The ~5 s
 /// acceptance figure in the plan is the NOTIFY→event delivery, which the
-/// P0c probe already measured as sub-second; here the wall-clock is mostly
+/// hardware probing measured sub-second; here the wall-clock is mostly
 /// the operator reaching for the app.
 #[test]
 #[ignore = "live-only — manual: regroup speakers in the Sonos app within 30 s"]
@@ -113,7 +113,7 @@ fn operator_regroup_emits_topology_changed() {
     let rx = wire.take_event_stream().expect("rx available");
 
     // Drain the seed NOTIFYs (~3 s) so we only count regroup-driven events.
-    // GroupMembership seeds per speaker on subscribe (P0c finding); the
+    // GroupMembership seeds per speaker on subscribe (see sonos-notes); the
     // probe observed seed latency that can exceed 3 s, so a straggler seed
     // could slip past — acceptable here: a seed TopologyChanged is
     // indistinguishable from a regroup one at this layer, and the operator

@@ -41,7 +41,7 @@ struct Model {
     /// `true` after `subscribe_topology` succeeds. Idempotent gate: subsequent
     /// calls remain `Ok(())` regardless of this flag.
     topology_subscribed: bool,
-    /// Per-speaker forced command error (v0.5 S2 test seam). When a speaker
+    /// Per-speaker forced command error (v0.5 test seam). When a speaker
     /// (or a group's coordinator) has an entry, its commands return the
     /// stored error instead of mutating/emitting — modelling an unreachable
     /// device so oto-app's health tracking can be exercised.
@@ -253,7 +253,7 @@ impl MockWire {
 
     /// Force commands targeting `speaker` (directly, or as a group's
     /// coordinator) to return `err` instead of succeeding. Models an
-    /// unreachable device — used by S2 health-tracking tests. Persists
+    /// unreachable device — used by health-tracking tests. Persists
     /// until `clear_command_error`.
     pub fn set_command_error(&self, speaker: &SpeakerId, err: WireError) {
         lock!(self).command_errors.insert(speaker.clone(), err);
@@ -330,15 +330,14 @@ impl Wire for MockWire {
             .get_mut(&coord)
             .ok_or_else(|| WireError::NotFound(coord.to_string()))?;
         // Keep the loaded track (Sonos retains it across pause/stop); clear
-        // position — the mock has no playhead, and the Task 6 e2e asserts
-        // transport.state, not position.
+        // position — the mock has no playhead.
         let prev_track = entry.transport.take().and_then(|t| t.current_track);
         entry.transport = Some(TransportState {
             state: PlaybackState::Playing,
             current_track: prev_track,
             position: None,
         });
-        // Auto-emit per-group Playback event (Slice 2). Real Sonos
+        // Auto-emit per-group Playback event. Real Sonos
         // surfaces AVTransport TransportState NOTIFYs after a Play
         // SOAP success; the mock mirrors that path.
         if let Some(tx) = &guard.tx {
@@ -556,7 +555,7 @@ impl Wire for MockWire {
             return Err(WireError::AlreadySubscribed);
         }
         let (tx, rx) = mpsc::channel();
-        // ── Slice 2 seed events ─────────────────────────────────────────
+        // ── Seed events ──────────────────────────────────────────────────
         //
         // Real Sonos sends a cold-start NOTIFY per subscribed service
         // when a new subscription opens. The mock mirrors that:
@@ -573,7 +572,7 @@ impl Wire for MockWire {
         // (a) inventing fake metadata that drifts from the rest of
         // the fixture, or (b) adding a Track::default impl that
         // pollutes the type system with "all None" sentinels for
-        // tests' sake. Slice-4 tests that need a track use
+        // tests' sake. Tests that need a track use
         // `MockWire::push_event` (or the dev_push seam in api.rs).
         let mut seeds: Vec<ChangeEvent> = Vec::with_capacity(
             // 2 per speaker (Volume + Mute) + 1 per group (Playback);
@@ -830,8 +829,8 @@ mod tests {
     }
 
     /// Collect every event the mock's pump has queued, with a short
-    /// per-recv timeout. Used by Slice 2 tests to drain the seed phase
-    /// without hardcoding a count (the count drifts as variants land).
+    /// per-recv timeout. Used by tests to drain the seed phase
+    /// without hardcoding a count.
     fn drain_seeds(rx: &Receiver<ChangeEvent>) -> Vec<ChangeEvent> {
         let mut out = Vec::new();
         while let Ok(ev) = rx.recv_timeout(std::time::Duration::from_millis(50)) {
