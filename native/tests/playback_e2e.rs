@@ -5,7 +5,7 @@
 //! production.  Zero network; deterministic fixture; proves the domain layer
 //! (oto-app + oto-core + oto-mock) before the FRB DTO map is wired in.
 //!
-//! The DTO-crossing e2e (snapshot + `oto_native::map`) is Task 7 / PR C.
+//! The DTO-crossing e2e (snapshot + `oto_native::map`) runs in a separate test file.
 //! A real Sonos LAN run is the user-run hardware smoke in
 //! `native/crates/wire/tests/live_playback.rs`.
 
@@ -17,10 +17,10 @@ use oto_native::api::PlaybackStateDto;
 use oto_native::map::to_speaker_state_dto;
 use std::time::Duration;
 
-/// Slice 4: `speaker_state` reads from the StateManager cache instead
-/// of the wire, so command-then-read round-trips need the consumer
-/// loop to run between the mutation and the read. 50 ms is plenty for
-/// MockWire (synchronous auto-emit).
+/// `speaker_state` reads from the StateManager cache instead of the wire,
+/// so command-then-read round-trips need the consumer loop to run between
+/// the mutation and the read. 50 ms is plenty for MockWire (synchronous
+/// auto-emit).
 const DRAIN_WINDOW: Duration = Duration::from_millis(50);
 
 /// Comprehensive command→state round-trip — the PR B acceptance bar.
@@ -47,10 +47,8 @@ fn playback_command_state_round_trips() {
         discover_with(|| Box::new(MockWire::default())).expect("mock discovery must succeed");
     assert_eq!(snap.speakers.len(), 3, "fixture must have 3 speakers");
     assert_eq!(snap.groups.len(), 2, "fixture must have 2 groups");
-    // Slice 4: drain subscribe_speakers seeds into the cache. Without
-    // this, the post-discover reads below see all-None state because
-    // the MockWire's auto-emitted seed Volume/Mute/Playback events are
-    // still in the channel.
+    // Drain subscribe_speakers seeds into the cache so post-discover
+    // reads see state — speaker_state reads the event-fed cache.
     process_pending_events(DRAIN_WINDOW);
 
     // ── (a) set_volume round-trip ─────────────────────────────────────────────
@@ -106,8 +104,8 @@ fn playback_command_state_round_trips() {
     previous(&office_group).expect("(e) previous must return Ok for a known group");
 
     // ── (f) unknown id → WireError::NotFound ─────────────────────────────────
-    // Slice 4: the topology check inside oto_app::speaker_state
-    // preserves the v0.3 error contract — an unknown id maps to
+    // The topology check inside oto_app::speaker_state preserves
+    // the v0.3 error contract — an unknown id maps to
     // NotFound, not to a silent all-None SpeakerState.
     let err_f = speaker_state(&ghost).expect_err("(f) unknown id must return Err");
     assert!(

@@ -1,7 +1,7 @@
-//! P0c — ZoneGroupTopology subscription probe (v0.5 prereq, THROWAWAY).
+//! ZoneGroupTopology subscription probe (v0.5 prereq, THROWAWAY).
 //!
 //! Confirms on real hardware that `sonos-sdk-state` `=0.5.2` delivers a
-//! change signal when speakers are regrouped, so v0.5 S1 (topology events)
+//! change signal when speakers are regrouped, so v0.5 topology events
 //! can ride the existing event pump. Run against a real Sonos LAN:
 //!
 //!   cargo run -p oto-wire --example topology_probe --features live-tests
@@ -14,7 +14,7 @@
 //! `tests/` integration test) so it can reach the crate's normal
 //! `[dependencies]` — `sonos_state` / `sonos_event_manager` — without any
 //! Cargo.toml change, and touches no production source. THROWAWAY: delete or
-//! fold into S1 when topology events are implemented.
+//! fold once v0.5 topology events are implemented.
 //!
 //! KEY FINDING (read from SDK source 2026-05-30; this probe verifies it on
 //! hardware): the v0.5 plan's original assumption was wrong. There is no
@@ -24,7 +24,7 @@
 //! `SERVICE = ZoneGroupTopology`, `SCOPE = Speaker`). The SDK handles ZGT
 //! NOTIFYs on a special path (`event_worker.rs:49`) and emits a
 //! `ChangeEvent { property_key: "group_membership", .. }` for every speaker
-//! whose membership changed AND is in the `watched` set. So S1 must register
+//! whose membership changed AND is in the `watched` set. v0.5 must register
 //! `watch_property_with_subscription::<GroupMembership>` PER SPEAKER (not
 //! per-coordinator) and map `"group_membership" => ChangeEvent::TopologyChanged`.
 
@@ -164,12 +164,11 @@ fn main() {
         }
     }
 
-    println!("\n=== P0c probe done: {gm_count} group_membership event(s) observed ===");
+    println!("\n=== probe done: {gm_count} group_membership event(s) observed ===");
     if gm_count == 0 {
         eprintln!(
             "WARNING: no group_membership events seen — either no regroup happened, \
-             or ZGT NOTIFYs are not arriving. This is the P0c risk path (fall back to \
-             the v0.4 stale-GroupId -> NotFound contract). See the v0.5 plan Task 2."
+             or ZGT NOTIFYs are not arriving. See sonos-notes § topology events."
         );
     }
 }

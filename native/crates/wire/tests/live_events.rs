@@ -3,7 +3,7 @@
 //!   cargo nextest run -p oto-wire --features live-tests --test live_events \
 //!     --run-ignored ignored-only --nocapture
 //!
-//! Verifies the v0.4 Path A pump end-to-end against the 4-speaker LAN:
+//! Verifies the v0.4 event pump end-to-end against the 4-speaker LAN:
 //!   1. `subscribe_speakers` + seed NOTIFYs arrive within 2 s of subscribe.
 //!   2. Operator volume change in the Sonos app → `ChangeEvent::Volume`
 //!      arrives during the operator window. Latency NOT asserted here
@@ -33,7 +33,7 @@ use oto_wire::SonosWire;
 
 /// Print + flush an interactive prompt to **stdout** (not stderr) so it
 /// actually shows up under `cargo nextest run --nocapture`. Empirically
-/// (Slice 3 hardware test, PR #46): the captured stdout `println!`
+/// (empirically on real hardware): the captured stdout `println!`
 /// output appears in the test runner's failure dump, but `eprintln!`
 /// stderr lines are dropped. Use this helper for any operator prompt
 /// so the user can actually see what they're being asked to do.
@@ -425,8 +425,8 @@ fn operator_play_pause_emits_per_group_event() {
 /// Test #4 — fully automatic. Calls `discover()` + `subscribe_speakers()`
 /// twice in sequence on the same wire? No — `subscribe_speakers` is
 /// one-shot per wire, so we construct two wires back-to-back. The
-/// regression we're guarding against: the v0.4 Slice 3 review-finding-C1
-/// `EventPump::Drop` self-deadlock would have hung the SECOND wire's
+/// regression we're guarding against: a v0.4 `EventPump::Drop`
+/// self-deadlock would have hung the SECOND wire's
 /// constructor (because dropping the first wire also drops its
 /// `EventPump`, which under the old design joined a pump thread that
 /// was blocked on its own sender clone).

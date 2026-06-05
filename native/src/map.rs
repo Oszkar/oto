@@ -112,7 +112,7 @@ pub fn to_speaker_state_dto(state: SpeakerState) -> SpeakerStateDto {
     }
 }
 
-/// `Track` → `TrackDto`. Extracted so the Slice 2 `ChangeEvent::Track`
+/// `Track` → `TrackDto`. Extracted so the `ChangeEvent::Track`
 /// mapping can reuse the same construction (DRY — the inline closure
 /// inside `to_speaker_state_dto` was the only previous build site).
 fn to_track_dto(track: Track) -> TrackDto {
@@ -140,7 +140,7 @@ fn to_playback_state_dto(state: PlaybackState) -> PlaybackStateDto {
 
 /// `ChangeEvent` → `ChangeEventDto`. Volume's `u8` widens to `u32` for
 /// the bridge (matches `SpeakerStateDto`'s pattern). `TopologyChanged`
-/// (v0.5 S1) is payload-less on both sides.
+/// is payload-less on both sides.
 pub fn to_change_event_dto(event: ChangeEvent) -> ChangeEventDto {
     match event {
         ChangeEvent::Volume { speaker, volume } => ChangeEventDto::Volume {

@@ -1,20 +1,20 @@
 //! group_ops_probe — group-operation SOAP + event hardware probe (v0.5.1, THROWAWAY).
 //!
-//! Confirms on real hardware the exact SOAP behaviors needed by v0.5.1 Tasks 2–4:
+//! Confirms on real hardware the SOAP behaviors needed by v0.5.1:
 //!   - JOIN:  `SetAVTransportURI` with `x-rincon:<coordinator_id>`
 //!   - LEAVE: `BecomeCoordinatorOfStandaloneGroup`
 //!   - GROUP-VOLUME COMMANDS: `GetGroupVolume`, `SetGroupVolume`,
 //!     `SetRelativeGroupVolume`, `GetGroupMute`, `SetGroupMute`
 //!   - GROUP-VOLUME EVENTS: `GroupVolume` / `GroupMute` watchable properties
-//!   - OPTION D: `manager.initialize(new_topology)` on a live StateManager
+//!   - FAST TOPOLOGY REFRESH: `manager.initialize(new_topology)` on a live StateManager
 //!
 //! Run against a real Sonos LAN (4 speakers recommended):
 //!
 //!   cargo run -p oto-wire --example group_ops_probe --features live-tests
 //!
 //! Gated behind `live-tests` so it never compiles in normal builds.
-//! THROWAWAY: delete or fold into Tasks 2–4 implementation once findings are
-//! recorded in sonos-notes.md. Informs v0.5.1 Tasks 2–4.
+//! THROWAWAY: delete or fold into the v0.5.1 implementation once findings
+//! are recorded in sonos-notes.md.
 
 #[cfg(not(feature = "live-tests"))]
 fn main() {
@@ -640,7 +640,7 @@ fn main() {
                     }
                 }
                 println!(
-                    "\n  Option D result: {} event(s) received after re-initialize.  \
+                    "\n  Fast topology result: {} event(s) received after re-initialize.  \
                      Check above whether they route to NEW coordinator IDs.",
                     post_reinit_count
                 );
@@ -657,11 +657,11 @@ fn main() {
     println!("\n========================================================");
     println!(" group_ops_probe COMPLETE — record findings in sonos-notes.md");
     println!("  Key answers to look for:");
-    println!("  S2: Does SetAVTransportURI x-rincon:ID join the speaker?");
-    println!("  S3: Does BecomeCoordinatorOfStandaloneGroup work on a member AND coordinator?");
-    println!("  S3: What happens to remaining members when coordinator leaves?");
-    println!("  S4: Does SetGroupVolume validate at > 100 or does device clamp?");
-    println!("  S5: Do GroupVolume/GroupMute events fire per-coordinator?  Double-fire?");
-    println!("  S6 (Option D): Does re-initialize route events to new coordinator?");
+    println!("  Join: Does SetAVTransportURI x-rincon:ID join the speaker?");
+    println!("  Leave: Does BecomeCoordinatorOfStandaloneGroup work on a member AND coordinator?");
+    println!("  Leave: What happens to remaining members when coordinator leaves?");
+    println!("  GroupVol: Does SetGroupVolume validate at > 100 or does device clamp?");
+    println!("  Events: Do GroupVolume/GroupMute events fire per-coordinator?  Double-fire?");
+    println!("  Fast topology: Does re-initialize route events to new coordinator?");
     println!("========================================================");
 }

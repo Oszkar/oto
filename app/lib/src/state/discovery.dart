@@ -22,7 +22,7 @@ part 'discovery.g.dart';
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
 /// retry via `ref.invalidate` / `ref.refresh`.
 ///
-/// On Android (v0.5 S3) the SSDP window is wrapped in a held
+/// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
@@ -47,7 +47,7 @@ class Discovery extends _$Discovery {
     return rust_api.discover();
   }
 
-  /// v0.5.1 (Option D): fast topology re-pull (no SSDP). Replaces the wire via
+  /// Fast topology re-pull (no SSDP). Replaces the wire via
   /// Rust `refreshTopology()` (re-pull authoritative topology, ~tens of ms, then a
   /// fresh seeded wire) and publishes the new `Topology`. Setting `state` to a
   /// new `AsyncValue.data` IS a `discoveryProvider` transition, so

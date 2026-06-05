@@ -76,7 +76,7 @@ pub trait Wire {
     /// just manifests as that speaker's events never arriving. The
     /// `ChangeEvent::SubscriptionError` / `SubscriptionRecovered`
     /// variants are emitted instead by `oto-app` from **command-observed
-    /// reachability** (v0.5 S2: a `WireError::Network` on a user command
+    /// reachability** (v0.5: a `WireError::Network` on a user command
     /// flips the speaker to `Errored`; a later `Ok` recovers it) — they
     /// reflect command reachability, NOT the health of the subscription
     /// pipeline this call sets up.

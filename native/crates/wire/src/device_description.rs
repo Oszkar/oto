@@ -1,5 +1,5 @@
 //! Fetch + parse Sonos `device_description.xml` for the `model` field
-//! (v0.5 S4). ZoneGroupTopology carries no model attribute (oto-core D1),
+//! (v0.5). ZoneGroupTopology carries no model attribute (oto-core D1),
 //! so `SpeakerIdentity.model` was `None` from v0.3; `discover()` and
 //! `refresh_topology()` repopulate it from each speaker's HTTP device
 //! description.

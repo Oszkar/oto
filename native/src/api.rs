@@ -72,9 +72,8 @@ pub enum CommandError {
 
 // ── v0.4 event DTOs ──────────────────────────────────────────────────────────
 
-/// FRB DTO for `oto_core::ChangeEvent`. Volume + the Subscription*
-/// variants landed in Slice 1; Mute / Playback / Track (Slice 2) cover
-/// the rest of the v0.4 property surface. Per spec § 4:
+/// FRB DTO for `oto_core::ChangeEvent`. Covers the full v0.4 property
+/// surface. Per spec § 4:
 ///   - Volume / Mute are per-speaker (carry `speaker_id`).
 ///   - Playback / Track are per-group (carry `group_id`).
 pub enum ChangeEventDto {
@@ -113,8 +112,8 @@ pub enum ChangeEventDto {
     },
     /// Household topology changed (speakers regrouped). Payload-less: the
     /// Dart `TopologyController` debounces then re-pulls topology on
-    /// receipt (v0.5 S1: invalidates `discoveryProvider` → full
-    /// re-discover; v0.6 may swap in a lighter SOAP refresh).
+    /// receipt (invalidates `discoveryProvider` → full re-discover;
+    /// v0.6 may swap in a lighter SOAP refresh).
     TopologyChanged,
 }
 
@@ -122,15 +121,15 @@ pub enum ChangeEventDto {
 
 // Android release discovery holds a WifiManager.MulticastLock around this
 // SSDP window — acquired/released on the Dart side (discoveryProvider) via
-// the `me.oszkar.oto/multicast_lock` MethodChannel (v0.5 S3). Without it
-// Android drops the inbound SSDP multicast replies.
+// the `me.oszkar.oto/multicast_lock` MethodChannel. Without it Android
+// drops the inbound SSDP multicast replies.
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
 /// topology — speaker identities (id / room / model / ip) plus the
 /// group identities they belong to, with the coordinator at
 /// `members[0]` (D3) — but no live state: volume, mute, and transport
-/// are read separately via `speaker_state`. Live state will move to an
-/// event-fed cache in v0.4 (ARCHITECTURE.md Open Q7).
+/// are read separately via `speaker_state`. Live state moved to an
+/// event-fed cache in v0.4.
 pub fn discover() -> Result<Topology, DiscoveryError> {
     // Glue only: delegate inward, then the representational map (tested
     // LAN-free in `native/tests/`; see `crate::map`).
@@ -138,7 +137,7 @@ pub fn discover() -> Result<Topology, DiscoveryError> {
     Ok(crate::map::to_topology(snap))
 }
 
-/// v0.5.1 (Option D): the topology fast-path — a re-discover that SKIPS SSDP.
+/// v0.5.1 fast topology path: a re-discover that SKIPS SSDP.
 /// Re-pulls authoritative topology from the current wire (no SSDP, ~tens of ms) and
 /// installs a fresh wire seeded from the reachable speaker IPs, through the same
 /// wire-replacement lifecycle as `discover()` (gen bump → Dart re-subscribes).
@@ -235,7 +234,7 @@ pub fn leave_group(speaker_id: String) -> Result<(), CommandError> {
 
 /// One-shot read of `speaker_id`'s current volume/mute/transport
 /// snapshot. **Not a SOAP round-trip** — reads the event-fed
-/// `StateManager` cache in `oto-app` (v0.4 Slice 4); fields are
+/// `StateManager` cache in `oto-app` (v0.4); fields are
 /// honest-partial (`None` until that property's first event lands).
 /// Surfaced as a Dart `Future` like the other commands.
 pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError> {
@@ -251,7 +250,7 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
 // end-to-end tests in `app/integration_test/v0_4_events_test.dart` (incl. the
 // v0.5 TopologyChanged delivery test).
 //
-// Trust boundary (per /codex review on PR #43, finding P1 #2): the FRB
+// Trust boundary: the FRB
 // fn symbols (`dev_discover_mock`, `dev_push_subscription_error_on_mock`)
 // must exist unconditionally — FRB v2's generated `frb_generated.rs`
 // references every exposed `pub fn` and a cfg gate at the symbol level
@@ -478,7 +477,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         sink.add(crate::map::to_change_event_dto(event)).is_ok()
     };
     loop {
-        // Drain TWO sources onto the one FRB stream (v0.5 S2):
+        // Drain TWO sources onto the one FRB stream (v0.5):
         //   1. oto-app's sibling bus — SubscriptionError/Recovered emitted
         //      on command-dispatch health transitions,
         //   2. the wire's v0.4 channel (`rx`) — property events from the

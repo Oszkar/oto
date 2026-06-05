@@ -1,4 +1,4 @@
-/// Dart shim over the `me.oszkar.oto/multicast_lock` MethodChannel (v0.5 S3).
+/// Dart shim over the `me.oszkar.oto/multicast_lock` MethodChannel.
 ///
 /// Android silently drops inbound SSDP multicast without a held
 /// `WifiManager.MulticastLock`, so release-build discovery finds nothing.

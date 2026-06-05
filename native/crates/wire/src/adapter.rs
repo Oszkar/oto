@@ -45,7 +45,7 @@ pub struct SonosWire {
     /// lifetime of the wire. The `Receiver` is taken once via
     /// `take_event_stream` and then is `None` inside the option.
     events_state: Mutex<Option<EventsState>>,
-    /// v0.5 (S1): `true` once `subscribe_topology` has been called.
+    /// v0.5: `true` once `subscribe_topology` has been called.
     /// Read by `subscribe_speakers` when it builds the pump — when set,
     /// the pump also registers a per-speaker `GroupMembership` watch so
     /// regroups surface as `ChangeEvent::TopologyChanged`. MUST be set
@@ -53,7 +53,7 @@ pub struct SonosWire {
     /// moved into the pump thread and can't take new watches after);
     /// `discover_with` enforces this ordering.
     topology_requested: AtomicBool,
-    /// v0.5.1 (Option D): seed responder IPs for an SSDP-skipped discover.
+    /// v0.5.1: seed responder IPs for an SSDP-skipped discover.
     /// Empty for `new()` → `discover()` runs the full multi-NIC SSDP sweep.
     /// Non-empty for `new_seeded()` → `discover()` skips SSDP and uses these
     /// as the `GetZoneGroupState` responder candidates (PerNetwork: any
@@ -79,7 +79,7 @@ impl SonosWire {
         Self::with_seed_ips(Vec::new())
     }
 
-    /// v0.5.1 (Option D): construct a wire whose `discover()` skips the SSDP
+    /// v0.5.1: construct a wire whose `discover()` skips the SSDP
     /// sweep and instead uses `seed_ips` as the `GetZoneGroupState` responder
     /// candidates. Used by `oto-app::refresh_topology` to install a FRESH wire
     /// (fresh pump, gen bump → Dart re-subscribes) seeded from the speaker IPs
@@ -312,7 +312,7 @@ fn to_snapshot(groups: Vec<ZoneGroupInfo>) -> DiscoverySnapshot {
     }
 }
 
-/// v0.5 S4: fill in `SpeakerIdentity.model` from each speaker's
+/// Fill in `SpeakerIdentity.model` from each speaker's
 /// `device_description.xml` (ZGT carries no model — D1). Parallel,
 /// best-effort: a speaker whose fetch fails simply keeps `model = None`.
 /// Shared by `discover()` and `refresh_topology()` so both paths populate
@@ -333,7 +333,7 @@ fn populate_models(snapshot: &mut DiscoverySnapshot) {
 
 impl Wire for SonosWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
-        // v0.5.1 (Option D): when seeded, skip the SSDP sweep entirely and use
+        // v0.5.1 fast-path: when seeded, skip the SSDP sweep entirely and use
         // the seed IPs as the GetZoneGroupState responder candidates — any
         // reachable speaker answers for the whole household (PerNetwork). This
         // is the "discover() minus SSDP" fast path a regroup re-discover uses.
@@ -383,7 +383,7 @@ impl Wire for SonosWire {
             ));
         }
         self.populate_caches(&snapshot);
-        // v0.5 S4: repopulate `model` (absent from ZGT — D1) via parallel
+        // Repopulate `model` (absent from ZGT — D1) via parallel
         // device_description.xml fetches. Best-effort: failures leave
         // `model = None` and don't fail discovery.
         populate_models(&mut snapshot);
@@ -523,14 +523,14 @@ impl Wire for SonosWire {
             ));
         }
         self.populate_caches(&snapshot);
-        // v0.5 S4: same model repopulate as discover() — keep the refresh
+        // Same model repopulate as discover() — keep the refresh
         // path consistent so a regroup re-pull doesn't drop `model`.
         populate_models(&mut snapshot);
         Ok(snapshot)
     }
 
     fn subscribe_speakers(&self) -> Result<(), WireError> {
-        // v0.4 Slice 3: wire up the sonos-sdk-state pump thread. One
+        // Wire up the sonos-sdk-state pump thread (v0.4). One
         // shot per wire — repeated calls error with `AlreadySubscribed`.
         //
         // Per-speaker subscription failures do NOT currently surface
@@ -700,9 +700,9 @@ mod tests {
         );
     }
 
-    /// T-C1: a group whose coordinator is absent from its members must be
+    /// A group whose coordinator is absent from its members must be
     /// skipped entirely — zero speakers from that group must leak into the
-    /// snapshot (C1 fix). The second, valid group must appear normally.
+    /// snapshot. The second, valid group must appear normally.
     #[test]
     fn skipped_group_contributes_no_speakers() {
         let snap = to_snapshot(
@@ -802,7 +802,7 @@ mod topology_tests {
     // Two groups: the first (RINCON_GHOST) has a coordinator that is NOT among
     // its members (RINCON_REAL is the only member). The second (RINCON_VALID)
     // is a normal solo group. to_snapshot must skip the ghost group entirely —
-    // RINCON_REAL must not appear in snapshot.speakers (C1).
+    // RINCON_REAL must not appear in snapshot.speakers.
     // Member attribute set copied from Kitchen member in GROUPED_XML.
     pub(crate) const GHOST_COORD_XML: &str = r#"<ZoneGroupState><ZoneGroups><ZoneGroup Coordinator="RINCON_GHOST" ID="RINCON_GHOST:1"><ZoneGroupMember UUID="RINCON_REAL" Location="http://10.0.0.9:1400/xml/device_description.xml" ZoneName="Ghost Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroup><ZoneGroup Coordinator="RINCON_VALID" ID="RINCON_VALID:2"><ZoneGroupMember UUID="RINCON_VALID" Location="http://10.0.0.10:1400/xml/device_description.xml" ZoneName="Valid Room" Icon="" Configuration="1" SoftwareVersion="94.1-76070" SWGen="2" MinCompatibleVersion="93.0-00000" LegacyCompatibleVersion="58.0-00000" BootSeq="31" TVConfigurationError="0" HdmiCecAvailable="0" WirelessMode="1" ConnectionType="5" ChannelFreq="5220" BehindWifiExtender="0" WifiEnabled="1" EthLink="0" Orientation="0" RoomCalibrationState="4" SecureRegState="3" VoiceConfigState="0" MicEnabled="0" HeadphoneSwapActive="0" AirPlayEnabled="1" IdleState="0" MoreInfo="" SSLPort="1443" HHSSLPort="1843"/></ZoneGroup></ZoneGroups></ZoneGroupState>"#;
 

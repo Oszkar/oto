@@ -317,10 +317,10 @@ fn live_group_volume_command_and_event_round_trip() {
 }
 
 #[test]
-#[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 Option D acceptance"]
+#[ignore = "requires a real Sonos LAN with >= 2 independent zones; v0.5.1 fast topology acceptance"]
 fn live_seeded_fast_rediscover() {
     let _serial = lan_serial();
-    // v0.5.1 (Option D): proves the SSDP-skipped fast re-discover.
+    // v0.5.1: proves the SSDP-skipped fast re-discover.
     //   (a) `SonosWire::new_seeded(ips).discover()` returns the grouped
     //       topology WITHOUT running SSDP, and does so FAST (< 2 s — an SSDP
     //       sweep alone is ~3 s), and

@@ -25,7 +25,7 @@ oto-core = { workspace = true }
 # UPnP SOAP client for control operations (play/pause/next/previous/
 # volume/mute/state). Direct dep; SonosClient + services::av_transport /
 # rendering_control are not re-exported by any other dep.
-# Promoted from dev-dep per Task 4 (v0.2). Pin =0.5.2 (workspace).
+# Pin =0.5.2 (workspace).
 sonos-api = { workspace = true }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
@@ -53,7 +53,7 @@ quick-xml = { workspace = true }
 # graph (transitive via sonos-api); direct edge only. See workspace dep.
 ureq = { workspace = true }
 
-# v0.4 Path A reactive event stack. `oto-wire` is the only crate that
+# v0.4 reactive event stack. `oto-wire` is the only crate that
 # touches the Sonos SDK family (AGENTS.md §4). Pump thread in
 # `events.rs` wraps `StateManager` + `SonosEventManager` watches into
 # one `mpsc::Sender<ChangeEvent>`.

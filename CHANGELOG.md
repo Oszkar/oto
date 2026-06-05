@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-05
+
+v0.5.1 — Group operations: form/break, group volume/mute, and a much faster regroup refresh. The last capability release before the v0.6 UI; all event additions ride the existing single change-event stream.
+
+### Added
+
+- **Group form/break.** Group and ungroup rooms from oto — join a speaker into another room's group, or split one out to play on its own. The view updates live afterward, the same way an app-side regroup does.
+- **Group volume and mute.** Set a whole group's volume or mute (proportional across its rooms), and read the current group volume/mute live as it changes.
+
+### Changed
+
+- **Regrouping is now fast.** A regroup updates oto in ~tens of milliseconds via a SOAP-only refresh, instead of the ~3–5 s full re-discovery v0.5 used — resolving the v0.5 known issue early.
+
+### Known issues
+
+- Leaving the coordinator of a 3+-room group relies on Sonos's own coordinator re-election (oto issues the standard "become standalone" command and re-reads the result); this path wasn't exercised on the 2-zone dev LAN.
+
 ## [0.5.0] - 2026-06-03
 
 v0.5 — Hardening before the v0.6 UI: live topology events, subscription-failure surfacing, Android release discovery, and speaker-model names. All event additions ride the single v0.4 `Stream<ChangeEventDto>` — no stream-surface redesign.
@@ -111,7 +128,8 @@ v0.1 — Foundation + LAN discovery. Identity-only discovery proven end-to-end t
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone — fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Oszkar/oto/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Oszkar/oto/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Oszkar/oto/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Oszkar/oto/compare/v0.2.0...v0.3.0

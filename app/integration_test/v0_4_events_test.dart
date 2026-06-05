@@ -1,11 +1,10 @@
 /// v0.4 end-to-end acceptance tests. Drives MockWire via
 /// `dev_discover_mock` and asserts the full Dart->Rust->Dart event
-/// loop works for every variant of `ChangeEventDto`. Slice 2 grew the
-/// suite to cover Mute, grouped Playback, the dev-seam SubscriptionError
-/// regression, and the discover-replacement race fix (generation
-/// token).
+/// loop works for every variant of `ChangeEventDto`. Covers Mute,
+/// grouped Playback, the dev-seam SubscriptionError regression, and
+/// the discover-replacement race fix (generation token).
 ///
-/// Run on a connected Windows desktop (this is a Windows-host slice):
+/// Run on a connected Windows desktop:
 ///
 /// ```text
 /// cd app && flutter test integration_test/v0_4_events_test.dart -d windows
@@ -19,12 +18,11 @@ import 'package:integration_test/integration_test.dart';
 import 'package:oto/src/rust/api.dart' as api;
 import 'package:oto/src/rust/frb_generated.dart';
 
-/// Slice 2 expanded the mock's seed set: subscribe_speakers now
-/// emits Volume + Mute (per speaker) + Playback (per group). For the
-/// 3-speaker / 2-group fixture that's 3 + 3 + 2 = 8 events. Pinning
-/// the exact count makes the seed-drain Completer trip when the seed
-/// surface grows again (deliberate brittleness — a silent change to
-/// the seed shape should fail this test).
+/// MockWire seed set: subscribe_speakers emits Volume + Mute (per speaker)
+/// + Playback (per group). For the 3-speaker / 2-group fixture that's
+/// 3 + 3 + 2 = 8 events. Pinning the exact count makes the seed-drain
+/// Completer trip when the seed surface grows again (deliberate
+/// brittleness — a silent change to the seed shape should fail this test).
 const int _expectedSeedCount = 3 + 3 + 2;
 
 /// Subscribe to the unified stream and capture a (subscription,
@@ -32,8 +30,7 @@ const int _expectedSeedCount = 3 + 3 + 2;
 /// [_expectedSeedCount] events have arrived; callers await it before
 /// any post-seed mutations to avoid racing on a still-draining seed
 /// phase. Replaces the `Future.delayed(Duration(milliseconds: 200))`
-/// patterns the Slice 1 test used (Claude Important #4 — flakiness
-/// fix).
+/// patterns the earlier tests used.
 ({StreamSubscription<api.ChangeEventDto> sub, List<api.ChangeEventDto> events, Completer<void> seedComplete})
     _subscribeAndCollect() {
   final events = <api.ChangeEventDto>[];
@@ -85,7 +82,7 @@ void main() {
 
     await h.seedComplete.future.timeout(const Duration(seconds: 5));
 
-    // Seed shape: 3 Volume + 3 Mute + 2 Playback (Slice 2).
+    // Seed shape: 3 Volume + 3 Mute + 2 Playback.
     final volumeSeeds = h.events.whereType<api.ChangeEventDto_Volume>().toList();
     final muteSeeds = h.events.whereType<api.ChangeEventDto_Mute>().toList();
     final playbackSeeds = h.events.whereType<api.ChangeEventDto_Playback>().toList();
@@ -141,7 +138,7 @@ void main() {
     unawaited(h.sub.cancel());
   });
 
-  test('v0.4 Slice 2: set_mute auto-emits ChangeEventDto.Mute', () async {
+  test('v0.4: set_mute auto-emits ChangeEventDto.Mute', () async {
     // Office is the solo-group fixture speaker; muting it is the
     // simplest single-speaker case.
     await api.devDiscoverMock();
@@ -163,7 +160,7 @@ void main() {
     unawaited(h.sub.cancel());
   });
 
-  test('v0.5 S1: TopologyChanged is delivered end-to-end over the FRB stream', () async {
+  test('v0.5: TopologyChanged is delivered end-to-end over the FRB stream', () async {
     // The FRB `subscribe_change_events` stream-loop has no Rust-level CI
     // test (it blocks on recv()); this integration test is the only
     // automated coverage that the loop forwards a variant to Dart. v0.5
@@ -185,7 +182,7 @@ void main() {
     unawaited(h.sub.cancel());
   });
 
-  test('v0.4 Slice 2: play(group) emits per-GROUP ChangeEventDto.Playback', () async {
+  test('v0.4: play(group) emits per-GROUP ChangeEventDto.Playback', () async {
     // Kitchen group is the multi-speaker fixture group (Kitchen +
     // Dining). The acceptance bar: the Playback event carries the
     // GROUP id (RINCON_KITCHEN:1), NOT a speaker id. A regression
@@ -211,7 +208,7 @@ void main() {
   });
 
   test(
-    'v0.4 Slice 2: rediscovery — OLD stream completes cleanly and NEW stream emits fresh seed shape',
+    'v0.4: rediscovery — OLD stream completes cleanly and NEW stream emits fresh seed shape',
     () async {
       // This verifies the *stream lifecycle* across a discover_with-
       // induced wire swap. It does NOT directly verify the generation-

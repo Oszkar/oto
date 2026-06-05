@@ -27,7 +27,7 @@
 //!   point a command channel or per-device granularity may be warranted.
 //!
 //! - **`StateManager` `RwLock`s (per-speaker / per-group / topology)** —
-//!   added in v0.4 (Slices 1–4). Independent of `SLOT`. The FRB-worker
+//!   added in v0.4. Independent of `SLOT`. The FRB-worker
 //!   consumer loop in `api.rs::subscribe_change_events` takes one of
 //!   these write locks per `ChangeEvent` applied (short hold — one
 //!   variant dispatch + one HashMap insert); the cache-backed
@@ -75,7 +75,7 @@ use crate::health::HealthTracker;
 use crate::state_manager::StateManager;
 
 // Re-export the FRB consumer's drain hook for the app-originated event bus
-// (v0.5 S2). `api.rs::subscribe_change_events` interleaves this with the
+// (v0.5). `api.rs::subscribe_change_events` interleaves this with the
 // wire channel. See `events.rs` for the dual-channel rationale.
 pub use crate::events::try_recv_app_event;
 
@@ -118,7 +118,7 @@ fn state_manager() -> &'static StateManager {
     SM.get_or_init(StateManager::new)
 }
 
-/// Process-global per-speaker subscription-health tracker (v0.5 S2).
+/// Process-global per-speaker subscription-health tracker (v0.5).
 /// Observed by command dispatch; reset by `discover_with` on wire
 /// replacement. Emits `SubscriptionError`/`Recovered` onto the app event
 /// bus (`events::push`) on health transitions.
@@ -177,7 +177,7 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let wire = make();
     let snapshot = wire.discover()?;
-    // v0.5 (S1): register topology-event interest BEFORE subscribe_speakers.
+    // v0.5: register topology-event interest BEFORE subscribe_speakers.
     // subscribe_speakers builds the event pump and (for SonosWire) the SDK
     // manager moves into the pump thread, so the GroupMembership watch must
     // be requested first — subscribe_speakers reads the flag when it spawns
@@ -218,7 +218,7 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
     // (generation, receiver) pair atomically from the slot on entry
     // (`take_event_stream_with_generation`).
     let generation = state_manager().bump_clear_and_install(&snapshot);
-    // v0.5 S2: a fresh wire starts with a clean health slate — drop any
+    // v0.5: a fresh wire starts with a clean health slate — drop any
     // Errored marks from the old wire so the first command on the new wire
     // is judged from Healthy (and a recovery on the new wire isn't masked).
     health_tracker().reset_all();
@@ -237,7 +237,7 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
     discover_with(|| Box::new(SonosWire::new()))
 }
 
-/// v0.5.1 (Option D): the topology fast-path — a "discover() minus SSDP".
+/// v0.5.1 topology fast-path — a "discover() minus SSDP".
 ///
 /// Re-pull authoritative topology from the CURRENT wire (no SSDP) to get the
 /// reachable speaker IPs, then install a FRESH wire seeded from them through
@@ -348,7 +348,7 @@ pub fn leave_group(speaker: &SpeakerId) -> Result<(), WireError> {
 
 /// One-shot read of `speaker`'s current volume/mute/transport snapshot.
 ///
-/// **Slice 4:** reads from the `StateManager` cache instead of
+/// Reads from the `StateManager` cache instead of
 /// dispatching through `Wire::speaker_state`. The trait method is kept
 /// (the production `SonosWire` still implements it via SOAP — used by
 /// the hardware-gated live tests for baseline reads; `MockWire` still
@@ -431,24 +431,22 @@ pub fn current_generation() -> u64 {
     state_manager().current_generation()
 }
 
-/// Read a speaker's cached volume — used by Slice 4's
-/// cache-backed `speaker_state`. v0.4 read surface; the full cache
-/// API lands in Task 2 / Slice 4 of this plan.
+/// Read a speaker's cached volume — used by the cache-backed `speaker_state`.
 pub fn cached_volume(speaker: &SpeakerId) -> Option<Volume> {
     state_manager().volume_of(speaker)
 }
 
-/// Read a speaker's cached mute state. Slice 4 read surface.
+/// Read a speaker's cached mute state.
 pub fn cached_muted(speaker: &SpeakerId) -> Option<bool> {
     state_manager().muted_of(speaker)
 }
 
-/// Read a group's cached transport. Slice 4 read surface.
+/// Read a group's cached transport.
 pub fn cached_transport(group: &GroupId) -> Option<oto_core::TransportState> {
     state_manager().transport_of(group)
 }
 
-/// Read a group's cached current track. Slice 4 read surface.
+/// Read a group's cached current track.
 pub fn cached_track(group: &GroupId) -> Option<oto_core::Track> {
     state_manager().track_of(group)
 }
@@ -467,7 +465,7 @@ pub fn cached_group_muted(group: &GroupId) -> Option<bool> {
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 //
-// Slice 4 swapped `speaker_state` to a cache-backed read, which means
+// `speaker_state` was swapped to a cache-backed read, which means
 // command-then-read round-trips in tests need the consumer loop to run
 // between the mutation and the read. The FRB consumer
 // (`api::subscribe_change_events`) is the production path; the helpers
@@ -610,10 +608,10 @@ fn clear_slot() {
     // Cache survives across tests in the same process otherwise; clear it
     // so the next test starts from a known-empty state.
     state_manager().clear();
-    // S2: clear per-speaker health so a prior test's Errored mark doesn't
+    // Clear per-speaker health so a prior test's Errored mark doesn't
     // leak into the next test (same process under `cargo test`).
     health_tracker().reset_all();
-    // S2: drain any app-bus events a prior test pushed so they don't leak
+    // Drain any app-bus events a prior test pushed so they don't leak
     // (gen-agnostic — clear() empties the channel regardless of stamp).
     events::clear();
     // Drop any stranded test receiver so the next test starts clean.
@@ -729,11 +727,9 @@ mod tests {
         // ── 2. Successful discover: snapshot + slot populated ─────────────
         let snap = discover_with(|| Box::new(MockWire::default())).unwrap();
         assert_eq!(snap.speakers.len(), 3);
-        // Slice 4: drain the subscribe_speakers seed events into the
-        // StateManager cache so the post-discover reads below see
-        // anything at all. (Before Slice 4 these reads dispatched
-        // through MockWire which reported state directly; now they
-        // read the event-fed cache, so the consumer loop must run.)
+        // Drain the subscribe_speakers seed events into the StateManager
+        // cache so the post-discover reads below see state — speaker_state
+        // reads the event-fed cache, so the consumer loop must run.
         process_pending_events(DRAIN_WINDOW);
 
         // ── 3. set_volume + speaker_state round-trip via cache ────────────
@@ -833,9 +829,7 @@ mod tests {
              MockWire's tx channel is None and the receiver is unreachable",
         );
 
-        // Drain seed events until the channel goes quiet. Slice 2
-        // expanded the mock's seed set (Volume + Mute + Playback —
-        // see `MockWire::subscribe_speakers`); rather than hardcode
+        // Drain seed events until the channel goes quiet. Rather than hardcode
         // the exact count, count the Volume seeds specifically and
         // assert ≥3 (one per fixture speaker). A regression that
         // dropped the subscribe call would surface as zero events
@@ -861,7 +855,7 @@ mod tests {
         );
     }
 
-    /// v0.5 (S1): `discover_with` must auto-invoke `subscribe_topology` so
+    /// v0.5: `discover_with` must auto-invoke `subscribe_topology` so
     /// the topology-event watch is active without the caller driving it.
     /// The `MockWire::topology_subscribed()` introspection confirms the
     /// call happened. (Ordering — topology before speakers — is enforced
@@ -884,7 +878,7 @@ mod tests {
         );
     }
 
-    /// v0.5.1 (Option D): `refresh_topology_with` installs a fresh wire via the
+    /// v0.5.1: `refresh_topology_with` installs a fresh wire via the
     /// proven `discover_with` path — so it returns a snapshot AND bumps the
     /// generation, exactly like a re-discover. (Production's `refresh_topology`
     /// first re-pulls IPs from the current wire, then calls this with a
@@ -928,10 +922,10 @@ mod tests {
         assert!(matches!(refresh_topology(), Err(WireError::NotFound(_))));
     }
 
-    // ── S2: SubscriptionError reactive emission ───────────────────────────
+    // ── SubscriptionError reactive emission ──────────────────────────────
 
     /// Drain every app-bus event currently queued at the current generation
-    /// (the S2 sibling channel). Mirrors the FRB consumer, which drains with
+    /// (the app-bus sibling channel). Mirrors the FRB consumer, which drains with
     /// the wire generation it captured at start.
     fn drain_app_events() -> Vec<ChangeEvent> {
         let gen = current_generation();

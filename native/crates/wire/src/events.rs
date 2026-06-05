@@ -1,4 +1,4 @@
-//! Path A event pipeline: wraps `sonos-sdk-state` + `sonos-sdk-event-manager`
+//! Event pipeline: wraps `sonos-sdk-state` + `sonos-sdk-event-manager`
 //! into one OS pump thread that maps upstream property events to
 //! `oto_core::ChangeEvent` and pushes them onto an unbounded
 //! `std::sync::mpsc::Sender<ChangeEvent>`. The matching `Receiver` is
@@ -56,7 +56,7 @@ pub(crate) struct PumpInputs {
     /// Friendly room names per speaker, used only to build the
     /// `sonos_discovery::Device` records the SDK needs in `add_devices`.
     pub(crate) speaker_names: HashMap<SpeakerId, String>,
-    /// v0.5 (S1): when `true`, also register a per-speaker
+    /// v0.5: when `true`, also register a per-speaker
     /// `GroupMembership` watch so regroups surface as
     /// `ChangeEvent::TopologyChanged`. Set from
     /// `SonosWire::topology_requested` (i.e. whether `subscribe_topology`
@@ -76,9 +76,8 @@ pub(crate) struct PumpInputs {
 /// fans out independent `mpsc::Sender`s (see
 /// `sonos-sdk-state-0.5.2/src/state.rs:855`); the pump thread also
 /// holds its own clone (via the `move` closure on the manager argument)
-/// and would block forever on its own sender otherwise (Slice 3 review
-/// finding C1). The poll-loop + atomic-stop pattern avoids the fan-out
-/// trap entirely.
+/// and would block forever on its own sender otherwise. The poll-loop +
+/// atomic-stop pattern avoids the fan-out trap entirely.
 pub(crate) struct EventPump {
     /// Set only while the thread is live. Cleared in `Drop` before join.
     handle: Option<JoinHandle<()>>,
@@ -151,14 +150,12 @@ impl EventPump {
         // registered but no UPnP SUBSCRIBE is sent, no NOTIFYs
         // arrive, no `PlaybackState` / `CurrentTrack` events ever
         // fire (RenderingControl works without topology because it's
-        // a per-speaker subscription). This was Slice 3's first
-        // hardware-test failure (PR #45 follow-up): operator
-        // play/pause produced zero `ChangeEvent::Playback` on real
-        // hardware because the SDK never subscribed to AVTransport
-        // on the coordinator. sonos-notes § Event model documents
-        // the required `manager.initialize(topology)` call as part
-        // of the canonical builder pattern; the original Slice 3
-        // build missed it.
+        // a per-speaker subscription). The first v0.4 hardware-test
+        // failure (PR #45 follow-up): operator play/pause produced
+        // zero `ChangeEvent::Playback` because the SDK never subscribed
+        // to AVTransport on the coordinator. sonos-notes § Event model
+        // documents the required `manager.initialize(topology)` call
+        // as part of the canonical builder pattern.
         let topology = build_sdk_topology(&inputs);
         manager.initialize(topology);
 
@@ -219,7 +216,7 @@ impl Drop for EventPump {
         // chasing the wake-up keeps the shutdown sequence simple and
         // failure-mode-free (no double-shutdown races).
         //
-        // Why this works where the v0.4 Slice 3 original didn't:
+        // Why this works where an earlier design didn't:
         // `StateManager::Clone` fans out independent `mpsc::Sender`s
         // (state.rs:855). The previous design held a "keepalive"
         // manager clone in this struct AND moved another clone into
@@ -315,7 +312,7 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
 /// `watch_property_with_subscription` (the safe path per spike finding
 /// "ergonomic footgun").
 ///
-/// **No per-speaker error reporting (Slice 3 review finding I1).** The
+/// **No per-speaker error reporting.** The
 /// SDK at `=0.5.2` does not expose per-speaker subscription failures:
 ///
 ///   - `watch_property_with_subscription::<P>` swallows
@@ -373,9 +370,9 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
             let _ = manager.watch_property_with_subscription::<GroupMute>(&sdk_sid);
         }
 
-        // v0.5 (S1): ZoneGroupTopology / GroupMembership is `Scope::Speaker`
-        // (P0c finding, sonos-notes § "Topology change events") — watch it
-        // on EVERY speaker, not just coordinators. A single regroup fires
+        // v0.5: ZoneGroupTopology / GroupMembership is `Scope::Speaker`
+        // (sonos-notes § "Topology change events") — watch it on EVERY
+        // speaker, not just coordinators. A single regroup fires
         // `group_membership` on each affected speaker; the downstream
         // Dart `TopologyController` debounces + re-pulls once.
         if inputs.watch_topology {
@@ -384,7 +381,7 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
     }
 
     // NOTE: We deliberately do NOT watch `Position`. The spike found
-    // Path A surfaces position as polling-derived ~2 s cadence; the UI
+    // position is polling-derived ~2 s cadence; the UI
     // derives position locally from the last transport event +
     // wall-clock. See spike findings #7 / sonos-notes § Event model.
 }
@@ -449,21 +446,20 @@ fn pump_loop(
 /// (codex cumulative review of the v0.5 series):
 ///
 /// 1. **Seed suppression (#1).** A fresh `GroupMembership` subscription emits
-///    one startup *seed* NOTIFY per speaker, before any user action (P0c
-///    finding). Each would map to `TopologyChanged`. Under the S1 Option-A
-///    design the Dart controller reacts to `TopologyChanged` with a full
-///    re-discover — which spawns a new pump, which emits new seeds, which
-///    trigger another re-discover: an infinite loop. So we drop the FIRST
-///    `group_membership` per speaker (the seed) and only emit on the 2nd+
-///    (a real regroup).
+///    one startup *seed* NOTIFY per speaker, before any user action. Each
+///    would map to `TopologyChanged`. The Dart controller reacts to
+///    `TopologyChanged` with a full re-discover — which spawns a new pump,
+///    which emits new seeds, which trigger another re-discover: an infinite
+///    loop. So we drop the FIRST `group_membership` per speaker (the seed)
+///    and only emit on the 2nd+ (a real regroup).
 ///
 /// 2. **Post-regroup group-event drop (#4).** The pump's `coord_to_group` /
 ///    `speaker_to_coord` maps are captured by value at spawn and frozen.
 ///    After a real regroup they're stale, so a `Playback`/`Track` event
 ///    would carry an obsolete `GroupId`. Once a real topology change is
 ///    seen we mark the pump `dirty` and drop group-addressed events until
-///    the pump is rebuilt (Option A rebuilds it via re-discover). Per-speaker
-///    `Volume`/`Mute` are unaffected by grouping and keep flowing.
+///    the pump is rebuilt (re-discover). Per-speaker `Volume`/`Mute` are
+///    unaffected by grouping and keep flowing.
 struct TopologyFilter {
     /// Speakers whose initial (seed) `group_membership` we've already
     /// swallowed. Absent ↔ "next group_membership is this speaker's seed".
@@ -581,9 +577,9 @@ fn map_upstream_event(
             let m: GroupMute = manager.get_group_property::<GroupMute>(&sdk_gid)?;
             Some(group_mute_event(group, m))
         }
-        // v0.5 (S1): ZoneGroupTopology change. The SDK emits one
+        // v0.5: ZoneGroupTopology change. The SDK emits one
         // `group_membership` event per affected speaker on a regroup
-        // (P0c finding). It carries no usable payload at this layer —
+        // (see sonos-notes § "Topology change events"). No usable payload —
         // the authoritative topology is re-pulled via `refresh_topology`
         // SOAP downstream — so this maps to the payload-less
         // `TopologyChanged`. Emitted from EVERY speaker (not
@@ -1098,13 +1094,13 @@ mod tests {
 
     // ── EventPump construct/drop deadlock regression ──────────────────
     //
-    // C1 regression coverage (Slice 3 review): the previous design
-    // self-deadlocked in `EventPump::Drop` because the pump thread held
-    // its own `StateManager::Clone` (= its own SDK event sender) and
-    // blocked on `iter.recv()`, which only returns `None` when the
-    // LAST sender drops. The thread couldn't drop its own sender until
-    // it exited; it couldn't exit until the sender dropped. The fix
-    // converts the loop to `recv_timeout` + an atomic stop flag.
+    // Deadlock regression coverage: the previous design self-deadlocked
+    // in `EventPump::Drop` because the pump thread held its own
+    // `StateManager::Clone` (= its own SDK event sender) and blocked on
+    // `iter.recv()`, which only returns `None` when the LAST sender
+    // drops. The thread couldn't drop its own sender until it exited;
+    // it couldn't exit until the sender dropped. The fix converts the
+    // loop to `recv_timeout` + an atomic stop flag.
     //
     // These tests use the REAL SDK with fake IPs. SUBSCRIBE attempts
     // will fail in the SDK's async worker (no real Sonos at the IP);
@@ -1138,7 +1134,7 @@ mod tests {
 
     /// Run `op` on a worker thread and assert it finishes within
     /// `budget`. On timeout, panic with a clear "hung" message — that
-    /// would have been the symptom of the C1 deadlock under the
+    /// would have been the symptom of a deadlock in the
     /// previous design.
     fn run_with_deadline<F>(label: &str, budget: std::time::Duration, op: F)
     where
@@ -1171,7 +1167,7 @@ mod tests {
 
     #[test]
     fn pump_with_topology_watch_constructs_and_drops() {
-        // v0.5 (S1): when watch_topology is set, the pump also registers a
+        // v0.5: when watch_topology is set, the pump also registers a
         // per-speaker GroupMembership watch. Verify that path constructs +
         // tears down cleanly (no hardware; the SDK only binds its local
         // callback port). Guards against a regression where the extra watch
@@ -1192,8 +1188,8 @@ mod tests {
     fn pump_can_be_spawned_and_dropped_twice_in_sequence() {
         // Models the "rediscover" path: discover() builds a new wire,
         // which drops the previous EventPump and constructs a fresh
-        // one. Under the C1 deadlock, the first drop would hang and
-        // the second spawn never run. Under the fix, both cycles
+        // one. Under the prior deadlock design, the first drop would hang
+        // and the second spawn never run. Both cycles now
         // complete promptly.
         run_with_deadline(
             "spawn/drop twice",

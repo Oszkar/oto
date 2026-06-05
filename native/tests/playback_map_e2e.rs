@@ -25,9 +25,9 @@ use oto_native::api::{CommandError, PlaybackStateDto};
 use oto_native::map::{to_command_error, to_speaker_state_dto};
 use std::time::Duration;
 
-/// Slice 4: cache-backed `speaker_state` needs the consumer loop
-/// driven between mutations and reads. 50 ms is well above any
-/// realistic MockWire emit-to-drain delay.
+/// Cache-backed `speaker_state` needs the consumer loop driven between
+/// mutations and reads. 50 ms is well above any realistic MockWire
+/// emit-to-drain delay.
 const DRAIN_WINDOW: Duration = Duration::from_millis(50);
 
 #[test]

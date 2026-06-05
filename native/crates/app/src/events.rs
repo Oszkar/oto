@@ -1,11 +1,11 @@
-//! App-originated event bus (v0.5 S2).
+//! App-originated event bus (v0.5).
 //!
 //! `SubscriptionError` / `SubscriptionRecovered` events originate in
 //! `oto-app` on command-dispatch health transitions — NOT in the wire's
 //! pump — so they need a path to the FRB consumer independent of the wire's
 //! v0.4 `mpsc` channel.
 //!
-//! **Design (plan Task 6, approach d1).** A process-global sibling channel
+//! **Design.** A process-global sibling channel
 //! owned by `oto-app`. The wire's own channel is left untouched: its
 //! drop-closes-the-stream teardown signal (v0.4) is load-bearing — when the
 //! wire is replaced, its pump's `Sender` drops, the FRB consumer's wire
@@ -91,5 +91,5 @@ pub(crate) fn clear() {
 // emptiness/round-trip assertion races other tests that `push()` in the
 // same `cargo test` binary (review #65). The push → `try_recv_app_event`
 // path is covered end-to-end — via real command-dispatch failures — by the
-// `oto-app` S2 integration tests in `lib.rs`, which serialize on
+// `oto-app` integration tests in `lib.rs`, which serialize on
 // `TEST_SERIAL`.

@@ -6,7 +6,7 @@
 //! `WireError` → `DiscoveryError`). This realises plan deviation D2 in full:
 //! the e2e asserts the snapshot *and* the `oto_native` DTO mapping with zero
 //! LAN. The thin Dart provider wiring is covered separately by the Flutter
-//! test (Task 7); a real LAN run is the user-run step (Task 8).
+//! test; a real LAN run is the user-run step.
 
 use oto_app::discover_with;
 use oto_core::WireError;

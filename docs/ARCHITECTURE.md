@@ -41,10 +41,10 @@ Solid arrows are command-direction (UI → FRB → … → speakers); dashed arr
 
 | Crate | Path | Responsibility |
 |---|---|---|
-| `oto_native` | `native/` | FRB cdylib. Thin shim — `discover()` + 7 non-sync playback commands + identity/playback DTOs + `CommandError`; delegates to `oto-app`. |
-| `oto-app` | `native/crates/app` | Owns runtime state (the active `Wire` in a process-global, lock held across SOAP); routes `discover()` and the 7 playback/state commands. |
+| `oto_native` | `native/` | FRB cdylib. Thin shim — `discover()` / `refresh_topology()` + non-sync commands (playback, group volume/mute, form/break) + identity/playback/event DTOs + `CommandError`; delegates to `oto-app`. |
+| `oto-app` | `native/crates/app` | Owns runtime state (the active `Wire` in a process-global, lock held across SOAP); routes `discover()` / `refresh_topology()` and the playback + group commands. |
 | `oto-core` | `native/crates/core` | Pure domain types (`Speaker`, `Group`, `TransportState`, `Track`, `Volume`, identifiers, `SpeakerState`, `SpeakerIdentity`, `GroupIdentity`, `DiscoverySnapshot`) + the `Wire` trait + `WireError`. No networking, no async, no third-party deps. |
-| `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP + direct `sonos_api` (=0.5.2) SOAP for discovery, playback control, and one-shot state reads; v0.4 live property events use the upstream reactive state/event layer from the same SDK family. No `SonosSystem`. Interior-mutable id→addr / group→coordinator / speaker→coordinator cache populated by `discover()`. |
+| `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP + direct `sonos_api` (=0.5.2) SOAP for discovery, playback control, group operations (v0.5.1: form/break + group volume/mute), and one-shot state reads; v0.4 live property events (+ v0.5.1 group volume/mute) use the upstream reactive state/event layer from the same SDK family. No `SonosSystem`. Interior-mutable id→addr / group→coordinator / speaker→coordinator cache populated by `discover()`. A no-SSDP seeded constructor (`new_seeded`) backs the v0.5.1 fast re-discover. |
 | `oto-mock` | `native/crates/mock` | Stateful `Wire` implementation (`MockWire`) — in-memory per-speaker model (commands mutate it, `speaker_state` reflects it); integration tests run without a LAN. |
 
 The Dart side is Flutter + Riverpod 3 (codegen). Providers live in `app/lib/src/state/`; FRB-generated bindings in `app/lib/src/rust/`.
@@ -73,7 +73,7 @@ Consequences:
 
 **`speaker_state` addressing (D2).** Volume/mute are per-speaker (cached from `Volume` / `Mute` events); transport is per-group (cached from `Playback` / `Track` events at the group coordinator). The cache stores transport per `GroupId`; the read resolves speaker → group via the `StateManager`'s topology map (installed on every `discover_with`) → group transport cache. A solo speaker is its own coordinator, so the resolution degrades cleanly.
 
-**Topology refresh (v0.5 S1).** Caches are populated by `discover()` and re-populated by `refresh_topology()` (`GetZoneGroupState` SOAP, no SSDP). App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`. A live `TopologyChanged` event is wired to drive a refresh so the view follows a regroup (the Dart `TopologyController` debounces, then re-discovers — Option A). **That controller is implemented and unit-tested but dormant in v0.5's headless build** — no UI watches it yet; like every other provider, it is activated by the v0.6 UI. Note the fallback's timing: until a re-discover actually runs, a regrouped group's old `GroupId` stays in the cache and still routes to the *former* coordinator; the stale-`GroupId` → `WireError::NotFound` fallback only kicks in once a re-discover has changed the `N` suffix while a caller still holds the old id. (v0.4 covered property events only — volume / mute / transport / track.)
+**Topology refresh (v0.5 / v0.5.1).** Caches are populated by `discover()` and re-populated by `refresh_topology()` (`GetZoneGroupState` SOAP, no SSDP). App-side regrouping changes a group's opaque `N` suffix in `GroupId = RINCON_<coord>:N`. A live `TopologyChanged` event drives a refresh so the view follows a regroup: the Dart `TopologyController` debounces, then calls `refresh_topology()` — **v0.5.1** a no-SSDP fast re-discover (oto-app seeds a fresh wire from cached IPs through `discover_with`, reusing the proven wire-replacement lifecycle), with a full SSDP re-discover as the error fallback. **That controller is implemented and unit-tested but dormant in v0.5's headless build** — no UI watches it yet; like every other provider, it is activated by the v0.6 UI. Note the fallback's timing: until a re-discover actually runs, a regrouped group's old `GroupId` stays in the cache and still routes to the *former* coordinator; the stale-`GroupId` → `WireError::NotFound` fallback only kicks in once a re-discover has changed the `N` suffix while a caller still holds the old id. (v0.4 covered property events only — volume / mute / transport / track.)
 
 **State-read shape (`speaker_state`).** `SpeakerState { volume: Option<Volume>, muted: Option<bool>, transport: Option<TransportState> }`. The signature is identical to v0.2/v0.3, but v0.4 swapped the backing source from SOAP-per-call to the `StateManager` event cache. `Option<T>` fields are now honest partial *cold-start*: a property is `None` until its first event lands in the cache (in practice, within the SUBSCRIBE NOTIFY seed phase ~1 s after `discover()`).
 
@@ -101,7 +101,7 @@ sequenceDiagram
 
 Commands are non-sync FRB fns (Dart `Future`) into blocking `sonos_api` SOAP calls. `oto-app` holds its `Mutex<Option<…>>` **locked across the SOAP call** — deliberate: commands are user-initiated and low-frequency; serializing all commands is the LAN-politeness story (no command storms against the user's speakers). Revisit only if v0.4 event threads and commands contend on the lock.
 
-No async/await in oto's own surface code. `sonos-api` uses async internally, and v0.4's Path A event stack pulls a tokio runtime transitively via the upstream event manager. The architectural rule is that commands stay sync/blocking at the `Wire` boundary and event delivery is pumped by dedicated threads; tokio in the lockfile is not itself a violation.
+No async/await in oto's own surface code. `sonos-api` uses async internally, and v0.4's reactive event stack pulls a tokio runtime transitively via the upstream event manager. The architectural rule is that commands stay sync/blocking at the `Wire` boundary and event delivery is pumped by dedicated threads; tokio in the lockfile is not itself a violation.
 
 ## The `Wire` seam
 
@@ -134,17 +134,27 @@ pub trait Wire {
     fn subscribe_speakers(&self) -> Result<(), WireError>;
     fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<ChangeEvent>>;
 
-    // v0.5 (S1) — topology events. `subscribe_topology` registers the
+    // v0.5 — topology events. `subscribe_topology` registers the
     // per-speaker ZoneGroupTopology (`GroupMembership`) watch; it MUST be
     // called BEFORE `subscribe_speakers` (the watch is registered at pump
     // spawn), which `discover_with` enforces. A regroup surfaces as a
     // payload-less `ChangeEvent::TopologyChanged`. `refresh_topology`
     // re-pulls authoritative topology via `GetZoneGroupState` SOAP (no
-    // SSDP) — kept on the trait for the live test; v0.5's UI-refresh path
-    // is a full re-discover (Option A), so `refresh_topology` is not yet on
-    // the production hot path (v0.6 Option D).
+    // SSDP); v0.5.1 puts it on the production hot path — a regroup
+    // fast-refreshes via a no-SSDP re-discover (oto-app seeds a fresh
+    // wire from cached IPs through `discover_with`).
     fn subscribe_topology(&self) -> Result<(), WireError>;
     fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError>;
+
+    // v0.5.1 — group operations. Form/break addressed per-speaker (Sonos
+    // primitives: `x-rincon:` SetAVTransportURI / BecomeCoordinatorOf-
+    // StandaloneGroup); group volume/mute addressed by GroupId (coordinator-
+    // routed, like playback). A mutation fires topology/group events that the
+    // existing stream surfaces; form/break does not self-trigger a refresh.
+    fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError>;
+    fn leave_group(&self, speaker: &SpeakerId) -> Result<(), WireError>;
+    fn set_group_volume(&self, group: &GroupId, volume: Volume) -> Result<(), WireError>;
+    fn set_group_mute(&self, group: &GroupId, muted: bool) -> Result<(), WireError>;
 }
 ```
 
@@ -174,10 +184,11 @@ sequenceDiagram
 
 The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when a NEW wire is installed — keyed on the **wire generation** (`current_wire_generation()`, bumped by `discover_with` on success only), not raw discovery state. A *failed* re-discover keeps the old wire (whose event receiver is one-shot and can't be retaken), so gating on the generation avoids tearing the live stream down onto a dead receiver. The same `StateManager` generation makes stale-OLD-wire cache applies after a mid-stream `discover_with` no-op against the freshly-cleared cache.
 
-**Live events (v0.5).** Two additions on the same single FRB stream:
+**Live events (v0.5 / v0.5.1).** Additions on the same single FRB stream:
 
-- **Topology events (S1).** The pump also registers a per-speaker `GroupMembership` watch (ZoneGroupTopology is a *service*, not a watchable property — the change surfaces via the speaker-scoped `GroupMembership` property; see [sonos-notes § Topology change events](sonos-notes.md#topology-change-events--how-regrouping-surfaces-p0c-finding-v05)). A regroup → payload-less `ChangeEvent::TopologyChanged`; the Dart `TopologyController` (implemented + unit-tested, but **dormant until the v0.6 UI watches it**) debounces 250 ms then re-discovers (Option A — a full rebuild, correct by construction; the lightweight SOAP `refresh_topology` fast-path is deferred to v0.6). Two pump-side guards make this safe: (1) the **first** `GroupMembership` per speaker is the subscribe *seed* and is suppressed — otherwise seed → re-discover → new pump → new seed would loop forever; (2) once a real regroup is seen the pump marks its (now-stale, frozen-at-spawn) coordinator→group routing **dirty** and drops group-addressed `Playback`/`Track` until the pump is rebuilt by re-discover. **v0.6 guard:** the lightweight `refresh_topology` must not ship until it rebuilds or atomically updates pump routing.
-- **Subscription health (S2).** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
+- **Topology events.** The pump also registers a per-speaker `GroupMembership` watch (ZoneGroupTopology is a *service*, not a watchable property — the change surfaces via the speaker-scoped `GroupMembership` property; see [sonos-notes § Topology change events](sonos-notes.md#topology-change-events--how-regrouping-surfaces-p0c-finding-v05)). A regroup → payload-less `ChangeEvent::TopologyChanged`; the Dart `TopologyController` (implemented + unit-tested, but **dormant until the v0.6 UI watches it**) debounces 250 ms then refreshes — **v0.5.1** via a no-SSDP fast `refresh_topology()` re-discover (a full ~3–5 s SSDP re-discover in v0.5), with a full re-discover as the error fallback. Two pump-side guards make this safe: (1) the **first** `GroupMembership` per speaker is the subscribe *seed* and is suppressed — otherwise seed → re-discover → new pump → new seed would loop forever; (2) once a real regroup is seen the pump marks its (now-stale, frozen-at-spawn) coordinator→group routing **dirty** and drops group-addressed `Playback`/`Track` until the pump is rebuilt by re-discover. **Resolved in v0.5.1:** `refresh_topology` is a full wire replacement (a fresh seeded wire via `discover_with`), so the new pump starts with clean routing + a clean `TopologyFilter` — no in-place mutation of the frozen maps. The Dart re-subscribe is forced via a `wireGenerationProvider` invalidation even when the new topology is value-equal to the old (FRB `Topology` has value equality, which would otherwise suppress the provider transition).
+- **Group volume/mute events (v0.5.1).** The pump also watches `GroupVolume` / `GroupMute` (GroupRenderingControl, `Scope::Group`, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}`. These are read from the SDK's group-property store via `get_group_property(GroupId)` — NOT the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike--hardware-confirmed-2026-06-04)).
+- **Subscription health.** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
 
 ## Scope
 
@@ -189,5 +200,5 @@ The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when
 
 - **Watch-after-fetch event suppression (resolved in v0.4).** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value. v0.4 sidesteps this by using `.watch()` itself as the reachability/seed probe — the initial SUBSCRIBE NOTIFY populates the cache and any code path that wants a current value reads from `StateManager` (which the pump thread fills). The fetch-then-subscribe pattern is now an anti-pattern in `oto-wire`; the production wire only calls `watch_property_with_subscription`. Detail: [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing).
 - **`manager.initialize(topology)` is non-optional** for AVTransport routing. Without it, `add_devices` + `register_watches` succeed without error but per-group Playback/Track NOTIFYs route to the wrong worker and silently disappear. `oto-wire`'s pump always calls `initialize(topology)` between `add_devices` and `register_watches`. The SDK's `StateManager::Clone` fans out independent `mpsc::Sender`s — dropping a clone does not close the channel; the pump's `Drop` uses an `Arc<AtomicBool>` stop flag + `recv_timeout` polling so it can shut down without depending on sender-close semantics.
-- **Android `MulticastLock` (resolved in v0.5 S3).** SSDP multicast on the Android *release* build needs a held `WifiManager.MulticastLock` (perms are declared in the manifest); debug builds happen to work because the developer build flow keeps the radio active. A Kotlin `MulticastLockHandler` (over the `me.oszkar.oto/multicast_lock` MethodChannel) is now held around `discover()`'s SSDP window, acquired/released on the Dart side in `discoveryProvider` — best-effort (a lock failure doesn't abort discovery). v0.4 GENA events are **unicast TCP** and work without the lock; it is the SSDP in `discover()` (and any re-discover) that needs it.
+- **Android `MulticastLock` (resolved in v0.5).** SSDP multicast on the Android *release* build needs a held `WifiManager.MulticastLock` (perms are declared in the manifest); debug builds happen to work because the developer build flow keeps the radio active. A Kotlin `MulticastLockHandler` (over the `me.oszkar.oto/multicast_lock` MethodChannel) is now held around `discover()`'s SSDP window, acquired/released on the Dart side in `discoveryProvider` — best-effort (a lock failure doesn't abort discovery). v0.4 GENA events are **unicast TCP** and work without the lock; it is the SSDP in `discover()` (and any re-discover) that needs it.
 - **SSDP responses are trusted (accepted risk, v0.5).** Discovery accepts any datagram carrying a `LOCATION` header — it does not validate the status line / `ST`, match the LOCATION host to the responder's source IP, or cap the candidate count. A hostile device on the user's LAN could therefore redirect discovery's follow-up `GetZoneGroupState` SOAP to an arbitrary host (port 1400 only). LAN-local and low-impact: a non-Sonos host fails to parse and is skipped, and `discover()` stops at the first responder that returns a parseable topology. Hardening (200 + `ST` + sender-IP match + candidate cap) is tracked for v0.6 — see the `TODO(v0.6)` in `native/crates/wire/src/ssdp.rs`.
