@@ -17,11 +17,11 @@ part 'api.freezed.dart';
 /// topology — speaker identities (id / room / model / ip) plus the
 /// group identities they belong to, with the coordinator at
 /// `members[0]` (D3) — but no live state: volume, mute, and transport
-/// are read separately via `speaker_state`. Live state will move to an
-/// event-fed cache in v0.4 (ARCHITECTURE.md Open Q7).
+/// are read separately via `speaker_state`. Live state moved to an
+/// event-fed cache in v0.4.
 Future<Topology> discover() => RustLib.instance.api.crateApiDiscover();
 
-/// v0.5.1 (Option D): the topology fast-path — a re-discover that SKIPS SSDP.
+/// v0.5.1 fast topology path: a re-discover that SKIPS SSDP.
 /// Re-pulls authoritative topology from the current wire (no SSDP, ~tens of ms) and
 /// installs a fresh wire seeded from the reachable speaker IPs, through the same
 /// wire-replacement lifecycle as `discover()` (gen bump → Dart re-subscribes).
@@ -101,7 +101,7 @@ Future<void> leaveGroup({required String speakerId}) =>
 
 /// One-shot read of `speaker_id`'s current volume/mute/transport
 /// snapshot. **Not a SOAP round-trip** — reads the event-fed
-/// `StateManager` cache in `oto-app` (v0.4 Slice 4); fields are
+/// `StateManager` cache in `oto-app` (v0.4); fields are
 /// honest-partial (`None` until that property's first event lands).
 /// Surfaced as a Dart `Future` like the other commands.
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
@@ -195,8 +195,8 @@ sealed class ChangeEventDto with _$ChangeEventDto {
 
   /// Household topology changed (speakers regrouped). Payload-less: the
   /// Dart `TopologyController` debounces then re-pulls topology on
-  /// receipt (v0.5 S1: invalidates `discoveryProvider` → full
-  /// re-discover; v0.6 may swap in a lighter SOAP refresh).
+  /// receipt (invalidates `discoveryProvider` → full re-discover;
+  /// v0.6 may swap in a lighter SOAP refresh).
   const factory ChangeEventDto.topologyChanged() =
       ChangeEventDto_TopologyChanged;
 }

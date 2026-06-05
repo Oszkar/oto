@@ -11,7 +11,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.3.0 | released | Real ZoneGroupTopology grouping — multi-room, coordinator election, bonded satellites folded |
 | v0.4.0 | released | Live **property** events (GENA) — Rust → Dart event stream for volume / mute / transport / track |
 | v0.5.0 | released | **Hardening before UI** — topology events, SubscriptionError surfacing, Android `MulticastLock`, model repopulate (group form/break → v0.5.1) |
-| v0.5.1 | released | **Group operations** — form/break, group volume/mute (commands + read/event), Option D fast topology refresh (no-SSDP re-discover) |
+| v0.5.1 | released | **Group operations** — form/break, group volume/mute (commands + read/event), fast topology refresh after a regroup (no SSDP re-discovery) |
 | v0.6   | next | The designed Flutter UI (on the now feature-complete capability layer) |
 | v1.0   | future | Stable — externally tested, packaged |
 
@@ -46,7 +46,7 @@ Capability-layer items that land before the v0.6 UI milestone designs against th
 
 ### Shipped
 
-- ✅ **Topology change events.** Live ZoneGroupTopology via a per-speaker `GroupMembership` watch on the v0.4 `ChangeEvent` stream (payload-less `TopologyChanged`); the Dart `TopologyController` debounces 250 ms then refreshes (v0.5 shipped a full SSDP re-discover; **v0.5.1 Option D** swapped in the no-SSDP fast `refresh_topology` re-discover). The controller is implemented + unit-tested but **dormant in v0.5's headless build** (no UI watches it yet — the v0.6 UI activates it). Additive `Wire` trait (`subscribe_topology` + `refresh_topology`); the pump guards against a subscribe-seed loop and post-regroup stale routing. Stale `GroupId` → `NotFound` remains the fallback.
+- ✅ **Topology change events.** Live ZoneGroupTopology via a per-speaker `GroupMembership` watch on the v0.4 `ChangeEvent` stream (payload-less `TopologyChanged`); the Dart `TopologyController` debounces 250 ms then refreshes (v0.5 shipped a full SSDP re-discover; **v0.5.1** swapped in the no-SSDP fast `refresh_topology` re-discover). The controller is implemented + unit-tested but **dormant in v0.5's headless build** (no UI watches it yet — the v0.6 UI activates it). Additive `Wire` trait (`subscribe_topology` + `refresh_topology`); the pump guards against a subscribe-seed loop and post-regroup stale routing. Stale `GroupId` → `NotFound` remains the fallback.
 - ✅ **In-band per-speaker subscription-failure surfacing.** `SubscriptionError` / `SubscriptionRecovered` (carried on the surface since v0.4 but never emitted — the SDK at `=0.5.2` swallows subscription failures internally) now emit **reactively from command dispatch**: `oto-app` tracks per-speaker `Healthy ↔ Errored` and emits on the edge — `WireError::Network` from a Healthy speaker → `SubscriptionError`; `Ok` from an Errored speaker → `SubscriptionRecovered` (`Backend`/`NotFound` don't flip health). Richer strategies (tracing capture, heartbeat probe) are recorded post-1.0 candidates below.
 - ✅ **Reactive-vs-NOTIFY revisit — closed.** ~80 min of combined production `event-tail` traces (idle + active) confirmed the chosen reactive layer stable: 0 errors, renewals clean at ~82% TTL, all events prompt and complete, no cross-speaker bleed — the Path B reconsideration trigger was not met. Detail in [sonos-notes.md § Reactive-vs-NOTIFY traces](sonos-notes.md#reactive-vs-notify-traces--p0b-validation-v05). Notes: double Track events need last-wins dedup (~200 ms window); `Transitioning` Playback state passes through or maps to `Loading`.
 - ✅ **Android `MulticastLock`.** A `WifiManager.MulticastLock` (Kotlin `MulticastLockHandler` over a MethodChannel) is held around `discover()`'s SSDP window — without it Android drops the inbound SSDP multicast and release-build discovery finds nothing. Best-effort on the Dart side (a lock failure doesn't abort discovery).
@@ -55,7 +55,7 @@ Capability-layer items that land before the v0.6 UI milestone designs against th
 
 ### Deferred to v0.5.1 — shipped
 
-- **Group form/break**, **group volume/mute**, and the **Option D fast topology refresh** all shipped in v0.5.1 (see the v0.5.1 section below).
+- **Group form/break**, **group volume/mute**, and the **fast topology refresh** all shipped in v0.5.1 (see the v0.5.1 section below).
 
 ### Explicit non-goals
 
@@ -70,11 +70,11 @@ The last capability-layer release before the v0.6 UI: the deferred group form/br
 
 - ✅ **Group form/break.** `Wire::join_group(speaker, coordinator)` (`x-rincon:` `SetAVTransportURI`) + `leave_group(speaker)` (`BecomeCoordinatorOfStandaloneGroup`), additive across all layers. Uniform — no coordinator branch (firmware re-elects; topology events surface the settled result). Form/break does **not** self-trigger a refresh; the existing `GroupMembership` event path drives it (hardware finding: an immediate post-mutation re-pull races the topology settle).
 - ✅ **Group volume/mute — commands + read/event.** `set_group_volume` / `set_group_mute` (GroupRenderingControl, coordinator-routed) plus `ChangeEvent::{GroupVolume, GroupMute}` on the existing stream, cached per-`GroupId` in the `StateManager`. Group-scoped values are read via the SDK's `get_group_property` (not the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event).
-- ✅ **Option D — fast topology refresh.** A regroup now refreshes in ~tens of ms instead of a ~3–5 s SSDP re-discover: `refresh_topology()` re-pulls topology from a cached IP (no SSDP) and installs a fresh seeded wire through the proven `discover_with` lifecycle (new pump, generation bump, Dart event re-subscribe). Refined from the plan's "same-wire pump respawn" — that would have stranded the event receiver, since the Dart re-subscribe keys on a `discoveryProvider` transition.
+- ✅ **Fast topology refresh.** A regroup now refreshes in ~tens of ms instead of a ~3–5 s SSDP re-discover: `refresh_topology()` re-pulls topology from a cached IP (no SSDP) and installs a fresh seeded wire through the proven `discover_with` lifecycle (new pump, generation bump, Dart event re-subscribe). Refined from the plan's "same-wire pump respawn" — that would have stranded the event receiver, since the Dart re-subscribe keys on a `discoveryProvider` transition.
 
 ### Process
 
-Spike-gated, risk-ordered (spike → form/break → group volume → Option D), one PR per workstream, hardware-validated on the 2-zone LAN (Beam + Sonos One). Durable Sonos facts in [sonos-notes.md § Group operations](sonos-notes.md). Two production-breaking event-lifecycle bugs (group events read from the wrong property store; a value-equal refresh stranding the stream) were caught by independent `/codex` review before merge. One hardware-gated group-volume live test is known-flaky on the shared 2-zone LAN; the seeded-fast-rediscover live test covers the same command+event path reliably.
+Spike-gated, risk-ordered (spike → form/break → group volume → fast topology refresh), one PR per workstream, hardware-validated on the 2-zone LAN (Beam + Sonos One). Durable Sonos facts in [sonos-notes.md § Group operations](sonos-notes.md). Two production-breaking event-lifecycle bugs (group events read from the wrong property store; a value-equal refresh stranding the stream) were caught by independent `/codex` review before merge. One hardware-gated group-volume live test is known-flaky on the shared 2-zone LAN; the seeded-fast-rediscover live test covers the same command+event path reliably.
 
 ## v0.6 — UI
 

@@ -1,4 +1,4 @@
-/// v0.5 (S1) — topology-change controller. Fast-path (Option D) since v0.5.1.
+/// Topology-change controller. Fast SSDP-skipping re-discover since v0.5.1.
 ///
 /// Listens on the unified [changeEventsProvider] for
 /// [rust_api.ChangeEventDto_TopologyChanged] notifications (emitted when
@@ -11,7 +11,7 @@
 /// The 250 ms window coalesces the burst into exactly one re-pull once the
 /// household settles.
 ///
-/// **Fast re-discover (Option D).** The debounce body calls
+/// **Fast re-discover (no SSDP).** The debounce body calls
 /// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~tens of ms vs the
 /// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
 /// the same wire-replacement lifecycle. The Rust generation always bumps, so
@@ -62,7 +62,7 @@ void topologyController(Ref ref) {
         // resets it, so a per-speaker NOTIFY burst yields one re-pull.
         debounce?.cancel();
         debounce = Timer(_debounceWindow, () async {
-          // Option D: fast re-discover (no SSDP). On failure (e.g. every
+          // Fast re-discover (no SSDP). On failure (e.g. every
           // cached speaker is now unreachable) fall back to a full
           // re-discover, which re-runs SSDP.
           try {

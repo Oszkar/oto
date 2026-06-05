@@ -1,5 +1,5 @@
-/// Tests for `topologyControllerProvider` (v0.5 S1; Option D fast-path since
-/// v0.5.1): a burst of `TopologyChanged` events from the unified change-event
+/// Tests for `topologyControllerProvider` (v0.5.1 fast SSDP-skipping path):
+/// a burst of `TopologyChanged` events from the unified change-event
 /// stream must be debounced (250 ms) into exactly one topology re-pull, a
 /// single event triggers exactly one re-pull, and non-topology events trigger
 /// none. The re-pull now goes through `Discovery.refreshTopology()` (the fast,

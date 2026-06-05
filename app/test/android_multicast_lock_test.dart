@@ -1,4 +1,4 @@
-/// Tests for the [AndroidMulticastLock] MethodChannel shim (v0.5 S3): verify
+/// Tests for the [AndroidMulticastLock] MethodChannel shim: verify
 /// `acquire`/`release` send the expected method names over the
 /// `me.oszkar.oto/multicast_lock` channel. The native handler and the
 /// `Platform.isAndroid`-gated wrapping in `discoveryProvider` are exercised
