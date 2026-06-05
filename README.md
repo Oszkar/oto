@@ -120,6 +120,7 @@ Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust�
 | v0.3 ✓ | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded satellites folded. Reads one-shot (no event streams yet). |
 | v0.4 ✓ | **Live property events** — reactive state via GENA for volume / mute / transport / track. One multiplexed FRB `Stream<ChangeEventDto>`; `speaker_state` reads from an event-fed cache. Topology events deferred to v0.5. |
 | v0.5 ✓ | **Hardening before UI** — topology change events, Android `MulticastLock`, model repopulate, in-band subscription-failure surfacing. Group form/break deferred to v0.5.1. |
+| v0.5.1 ✓ | **Group operations** — form/break (join/leave), group volume/mute (commands + live events), and the Option D fast topology refresh (~tens of ms, no SSDP). |
 | v0.6 | **UI** — the designed Flutter interface on the proven capability layers. |
 | v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
 
