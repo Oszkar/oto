@@ -1,9 +1,9 @@
-/// v0.5 (S1) — topology-change controller.
+/// v0.5 (S1) — topology-change controller. Fast-path (Option D) since v0.5.1.
 ///
 /// Listens on the unified [changeEventsProvider] for
 /// [rust_api.ChangeEventDto_TopologyChanged] notifications (emitted when
 /// the Sonos household is regrouped) and, after a 250 ms debounce window,
-/// invalidates [discoveryProvider] to re-pull the authoritative topology.
+/// re-pulls the authoritative topology.
 ///
 /// **Debounce rationale.** A single regroup fires one `GroupMembership`
 /// NOTIFY per affected speaker (see docs/sonos-notes.md § "Topology change
@@ -11,17 +11,18 @@
 /// The 250 ms window coalesces the burst into exactly one re-pull once the
 /// household settles.
 ///
-/// **Why a full re-discover (Option A) rather than a lightweight refresh.**
-/// v0.5 S1 deliberately uses the proven cold-start path: invalidating
-/// [discoveryProvider] re-runs `discover()`, which rebuilds the wire +
-/// event pump + topology + caches from scratch — correct by construction,
-/// with no risk of stale event-routing after a regroup (the pump's
-/// coordinator→group maps are frozen at subscribe time). The lightweight
-/// SOAP-only fast path (`refresh_topology`, ~50 ms, no SSDP) is deferred to
-/// v0.6 when the UI makes the ~3-5 s re-discover latency user-visible; the
-/// controller's contract (TopologyChanged → debounce → re-pull) is
-/// identical, so that future swap is a one-line change. See the v0.5 plan
-/// Task 5 (Option A).
+/// **Fast re-discover (Option D).** The debounce body calls
+/// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~tens of ms vs the
+/// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
+/// the same wire-replacement lifecycle. The Rust generation always bumps, so
+/// the controller invalidates [wireGenerationProvider] to force the event
+/// stream to re-subscribe against the new wire's fresh pump (clean
+/// `TopologyFilter`) — even when the new `Topology` is value-equal to the old
+/// (a no-op `TopologyChanged`), which would otherwise suppress the
+/// `discoveryProvider` transition (FRB `Topology` has value equality) and
+/// silently strand the new receiver. If the fast re-pull throws (e.g. every
+/// cached speaker is now unreachable), it falls back to a full re-discover via
+/// `ref.invalidate(discoveryProvider)`.
 ///
 /// Activated by watching [topologyControllerProvider]. The v0.6 UI watches
 /// it once the app shell exists (the same way it will watch
@@ -60,8 +61,25 @@ void topologyController(Ref ref) {
         // (Re)arm the debounce: each TopologyChanged within the window
         // resets it, so a per-speaker NOTIFY burst yields one re-pull.
         debounce?.cancel();
-        debounce = Timer(_debounceWindow, () {
-          ref.invalidate(discoveryProvider);
+        debounce = Timer(_debounceWindow, () async {
+          // Option D: fast re-discover (no SSDP). On failure (e.g. every
+          // cached speaker is now unreachable) fall back to a full
+          // re-discover, which re-runs SSDP.
+          try {
+            await ref.read(discoveryProvider.notifier).refreshTopology();
+            // refresh_topology() ALWAYS replaces the Rust wire + bumps the
+            // generation, but if the new Topology VALUE equals the current one
+            // (a no-op / duplicate TopologyChanged) the discoveryProvider state
+            // does NOT transition — FRB `Topology` has value equality — so
+            // wireGenerationProvider wouldn't recompute and changeEventsProvider
+            // wouldn't re-take the new wire's receiver, while the OLD receiver
+            // has already ended: events would silently stop. Invalidate the
+            // generation provider to force the re-subscribe regardless of
+            // value-equality (codex review of PR #74).
+            ref.invalidate(wireGenerationProvider);
+          } catch (_) {
+            ref.invalidate(discoveryProvider);
+          }
         });
       }
     });

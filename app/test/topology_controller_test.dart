@@ -1,12 +1,16 @@
-/// Tests for `topologyControllerProvider` (v0.5 S1, Option A): a burst of
-/// `TopologyChanged` events from the unified change-event stream must be
-/// debounced (250 ms) into exactly one `discoveryProvider` re-pull, a single
-/// event triggers exactly one re-pull, and non-topology events trigger none.
+/// Tests for `topologyControllerProvider` (v0.5 S1; Option D fast-path since
+/// v0.5.1): a burst of `TopologyChanged` events from the unified change-event
+/// stream must be debounced (250 ms) into exactly one topology re-pull, a
+/// single event triggers exactly one re-pull, and non-topology events trigger
+/// none. The re-pull now goes through `Discovery.refreshTopology()` (the fast,
+/// SSDP-skipped path), with a fallback to a full `discover()` re-build if that
+/// throws.
 ///
-/// FRB and a real LAN are bypassed: `changeEventsProvider` is overridden
-/// with a controllable stream and `discoveryProvider` with a counting fake,
-/// so the test observes the controller's debounce + invalidate behavior
-/// without touching Rust.
+/// FRB and a real LAN are bypassed: `changeEventsProvider` is overridden with a
+/// controllable stream and `discoveryProvider` with a fake Notifier that counts
+/// both `build()` re-discovers and `refreshTopology()` fast-path calls, so the
+/// test observes the controller's debounce + re-pull behavior without touching
+/// Rust.
 library;
 
 import 'dart:async';
@@ -35,6 +39,38 @@ const _fakeTopology = rust_api.Topology(
   ],
 );
 
+/// Shared counters mutated by the fake Notifier (it's reconstructed per
+/// build, so the counters can't live on the instance).
+class _Counters {
+  int builds = 0;
+  int refreshes = 0;
+  bool refreshThrows = false;
+}
+
+late _Counters _counters;
+
+/// Fake [Discovery] Notifier: `build()` returns the fixture (counting
+/// re-discovers / fallbacks), and `refreshTopology()` counts the fast-path and
+/// publishes a fresh `AsyncValue.data` — a real `discoveryProvider` transition,
+/// exactly like the production fast path. When `refreshThrows` is set it throws
+/// instead, so the controller's fallback to a full re-discover can be observed.
+class _FakeDiscovery extends Discovery {
+  @override
+  Future<rust_api.Topology> build() async {
+    _counters.builds++;
+    return _fakeTopology;
+  }
+
+  @override
+  Future<void> refreshTopology() async {
+    _counters.refreshes++;
+    if (_counters.refreshThrows) {
+      throw StateError('fast re-pull failed');
+    }
+    state = const AsyncValue.data(_fakeTopology);
+  }
+}
+
 /// A little longer than the controller's 250 ms debounce, so the timer has
 /// fired by the time we flush + assert.
 const _pastDebounce = Duration(milliseconds: 400);
@@ -46,24 +82,22 @@ const _testTimeout = Timeout(Duration(seconds: 8));
 void main() {
   group('topologyController', () {
     late StreamController<rust_api.ChangeEventDto> events;
-    late int discoveryBuilds;
     late ProviderContainer container;
 
     setUp(() {
       events = StreamController<rust_api.ChangeEventDto>.broadcast();
-      discoveryBuilds = 0;
+      _counters = _Counters();
       container = ProviderContainer(
         overrides: [
           // Decouple from FRB: the controller listens to this stream.
           changeEventsProvider.overrideWith((ref) => events.stream),
-          // Count (re)builds; an invalidate() by the controller forces one.
-          discoveryProvider.overrideWith((ref) async {
-            discoveryBuilds++;
-            return _fakeTopology;
-          }),
+          // Fake Notifier: counts build() re-discovers AND refreshTopology()
+          // fast-path calls.
+          discoveryProvider.overrideWith(_FakeDiscovery.new),
         ],
       );
-      // A listener so discoveryProvider actually (re)builds on invalidate.
+      // A listener so discoveryProvider actually builds (and rebuilds on a
+      // fallback invalidate).
       container.listen(discoveryProvider, (_, _) {}, fireImmediately: true);
       // Activate + keep the controller mounted (a persistent listener, not a
       // one-shot read) so its ref.listen subscription stays live for the test.
@@ -80,27 +114,37 @@ void main() {
     });
 
     /// Fire `events`, wait past the debounce window, and flush the
-    /// microtask/timer queue so the invalidate-driven rebuild has run.
+    /// microtask/timer queue so the re-pull has run.
     Future<void> settle() async {
       await Future<void>.delayed(_pastDebounce);
       await pumpEventQueue();
     }
 
-    test('a single TopologyChanged triggers one re-pull after the window',
+    test('a single TopologyChanged triggers one fast re-pull after the window',
         () async {
       await pumpEventQueue();
-      expect(discoveryBuilds, 1, reason: 'initial build only');
+      expect(_counters.builds, 1, reason: 'initial build only');
+      expect(_counters.refreshes, 0, reason: 'no fast re-pull yet');
 
       events.add(const rust_api.ChangeEventDto.topologyChanged());
       await settle();
 
-      expect(discoveryBuilds, 2, reason: 'one re-pull after the debounce window');
+      expect(
+        _counters.refreshes,
+        1,
+        reason: 'one fast re-pull (refreshTopology) after the debounce window',
+      );
+      expect(
+        _counters.builds,
+        1,
+        reason: 'fast path used — no full re-discover (build) on the happy path',
+      );
     }, timeout: _testTimeout);
 
-    test('a burst of TopologyChanged coalesces into exactly one re-pull',
+    test('a burst of TopologyChanged coalesces into exactly one fast re-pull',
         () async {
       await pumpEventQueue();
-      expect(discoveryBuilds, 1);
+      expect(_counters.builds, 1);
 
       // Three events well within the 250 ms window.
       events.add(const rust_api.ChangeEventDto.topologyChanged());
@@ -109,15 +153,16 @@ void main() {
       await settle();
 
       expect(
-        discoveryBuilds,
-        2,
+        _counters.refreshes,
+        1,
         reason: 'the per-speaker NOTIFY burst must coalesce into one re-pull',
       );
+      expect(_counters.builds, 1, reason: 'no full re-discover on the happy path');
     }, timeout: _testTimeout);
 
     test('non-topology events do not trigger a re-pull', () async {
       await pumpEventQueue();
-      expect(discoveryBuilds, 1);
+      expect(_counters.builds, 1);
 
       events.add(
         const rust_api.ChangeEventDto.volume(speakerId: 'RINCON_KITCHEN', volume: 40),
@@ -125,7 +170,24 @@ void main() {
       events.add(const rust_api.ChangeEventDto.mute(speakerId: 'RINCON_KITCHEN', muted: true));
       await settle();
 
-      expect(discoveryBuilds, 1, reason: 'only TopologyChanged re-pulls');
+      expect(_counters.refreshes, 0, reason: 'only TopologyChanged re-pulls');
+      expect(_counters.builds, 1, reason: 'only TopologyChanged re-pulls');
+    }, timeout: _testTimeout);
+
+    test('a failing fast re-pull falls back to a full re-discover', () async {
+      await pumpEventQueue();
+      expect(_counters.builds, 1, reason: 'initial build only');
+      _counters.refreshThrows = true;
+
+      events.add(const rust_api.ChangeEventDto.topologyChanged());
+      await settle();
+
+      expect(_counters.refreshes, 1, reason: 'the fast path was attempted');
+      expect(
+        _counters.builds,
+        2,
+        reason: 'on fast-path failure the controller invalidates → full re-discover',
+      );
     }, timeout: _testTimeout);
   });
 }

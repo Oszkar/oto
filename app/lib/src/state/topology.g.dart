@@ -62,4 +62,4 @@ final class TopologyControllerProvider
 }
 
 String _$topologyControllerHash() =>
-    r'2f36616724a6503d444603a8a56abe2c8ae79793';
+    r'24492faaed696d7aec97eb2760fa460484aa8ae9';

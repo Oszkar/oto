@@ -1,16 +1,14 @@
 /// Tests for `discoveryProvider`: asserts the terminal `AsyncValue.data`
-/// and `AsyncValue.error` states the provider exposes when its result is
-/// injected via `overrideWithValue`. These do *not* observe an actual
-/// loading→data/error transition — the async-throwing override form that
-/// would yield one races autoDispose on Riverpod 3.0.3 (provider gets
-/// disposed during the loading state before the throw can propagate,
-/// surfacing as `StateError: provider disposed during loading`).
-/// `overrideWithValue(AsyncValue.…)` (restored in Riverpod 3.0.2) is the
-/// canonical async-test seam for this scenario.
+/// and `AsyncValue.error` states the provider exposes.
 ///
-/// FRB and a real LAN are bypassed entirely. The compile-level smoke
-/// that the generated provider name resolves is implicit (test won't
-/// compile otherwise).
+/// Since v0.5.1 `discoveryProvider` is a class-based async Notifier
+/// ([Discovery]) so it can expose `refreshTopology()`. The test seam is now
+/// `overrideWith(() => FakeNotifier())` (not `overrideWithValue`): the fake's
+/// `build()` returns the fixture or throws, yielding the terminal data/error
+/// state synchronously for a `ProviderContainer.read`.
+///
+/// FRB and a real LAN are bypassed entirely. The compile-level smoke that the
+/// generated provider name resolves is implicit (test won't compile otherwise).
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,50 +16,83 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:oto/src/rust/api.dart' as rust_api;
 import 'package:oto/src/state/discovery.dart';
 
+const _fakeTopology = rust_api.Topology(
+  speakers: [
+    rust_api.DiscoveredSpeaker(
+      id: 'RINCON_KITCHEN',
+      roomName: 'Kitchen',
+      ip: '10.0.0.10',
+    ),
+  ],
+  groups: [
+    rust_api.DiscoveredGroup(
+      id: 'RINCON_KITCHEN:0',
+      coordinator: 'RINCON_KITCHEN',
+      members: ['RINCON_KITCHEN'],
+    ),
+  ],
+);
+
+/// Fake [Discovery] whose `build()` returns a Future that resolves immediately
+/// to the fixture (settles to `AsyncValue.data` after the microtask drain in
+/// `settledState`).
+class _DataDiscovery extends Discovery {
+  @override
+  Future<rust_api.Topology> build() async => _fakeTopology;
+}
+
+/// Fake [Discovery] whose `build()` throws, so the container surfaces
+/// `AsyncValue.error`.
+class _ErrorDiscovery extends Discovery {
+  @override
+  Future<rust_api.Topology> build() async =>
+      throw rust_api.DiscoveryError.noDevicesFound();
+}
+
 void main() {
   group('discoveryProvider', () {
-    const fakeTopology = rust_api.Topology(
-      speakers: [
-        rust_api.DiscoveredSpeaker(
-          id: 'RINCON_KITCHEN',
-          roomName: 'Kitchen',
-          ip: '10.0.0.10',
-        ),
-      ],
-      groups: [
-        rust_api.DiscoveredGroup(
-          id: 'RINCON_KITCHEN:0',
-          coordinator: 'RINCON_KITCHEN',
-          members: ['RINCON_KITCHEN'],
-        ),
-      ],
-    );
+    // Listen (keeping the autoDispose provider mounted across the async gap)
+    // and pump microtasks until the loading state settles into the terminal
+    // AsyncValue. We assert on the AsyncValue rather than awaiting
+    // `provider.future`: a class-Notifier `build()` that throws races
+    // autoDispose, so `.future` surfaces a `StateError: disposed during
+    // loading` instead of the real error (this Riverpod) — the AsyncValue is
+    // the stable seam the old `overrideWithValue` test relied on.
+    Future<AsyncValue<rust_api.Topology>> settledState(
+      ProviderContainer container,
+    ) async {
+      AsyncValue<rust_api.Topology>? last;
+      container.listen(
+        discoveryProvider,
+        (_, next) => last = next,
+        fireImmediately: true,
+      );
+      // Drain all pending microtasks so the Notifier's build() future settles
+      // (success → AsyncData, throw → AsyncError) before we read the state.
+      await pumpEventQueue();
+      return last!;
+    }
 
-    test('exposes AsyncValue.data on success', () {
+    test('exposes AsyncValue.data on success', () async {
       final container = ProviderContainer(
-        overrides: [
-          discoveryProvider.overrideWithValue(const AsyncValue.data(fakeTopology)),
-        ],
+        overrides: [discoveryProvider.overrideWith(_DataDiscovery.new)],
       );
       addTearDown(container.dispose);
 
-      final state = container.read(discoveryProvider);
+      final state = await settledState(container);
       expect(state.hasValue, isTrue);
-      expect(state.value, equals(fakeTopology));
+      expect(state.value, equals(_fakeTopology));
     });
 
-    test('exposes DiscoveryError as AsyncValue.error', () {
-      final error = rust_api.DiscoveryError.noDevicesFound();
+    test('exposes DiscoveryError as AsyncValue.error', () async {
       final container = ProviderContainer(
-        overrides: [
-          discoveryProvider.overrideWithValue(AsyncValue.error(error, StackTrace.empty)),
-        ],
+        overrides: [discoveryProvider.overrideWith(_ErrorDiscovery.new)],
       );
       addTearDown(container.dispose);
 
-      final state = container.read(discoveryProvider);
+      final state = await settledState(container);
       expect(state.hasError, isTrue);
-      expect(state.error, equals(error));
+      expect(state.error, isA<rust_api.DiscoveryError>());
     });
   });
 }

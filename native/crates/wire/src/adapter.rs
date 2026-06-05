@@ -53,6 +53,14 @@ pub struct SonosWire {
     /// moved into the pump thread and can't take new watches after);
     /// `discover_with` enforces this ordering.
     topology_requested: AtomicBool,
+    /// v0.5.1 (Option D): seed responder IPs for an SSDP-skipped discover.
+    /// Empty for `new()` → `discover()` runs the full multi-NIC SSDP sweep.
+    /// Non-empty for `new_seeded()` → `discover()` skips SSDP and uses these
+    /// as the `GetZoneGroupState` responder candidates (PerNetwork: any
+    /// reachable one answers for the whole household). This makes a regroup
+    /// re-discover fast (~50 ms vs ~3 s) while still flowing through the
+    /// proven wire-replacement lifecycle (fresh pump, clean TopologyFilter).
+    seed_ips: Vec<IpAddr>,
 }
 
 struct EventsState {
@@ -68,6 +76,20 @@ struct EventsState {
 
 impl SonosWire {
     pub fn new() -> Self {
+        Self::with_seed_ips(Vec::new())
+    }
+
+    /// v0.5.1 (Option D): construct a wire whose `discover()` skips the SSDP
+    /// sweep and instead uses `seed_ips` as the `GetZoneGroupState` responder
+    /// candidates. Used by `oto-app::refresh_topology` to install a FRESH wire
+    /// (fresh pump, gen bump → Dart re-subscribes) seeded from the speaker IPs
+    /// the current wire already knows — a "discover() minus SSDP" fast path.
+    /// `new()` keeps `seed_ips` empty, so the full-SSDP behavior is unchanged.
+    pub fn new_seeded(seed_ips: Vec<IpAddr>) -> Self {
+        Self::with_seed_ips(seed_ips)
+    }
+
+    fn with_seed_ips(seed_ips: Vec<IpAddr>) -> Self {
         Self {
             client: SonosClient::new(),
             id_to_addr: Mutex::new(HashMap::new()),
@@ -76,6 +98,7 @@ impl SonosWire {
             id_to_name: Mutex::new(HashMap::new()),
             events_state: Mutex::new(None),
             topology_requested: AtomicBool::new(false),
+            seed_ips,
         }
     }
 
@@ -310,38 +333,46 @@ fn populate_models(snapshot: &mut DiscoverySnapshot) {
 
 impl Wire for SonosWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
-        let locations = ssdp::discover_locations(SSDP_TIMEOUT)?;
-        if locations.is_empty() {
-            return Err(WireError::NoDevicesFound);
+        // v0.5.1 (Option D): when seeded, skip the SSDP sweep entirely and use
+        // the seed IPs as the GetZoneGroupState responder candidates — any
+        // reachable speaker answers for the whole household (PerNetwork). This
+        // is the "discover() minus SSDP" fast path a regroup re-discover uses.
+        // Unseeded (`new()`) runs the full multi-NIC SSDP path as before.
+        let candidates: Vec<String> = if self.seed_ips.is_empty() {
+            let locations = ssdp::discover_locations(SSDP_TIMEOUT)?;
+            if locations.is_empty() {
+                return Err(WireError::NoDevicesFound);
+            }
+            // C2: a LOCATION that doesn't yield a parseable IP is dropped here;
+            // if every one drops, `candidates` is empty and the diagnostic
+            // below fires (distinct from the empty-LAN NoDevicesFound above).
+            locations.iter().filter_map(|loc| extract_ip(loc)).collect()
+        } else {
+            self.seed_ips.iter().map(IpAddr::to_string).collect()
+        };
+        if candidates.is_empty() {
+            // Only reachable on the SSDP path: responders were found but none
+            // had a parseable LOCATION. (Seeded candidates are always valid
+            // IPs.) Surface a precise diagnostic, not the misleading
+            // NoDevicesFound.
+            return Err(WireError::Backend(
+                "SSDP found responder(s) but none had a parseable LOCATION; \
+                 cannot reach ZoneGroupTopology"
+                    .into(),
+            ));
         }
         // PerNetwork: any reachable speaker returns the whole household.
         // Try responders until one answers (a vanished/asleep unit fails).
         let mut last_err = WireError::NoDevicesFound;
         let mut groups = None;
-        // C2: track whether at least one responder had a parseable LOCATION so
-        // we can surface a precise error when all locations are unparseable.
-        let mut attempted = false;
-        for loc in &locations {
-            let Some(ip) = extract_ip(loc) else { continue };
-            attempted = true;
-            match control::fetch_zone_group_state(&self.client, &ip) {
+        for ip in &candidates {
+            match control::fetch_zone_group_state(&self.client, ip) {
                 Ok(g) => {
                     groups = Some(g);
                     break;
                 }
                 Err(e) => last_err = e,
             }
-        }
-        // If groups is still None but no responder was ever attempted, every
-        // LOCATION was unparseable — surface a precise diagnostic (not the
-        // misleading NoDevicesFound).
-        if groups.is_none() && !attempted {
-            return Err(WireError::Backend(format!(
-                "SSDP found {} responder(s) but none had a parseable LOCATION \
-                 (e.g. {}); cannot reach ZoneGroupTopology",
-                locations.len(),
-                locations.first().map(String::as_str).unwrap_or("?"),
-            )));
         }
         let groups = groups.ok_or(last_err)?;
         let mut snapshot = to_snapshot(groups);
@@ -547,6 +578,28 @@ mod tests {
         assert_eq!(
             extract_ip("http://10.83.0.10:1400/xml/device_description.xml"),
             Some("10.83.0.10".to_string())
+        );
+    }
+
+    /// `new()` leaves `seed_ips` empty → `discover()` takes the full-SSDP
+    /// branch; `new_seeded()` stores the IPs → `discover()` skips SSDP and
+    /// uses them as responder candidates. Pin the field wiring without a
+    /// network call (the SSDP-skip behavior itself is hardware-gated in
+    /// `tests/live_grouping.rs::live_seeded_fast_rediscover`).
+    #[test]
+    fn new_seeded_stores_ips_new_is_empty() {
+        assert!(
+            SonosWire::new().seed_ips.is_empty(),
+            "new() must not seed any IPs (full-SSDP behavior unchanged)"
+        );
+        let ips = vec![
+            "10.0.0.1".parse::<IpAddr>().unwrap(),
+            "10.0.0.2".parse::<IpAddr>().unwrap(),
+        ];
+        let wire = SonosWire::new_seeded(ips.clone());
+        assert_eq!(
+            wire.seed_ips, ips,
+            "new_seeded() must store the seed IPs for the SSDP-skip path"
         );
     }
 

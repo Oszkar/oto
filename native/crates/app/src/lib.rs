@@ -237,6 +237,38 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
     discover_with(|| Box::new(SonosWire::new()))
 }
 
+/// v0.5.1 (Option D): the topology fast-path — a "discover() minus SSDP".
+///
+/// Re-pull authoritative topology from the CURRENT wire (no SSDP) to get the
+/// reachable speaker IPs, then install a FRESH wire seeded from them through
+/// the proven wire-replacement lifecycle. Going through `discover_with` (not a
+/// same-wire pump respawn) is load-bearing: it bumps the generation AND, on the
+/// Dart side, drives a `discoveryProvider` transition, so `wireGeneration`
+/// recomputes and the event stream re-subscribes against the new wire's fresh
+/// pump (clean `TopologyFilter`). A same-wire respawn would bump the Rust
+/// generation but NOT trigger the Dart `discoveryProvider` transition, so Dart
+/// would never re-take the new receiver and events would silently stop after
+/// the first regroup.
+pub fn refresh_topology() -> Result<DiscoverySnapshot, WireError> {
+    // `with_wire` releases SLOT before returning; `refresh_topology_with` →
+    // `discover_with` then acquires DISCOVER_LOCK → SLOT independently — no lock
+    // inversion. Two GetZoneGroupState SOAP calls happen (one here for the IPs,
+    // one in the seeded `discover()`), each ~tens of ms — still far under the
+    // ~3-5 s SSDP sweep this replaces.
+    let snapshot = with_wire(|w| w.refresh_topology())?;
+    let ips: Vec<std::net::IpAddr> = snapshot.speakers.iter().map(|s| s.ip).collect();
+    refresh_topology_with(move || Box::new(SonosWire::new_seeded(ips)))
+}
+
+/// Test seam (mirrors `discover`/`discover_with`): install a fresh wire via the
+/// proven `discover_with` path. Production passes the seeded-`SonosWire`
+/// factory (see [`refresh_topology`]); tests pass a `MockWire` factory.
+pub fn refresh_topology_with(
+    make: impl FnOnce() -> BoxedWire,
+) -> Result<DiscoverySnapshot, WireError> {
+    discover_with(make)
+}
+
 /// Start playback on `group` (routed to its coordinator).
 pub fn play(group: &GroupId) -> Result<(), WireError> {
     let result = with_wire(|w| w.play(group));
@@ -850,6 +882,50 @@ mod tests {
             mock_probe.topology_subscribed(),
             "discover_with must call subscribe_topology on the installed wire"
         );
+    }
+
+    /// v0.5.1 (Option D): `refresh_topology_with` installs a fresh wire via the
+    /// proven `discover_with` path — so it returns a snapshot AND bumps the
+    /// generation, exactly like a re-discover. (Production's `refresh_topology`
+    /// first re-pulls IPs from the current wire, then calls this with a
+    /// seeded-`SonosWire` factory; here we drive the seam directly with a
+    /// `MockWire`, which is what the FRB layer relies on for the gen bump that
+    /// makes Dart re-subscribe.)
+    #[test]
+    fn refresh_topology_with_installs_fresh_wire_and_bumps_generation() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        clear_slot();
+
+        // Seed an initial wire so there's a generation to bump from.
+        discover_with(|| Box::new(MockWire::default())).expect("initial discover ok");
+        let gen_before = current_generation();
+
+        // The fast-path seam: a fresh wire goes in via discover_with, so the
+        // snapshot comes back and the generation advances by one.
+        let snap = refresh_topology_with(|| Box::new(MockWire::default()))
+            .expect("refresh_topology_with ok");
+        assert_eq!(snap.speakers.len(), 3, "fixture snapshot returned");
+        assert_eq!(
+            current_generation(),
+            gen_before + 1,
+            "refresh installs a fresh wire → generation bumps (Dart re-subscribes)"
+        );
+    }
+
+    /// Production `refresh_topology` re-pulls the topology from the CURRENT wire
+    /// (via `with_wire(refresh_topology)`) before seeding the new wire — so it
+    /// requires a wire to be installed first. Pin that precondition: with no
+    /// wire installed it returns `NotFound`, same as any other `with_wire`
+    /// command.
+    #[test]
+    fn refresh_topology_without_wire_is_not_found() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        clear_slot();
+        assert!(matches!(refresh_topology(), Err(WireError::NotFound(_))));
     }
 
     // ── S2: SubscriptionError reactive emission ───────────────────────────
