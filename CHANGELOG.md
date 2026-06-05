@@ -23,12 +23,6 @@ v0.5.1 — Group operations: form/break, group volume/mute, and a much faster re
 
 - Leaving the coordinator of a 3+-room group relies on Sonos's own coordinator re-election (oto issues the standard "become standalone" command and re-reads the result); this path wasn't exercised on the 2-zone dev LAN.
 
-### Housekeeping
-
-- Durable Sonos protocol facts (group SOAP, group-scoped property reads, topology settle latency) recorded in `docs/sonos-notes.md`; the milestone's design + plan docs are retired post-release. Two event-lifecycle bugs were caught by independent code review before merge.
-
-Validated on real hardware: a 2-speaker LAN (Sonos Beam + Sonos One).
-
 ## [0.5.0] - 2026-06-03
 
 v0.5 — Hardening before the v0.6 UI: live topology events, subscription-failure surfacing, Android release discovery, and speaker-model names. All event additions ride the single v0.4 `Stream<ChangeEventDto>` — no stream-surface redesign.
