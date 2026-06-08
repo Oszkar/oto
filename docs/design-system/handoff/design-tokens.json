@@ -1,0 +1,113 @@
+{
+  "$meta": {
+    "product": "oto — speaker controller",
+    "source": "Extracted from hifi-primitives.jsx (hfTokens) + measured usage across v3. Mobile frame 390×844.",
+    "note": "Platform-neutral. Colors resolved to concrete rgba/hex — no CSS color-mix/oklab (Flutter can't consume those). accentSoft is the accent pre-blended onto transparent at the documented alpha.",
+    "flutterMapping": {
+      "colors": "ColorScheme + a custom ThemeExtension for the non-Material roles (ink2, inkMute, inkFaint, fill, fillStrong, line, success, spotify, accentSoft).",
+      "type": "TextTheme — sizes are logical px == Flutter logical pixels 1:1.",
+      "opacityInks": "ink/ink2/inkMute/inkFaint are one base color at descending alpha. In Flutter use baseColor.withOpacity(a) rather than 4 separate hex values."
+    }
+  },
+
+  "color": {
+    "accents": {
+      "_doc": "Default accent is teal. User-selectable. light/dark are the resolved swatch; soft is the same hue at low alpha used for badges/pills.",
+      "teal":   { "light": "#0f7a72", "dark": "#5dd6c8", "softLight": "rgba(15,122,114,0.14)",  "softDark": "rgba(93,214,200,0.22)" },
+      "indigo": { "light": "#3f4cb8", "dark": "#8a96ff", "softLight": "rgba(63,76,184,0.14)",   "softDark": "rgba(138,150,255,0.22)" },
+      "amber":  { "light": "#a85a1a", "dark": "#f0b070", "softLight": "rgba(168,90,26,0.14)",    "softDark": "rgba(240,176,112,0.22)" },
+      "slate":  { "light": "#3a4554", "dark": "#a8b3c2", "softLight": "rgba(58,69,84,0.14)",     "softDark": "rgba(168,179,194,0.22)" }
+    },
+    "light": {
+      "bg":         "#f6f5f1",
+      "surface":    "#ffffff",
+      "surface2":   "#f0eee9",
+      "elevated":   "#ffffff",
+      "line":       "rgba(20,20,20,0.07)",
+      "lineStrong": "rgba(20,20,20,0.16)",
+      "ink":        "rgba(15,15,15,0.96)",
+      "ink2":       "rgba(15,15,15,0.78)",
+      "inkMute":    "rgba(15,15,15,0.58)",
+      "inkFaint":   "rgba(15,15,15,0.46)",
+      "fill":       "rgba(20,20,20,0.035)",
+      "fillStrong": "rgba(20,20,20,0.07)",
+      "onAccent":   "#ffffff",
+      "danger":     "#b34a3a",
+      "success":    "#3ea76f",
+      "spotify":    "#1db954"
+    },
+    "dark": {
+      "bg":         "#0e0e10",
+      "surface":    "#16161a",
+      "surface2":   "#1d1d22",
+      "elevated":   "#22222a",
+      "line":       "rgba(255,255,255,0.07)",
+      "lineStrong": "rgba(255,255,255,0.14)",
+      "ink":        "rgba(255,255,255,0.95)",
+      "ink2":       "rgba(255,255,255,0.78)",
+      "inkMute":    "rgba(255,255,255,0.62)",
+      "inkFaint":   "rgba(255,255,255,0.46)",
+      "fill":       "rgba(255,255,255,0.04)",
+      "fillStrong": "rgba(255,255,255,0.10)",
+      "onAccent":   "#0e0e10",
+      "danger":     "#e08a7a",
+      "success":    "#5cc497",
+      "spotify":    "#1db954"
+    },
+    "_roles": {
+      "ink": "primary text", "ink2": "secondary text / icons", "inkMute": "meta, captions (AA-passing)", "inkFaint": "decorative only — never load-bearing text",
+      "line": "hairline dividers", "lineStrong": "emphasized borders",
+      "fill": "subtle button/track bg", "fillStrong": "pressed/active fill",
+      "danger": "destructive (ungroup, clear, offline)", "success": "online/connected status dot", "spotify": "Spotify Connect brand dot — branded exception, do not reuse"
+    }
+  },
+
+  "type": {
+    "family": { "sans": "Geist", "mono": "Geist Mono" },
+    "weights": { "regular": 400, "medium": 500, "semibold": 600, "bold": 700 },
+    "_familyNote": "Geist is open-source (geist-font / Vercel). Bundle the TTFs in the Flutter app; do not rely on a system fallback for brand consistency.",
+    "scale": {
+      "displayLg":   { "size": 34, "weight": 700, "tracking": "-0.025em", "lineHeight": 1.05, "use": "Now Playing title" },
+      "titleScreen": { "size": 26, "weight": 700, "tracking": "-0.025em", "lineHeight": 1.05, "use": "Screen header — 'Speakers'" },
+      "titleSection":{ "size": 22, "weight": 700, "tracking": "-0.02em",  "use": "Section / room-detail title, empty-state heads" },
+      "titleCard":   { "size": 14.5,"weight": 600, "tracking": "-0.005em", "use": "Card/row/group title" },
+      "body":        { "size": 14,  "weight": 400, "tracking": "-0.005em", "use": "Default body" },
+      "bodySm":      { "size": 13,  "weight": 400, "use": "Empty-state copy, secondary body" },
+      "label":       { "size": 12.5,"weight": 600, "use": "Buttons, field labels, now-playing meta" },
+      "caption":     { "size": 11.5,"weight": 400, "use": "Row subtitle, status line" },
+      "micro":       { "size": 10.5,"weight": 600, "use": "Pills, small meta" },
+      "overline":    { "size": 10.5,"weight": 700, "tracking": "0.06em", "transform": "uppercase", "use": "'GROUP VOLUME', 'ROOM LEVELS', section eyebrows" },
+      "badge":       { "size": 9.5, "weight": 700, "use": "Group count badge" }
+    },
+    "_desktopNote": "Tablet/desktop layouts scale the display sizes up (NowPlaying title 34→38). Mobile values above are canonical for the Flutter phone build."
+  },
+
+  "space": {
+    "_doc": "De-facto scale measured from gaps/padding. Mostly even; codified here so Flutter uses named steps, not literals.",
+    "xs": 4, "sm": 6, "md": 8, "lg": 10, "gutter": 12, "card": 14, "screen": 18, "section": 22
+  },
+
+  "radius": {
+    "xs": 4, "sm": 6, "control": 7, "input": 9, "art": 10, "button": 12, "card": 16, "pill": 999,
+    "_doc": "Cards 16, primary buttons 12, inputs/segmented 9, small chips 6–7, album art 10, fully-round controls use pill."
+  },
+
+  "elevation": {
+    "card":   "0 1px 2px rgba(0,0,0,0.04)",
+    "float":  "0 6px 18px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)",
+    "floatLg":"0 8px 22px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.04)",
+    "_doc": "Bottom strip / floating group bar uses float–floatLg. Flat cards use the hairline border, not shadow."
+  },
+
+  "touch": {
+    "minTarget": 44,
+    "_doc": "Every interactive control has a >=44px tap area (transparent hit-slop is fine — the visible glyph can be smaller, e.g. 34px circle inside a 44px button)."
+  },
+
+  "icons": {
+    "_doc": "Custom inline-SVG set on a 24×24 viewBox, 1.7 default stroke (filled glyphs noted). Rebuild as a Flutter icon font or SVG assets. Standard glyphs can map to Material/Lucide; the device + brand glyphs below are custom and must be reproduced.",
+    "standard": ["play","pause","next","prev","shuffle","repeat","volume","volume-low","volume-mute","search","plus","check","chevron-right","chevron-down","chevron-up","chevron-left","queue","moon","mic","sliders","wave","tv","timer","link","kebab","drag","wifi","signal"],
+    "custom":   ["speaker","speakers","soundbar","group","oto-mark"],
+    "_customNote": "speaker/speakers/soundbar are the room-type glyphs; oto-mark is the brand mark (see brand/ SVGs)."
+  }
+}

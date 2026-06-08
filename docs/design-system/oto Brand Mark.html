@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>oto — Brand Mark</title>
+<link rel="icon" type="image/png" sizes="32x32" href="brand/favicon-32.png"/>
+<link rel="icon" type="image/png" sizes="16x16" href="brand/favicon-16.png"/>
+<link rel="apple-touch-icon" sizes="180x180" href="brand/apple-touch-icon-180.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --bg:#f6f5f1; --surface:#ffffff; --ink:#0f0f0f; --ink2:rgba(15,15,15,0.78);
+    --mute:rgba(15,15,15,0.58); --faint:rgba(15,15,15,0.46);
+    --line:rgba(20,20,20,0.10); --accent:#0f7a72; --dark:#16161a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Geist",ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:-0.01em; -webkit-font-smoothing:antialiased;
+    padding:64px 40px 96px;
+  }
+  .wrap{max-width:1040px;margin:0 auto;}
+  .eyebrow{font-family:"Geist Mono",monospace;font-size:12px;letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 14px;}
+  h1{font-size:46px;font-weight:700;letter-spacing:-0.03em;margin:0 0 12px;line-height:1.02;}
+  .lede{font-size:16px;color:var(--mute);max-width:560px;line-height:1.55;margin:0 0 56px;}
+  .sec{font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;
+    color:var(--faint);margin:0 0 20px;padding-bottom:12px;border-bottom:1px solid var(--line);}
+  .block{margin-bottom:64px;}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .card{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--surface);
+    display:flex;flex-direction:column;}
+  .swatch{height:200px;display:flex;align-items:center;justify-content:center;}
+  .swatch.light{background:var(--surface);}
+  .swatch.warm{background:var(--bg);}
+  .swatch.dark{background:var(--dark);}
+  .swatch.accent{background:color-mix(in oklab,var(--accent) 12%, #ffffff);}
+  .meta{padding:16px 18px;border-top:1px solid var(--line);display:flex;
+    align-items:center;justify-content:space-between;gap:10px;}
+  .meta .name{font-size:14px;font-weight:600;}
+  .meta .file{font-family:"Geist Mono",monospace;font-size:11px;color:var(--faint);}
+  .dl{font-family:"Geist Mono",monospace;font-size:11px;text-decoration:none;
+    color:var(--accent);border:1px solid color-mix(in oklab,var(--accent) 30%, transparent);
+    padding:5px 10px;border-radius:7px;white-space:nowrap;}
+  .dl:hover{background:color-mix(in oklab,var(--accent) 8%, transparent);}
+  .lockgrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .lockgrid .swatch{height:160px;}
+  .rules{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;}
+  .rule{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:24px;}
+  .rule h3{font-size:15px;font-weight:600;margin:0 0 8px;}
+  .rule p{font-size:13.5px;color:var(--mute);line-height:1.55;margin:0;}
+  .clearbox{position:relative;height:150px;display:flex;align-items:center;justify-content:center;
+    margin-top:18px;background:var(--bg);border-radius:12px;}
+  .clearbox .pad{position:absolute;inset:38px;border:1px dashed color-mix(in oklab,var(--accent) 45%, transparent);border-radius:8px;}
+  .sizes{display:flex;align-items:flex-end;gap:28px;margin-top:18px;}
+  .sizes .s{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .sizes .s span{font-family:"Geist Mono",monospace;font-size:11px;color:var(--faint);}
+  .note{font-size:12.5px;color:var(--faint);margin-top:14px;line-height:1.5;}
+  img.mk{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Brand · Mark</p>
+  <h1>oto</h1>
+  <p class="lede">The oto mark is <em>Nested Rooms</em> — three concentric rounded squares reading as speakers nested inside a home. The solid center is the room you're in; the outlines recede into the rest of the house.</p>
+
+  <div class="block">
+    <p class="sec">Primary mark</p>
+    <div class="grid">
+      <div class="card">
+        <div class="swatch warm"><img class="mk" src="brand/oto-mark.svg" width="96" height="96" alt="oto mark, primary"/></div>
+        <div class="meta"><div><div class="name">Primary</div></div><a class="dl" href="brand/oto-mark.svg" download>oto-mark.svg</a></div>
+      </div>
+      <div class="card">
+        <div class="swatch light"><img class="mk" src="brand/oto-mark-black.svg" width="96" height="96" alt="oto mark, black"/></div>
+        <div class="meta"><div><div class="name">Black</div></div><a class="dl" href="brand/oto-mark-black.svg" download>oto-mark-black.svg</a></div>
+      </div>
+      <div class="card">
+        <div class="swatch dark"><img class="mk" src="brand/oto-mark-white.svg" width="96" height="96" alt="oto mark, white"/></div>
+        <div class="meta"><div><div class="name">White</div></div><a class="dl" href="brand/oto-mark-white.svg" download>oto-mark-white.svg</a></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block">
+    <p class="sec">Lockup · mark + wordmark</p>
+    <div class="lockgrid">
+      <div class="card">
+        <div class="swatch warm"><img class="mk" src="brand/oto-lockup-black.svg" width="252" height="96" alt="oto lockup, black"/></div>
+        <div class="meta"><div><div class="name">Black lockup</div></div><a class="dl" href="brand/oto-lockup-black.svg" download>oto-lockup-black.svg</a></div>
+      </div>
+      <div class="card">
+        <div class="swatch dark"><img class="mk" src="brand/oto-lockup-white.svg" width="252" height="96" alt="oto lockup, white"/></div>
+        <div class="meta"><div><div class="name">White lockup</div></div><a class="dl" href="brand/oto-lockup-white.svg" download>oto-lockup-white.svg</a></div>
+      </div>
+    </div>
+    <p class="note">Wordmark is set in <strong>Geist 700</strong>, tracking −0.02em. The lockup SVGs reference the live font; outline the text before handing to external vendors who may not have Geist installed.</p>
+  </div>
+
+  <div class="block">
+    <p class="sec">Raster · PNG & favicon</p>
+    <div class="grid">
+      <div class="card">
+        <div class="swatch warm"><img class="mk" src="brand/oto-mark-512.png" width="96" height="96" alt="oto mark 512px png"/></div>
+        <div class="meta"><div><div class="name">Mark · 512px</div></div><a class="dl" href="brand/oto-mark-512.png" download>oto-mark-512.png</a></div>
+      </div>
+      <div class="card">
+        <div class="swatch warm"><img class="mk" src="brand/oto-icon-512.png" width="96" height="96" style="border-radius:21px" alt="oto app icon"/></div>
+        <div class="meta"><div><div class="name">App icon · 512px</div></div><a class="dl" href="brand/oto-icon-512.png" download>oto-icon-512.png</a></div>
+      </div>
+      <div class="card">
+        <div class="swatch warm">
+          <div style="display:flex;align-items:flex-end;gap:22px;">
+            <div class="s" style="display:flex;flex-direction:column;align-items:center;gap:8px;"><img class="mk" src="brand/favicon-48.png" width="48" height="48" style="border-radius:11px" alt="favicon 48"/><span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--faint)">48</span></div>
+            <div class="s" style="display:flex;flex-direction:column;align-items:center;gap:8px;"><img class="mk" src="brand/favicon-32.png" width="32" height="32" style="border-radius:7px" alt="favicon 32"/><span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--faint)">32</span></div>
+            <div class="s" style="display:flex;flex-direction:column;align-items:center;gap:8px;"><img class="mk" src="brand/favicon-16.png" width="16" height="16" style="border-radius:4px" alt="favicon 16"/><span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--faint)">16</span></div>
+          </div>
+        </div>
+        <div class="meta"><div><div class="name">Favicon</div></div><a class="dl" href="brand/favicon-32.png" download>favicon-32.png</a></div>
+      </div>
+    </div>
+    <p class="note">The favicon and app icon use a solid teal tile with white nested rooms — the faint outline rings of the primary mark drop out below ~18px, so small sizes need the filled treatment. Apple touch icon (180px) is included in <code>brand/</code>.</p>
+  </div>
+
+  <div class="block">
+    <p class="sec">Usage</p>
+    <div class="rules">
+      <div class="rule">
+        <h3>Clear space</h3>
+        <p>Keep padding of at least the center square's width on all sides. Nothing intrudes inside the dashed boundary.</p>
+        <div class="clearbox"><img class="mk" src="brand/oto-mark.svg" width="74" height="74" alt=""/><div class="pad"></div></div>
+      </div>
+      <div class="rule">
+        <h3>Minimum size</h3>
+        <p>Don't render the mark below 18px — the outer ring's 0.28 opacity drops out at small sizes. Use the solid-center-only treatment if you need a favicon.</p>
+        <div class="sizes">
+          <div class="s"><img class="mk" src="brand/oto-mark.svg" width="56" height="56" alt=""/><span>56</span></div>
+          <div class="s"><img class="mk" src="brand/oto-mark.svg" width="32" height="32" alt=""/><span>32</span></div>
+          <div class="s"><img class="mk" src="brand/oto-mark.svg" width="18" height="18" alt=""/><span>18 min</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Primary color is the teal accent <strong>#0f7a72</strong> (light) / <strong>#5dd6c8</strong> (dark). Use the black or white monochrome marks anywhere the teal would clash or fail contrast.</p>
+  </div>
+</div>
+</body>
+</html>
