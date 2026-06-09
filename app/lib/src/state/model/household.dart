@@ -30,11 +30,16 @@ class Household {
           mapEquals(rooms, other.rooms) &&
           mapEquals(groups, other.groups);
 
+  // Order-independent so it stays consistent with the order-independent
+  // `mapEquals` above: equal Households (same entries, any insertion order)
+  // must hash equal (codex review, PR #80).
   @override
   int get hashCode => Object.hash(
-    Object.hashAll(rooms.keys),
-    Object.hashAll(rooms.values),
-    Object.hashAll(groups.keys),
-    Object.hashAll(groups.values),
+    Object.hashAllUnordered(
+      rooms.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
+    Object.hashAllUnordered(
+      groups.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
   );
 }

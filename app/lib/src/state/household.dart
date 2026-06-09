@@ -25,47 +25,54 @@ part 'household.g.dart';
 class HouseholdNotifier extends _$HouseholdNotifier {
   @override
   Household build() {
+    // Future discovery transitions (regroup / re-discover) fold in here,
+    // preserving accumulated per-speaker/-group state via `previous: state`.
     ref.listen(discoveryProvider, (_, next) {
       next.whenData(
         (topo) => state = householdFromTopology(topo, previous: state),
       );
-    }, fireImmediately: true);
+    });
     ref.listen(changeEventsProvider, (_, next) {
       next.whenData((e) => state = applyEvent(state, e));
     });
-    return const Household();
+    // Seed the INITIAL skeleton from discovery's current value. We read here
+    // rather than rely on a `fireImmediately` listener: an immediate fire runs
+    // during build(), so it would set `state` (reading an uninitialized `state`
+    // via `previous: state`) only for `return const Household()` to overwrite
+    // it -- leaving the UI empty whenever discovery already resolved before
+    // this provider was first watched (codex review, PR #80).
+    return switch (ref.read(discoveryProvider)) {
+      AsyncData(:final value) => householdFromTopology(value),
+      _ => const Household(),
+    };
   }
 
   /// Optimistically reflect a per-speaker volume change before the event
   /// echoes back. Mirrors a `Volume` event.
-  void setOptimisticVolume(String speakerId, int v) =>
-      state = applyEvent(
-        state,
-        ChangeEventDto.volume(speakerId: speakerId, volume: v),
-      );
+  void setOptimisticVolume(String speakerId, int v) => state = applyEvent(
+    state,
+    ChangeEventDto.volume(speakerId: speakerId, volume: v),
+  );
 
   /// Optimistically reflect a per-speaker mute change. Mirrors a `Mute` event.
-  void setOptimisticMuted(String speakerId, bool m) =>
-      state = applyEvent(
-        state,
-        ChangeEventDto.mute(speakerId: speakerId, muted: m),
-      );
+  void setOptimisticMuted(String speakerId, bool m) => state = applyEvent(
+    state,
+    ChangeEventDto.mute(speakerId: speakerId, muted: m),
+  );
 
   /// Optimistically reflect a group master volume change. Mirrors a
   /// `GroupVolume` event (the only path to a group volume value).
-  void setOptimisticGroupVolume(String groupId, int v) =>
-      state = applyEvent(
-        state,
-        ChangeEventDto.groupVolume(groupId: groupId, volume: v),
-      );
+  void setOptimisticGroupVolume(String groupId, int v) => state = applyEvent(
+    state,
+    ChangeEventDto.groupVolume(groupId: groupId, volume: v),
+  );
 
   /// Optimistically reflect a group master mute change. Mirrors a
   /// `GroupMute` event (the only path to a group mute value).
-  void setOptimisticGroupMuted(String groupId, bool m) =>
-      state = applyEvent(
-        state,
-        ChangeEventDto.groupMute(groupId: groupId, muted: m),
-      );
+  void setOptimisticGroupMuted(String groupId, bool m) => state = applyEvent(
+    state,
+    ChangeEventDto.groupMute(groupId: groupId, muted: m),
+  );
 
   /// Optimistically reflect a group transport change. Mirrors a `Playback`
   /// event; the view enum is mapped back to the DTO at the boundary.
