@@ -94,6 +94,14 @@ class PlaybackController with _Reconciling {
     );
   }
 
+  /// Skip to the next track. No optimistic state: the authoritative `Track`
+  /// event drives the change, and the shared [send] re-discovers on a stale-id
+  /// `NotFound`. (Deferred from Task 4 to the Now Playing screen.)
+  Future<void> next(String groupId) => send(() => api.next(groupId));
+
+  /// Skip to the previous track. Same no-optimistic-state rationale as [next].
+  Future<void> previous(String groupId) => send(() => api.previous(groupId));
+
   /// Mid-drag volume: optimistic now, SOAP send throttled to the trailing edge.
   void setVolume(String speakerId, int v) {
     _volAnchor.putIfAbsent(

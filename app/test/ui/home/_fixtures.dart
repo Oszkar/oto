@@ -36,6 +36,16 @@ class SpyPlayback extends PlaybackController {
   }
 
   @override
+  Future<void> next(String groupId) async {
+    calls.add('next($groupId)');
+  }
+
+  @override
+  Future<void> previous(String groupId) async {
+    calls.add('previous($groupId)');
+  }
+
+  @override
   void setVolume(String speakerId, int v) {
     calls.add('setVolume($speakerId,$v)');
   }
