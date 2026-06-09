@@ -178,7 +178,7 @@ class _SourceRow extends ConsumerWidget {
               key: Key('strip-play-${source.id}'),
               onPressed: () => ref
                   .read(playbackControllerProvider)
-                  .togglePlay(source.id, transport ?? PlaybackState.playing),
+                  .togglePlay(source.id, transport ?? PlaybackState.paused),
               icon: Container(
                 width: 34,
                 height: 34,

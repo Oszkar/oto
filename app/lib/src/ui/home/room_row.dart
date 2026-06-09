@@ -168,7 +168,7 @@ class RoomRow extends ConsumerWidget {
               value: value,
               onChanged: hasVolume
                   ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
-                  : (_) {},
+                  : null,
               onChangeEnd: hasVolume
                   ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
                   : null,

@@ -252,7 +252,7 @@ class NowPlayingScreen extends ConsumerWidget {
             value: value,
             onChanged: hasVolume
                 ? (v) => ctrl.setGroupVolume(groupId, (v * 100).round())
-                : (_) {},
+                : null,
             onChangeEnd: hasVolume
                 ? (v) => ctrl.setGroupVolumeEnd(groupId, (v * 100).round())
                 : null,

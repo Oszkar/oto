@@ -247,7 +247,7 @@ class GroupCard extends ConsumerWidget {
           // Group-master routes through the GroupingController, never per-room.
           onChanged: hasVolume
               ? (v) => ctrl.setGroupVolume(groupId, (v * 100).round())
-              : (_) {},
+              : null,
           onChangeEnd: hasVolume
               ? (v) => ctrl.setGroupVolumeEnd(groupId, (v * 100).round())
               : null,
@@ -285,7 +285,7 @@ class GroupCard extends ConsumerWidget {
             value: value,
             onChanged: hasVolume
                 ? (v) => ctrl.setVolume(roomId, (v * 100).round())
-                : (_) {},
+                : null,
             onChangeEnd: hasVolume
                 ? (v) => ctrl.setVolumeEnd(roomId, (v * 100).round())
                 : null,

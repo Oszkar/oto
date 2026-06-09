@@ -41,4 +41,19 @@ void main() {
     await t.pumpAndSettle();
     expect(changed, isNotNull);
   });
+
+  testWidgets('OtoSlider with null onChanged is disabled (non-interactive)', (
+    t,
+  ) async {
+    await t.pumpWidget(MaterialApp(
+      theme: otoTheme(Brightness.light, Accent.teal),
+      home: const Scaffold(
+        body: Center(child: OtoSlider(value: 0.5, onChanged: null)),
+      ),
+    ));
+    // A null onChanged disables the underlying Material Slider (greyed,
+    // non-interactive) — the idiomatic disabled state, not a draggable no-op.
+    final slider = t.widget<Slider>(find.byType(Slider));
+    expect(slider.onChanged, isNull);
+  });
 }

@@ -193,10 +193,10 @@ class RoomCard extends ConsumerWidget {
         Expanded(
           child: OtoSlider(
             value: value,
-            // No known volume yet: render a flat, no-op skeleton track.
+            // No known volume yet: render a disabled (non-interactive) track.
             onChanged: hasVolume
                 ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
-                : (_) {},
+                : null,
             onChangeEnd: hasVolume
                 ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
                 : null,
