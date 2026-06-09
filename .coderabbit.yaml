@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration — https://docs.coderabbit.ai/
+#
+# We only narrow review *scope* here. CodeRabbit's built-in review logic and
+# its default ignore list (lock files, binaries, generated code, images/fonts)
+# are kept as-is.
+reviews:
+  path_filters:
+    # Imported visual design system — React/JSX prototype, design tokens,
+    # brand assets, handoff notes. Reference material, not application code.
+    - "!docs/design-system/**"
+    # superpowers brainstorm / spec / plan working docs — process artifacts,
+    # not code. Skip review entirely.
+    - "!docs/superpowers/**"
