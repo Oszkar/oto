@@ -18,9 +18,9 @@ void main() {
       overrides: [prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs))],
       child: const OtoApp(),
     ));
-    // Pump one frame, not pumpAndSettle: the placeholder Home shows an
-    // indeterminate CircularProgressIndicator that animates forever, so
-    // pumpAndSettle would time out. We only assert on MaterialApp's theme.
+    // HomePage now renders HomeScreen; this test only reads MaterialApp theme
+    // props via a single pump() (no discovery / FRB wired here, so we avoid
+    // pumpAndSettle and just assert on MaterialApp's theme).
     await t.pump();
 
     final app = t.widget<MaterialApp>(find.byType(MaterialApp));
