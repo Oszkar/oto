@@ -124,6 +124,36 @@ Household offlineHousehold() {
   );
 }
 
+/// An offline solo room `OS` (Outside) whose group `G_OS` still reports an
+/// active stream (track + playing transport). Models the reachable edge case
+/// where a room drops offline mid-stream: a `SubscriptionError` clears
+/// `online` without clearing the group's transport/track, so `hasActiveStream`
+/// stays true while `online` is false.
+Household offlineWithStreamHousehold() {
+  return const Household(
+    rooms: {
+      'OS': RoomState(
+        id: 'OS',
+        name: 'Outside',
+        model: 'Move 2',
+        kind: RoomKind.speaker,
+        volume: 40,
+        online: false,
+        groupId: 'G_OS',
+      ),
+    },
+    groups: {
+      'G_OS': GroupState(
+        id: 'G_OS',
+        coordinatorId: 'OS',
+        memberIds: ['OS'],
+        transport: PlaybackState.playing,
+        track: Track(title: 'Strobe', artist: 'Deadmau5'),
+      ),
+    },
+  );
+}
+
 /// A multi-room household for header subtitle counting: 3 rooms, 1 group
 /// playing (`hasActiveStream`), so the subtitle reads "3 rooms · 1 playing".
 Household mixedHousehold() {

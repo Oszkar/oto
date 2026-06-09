@@ -65,4 +65,19 @@ void main() {
     expect(find.byKey(const Key('room-play-PT')), findsNothing);
     expect(find.byType(Opacity), findsWidgets);
   });
+
+  testWidgets(
+    'offline room with a stale active stream shows no play button or slider',
+    (t) async {
+      final h = wrap(
+        const RoomRow(speakerId: 'OS'),
+        household: offlineWithStreamHousehold(),
+      );
+      await t.pumpWidget(h.widget);
+
+      expect(find.byKey(const Key('room-play-OS')), findsNothing);
+      expect(find.byType(OtoSlider), findsNothing);
+      expect(find.byType(Opacity), findsWidgets);
+    },
+  );
 }

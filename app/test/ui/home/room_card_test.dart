@@ -77,4 +77,23 @@ void main() {
       reason: 'offline room is rendered dimmed',
     );
   });
+
+  testWidgets(
+    'offline room with a stale active stream shows no play button or slider',
+    (t) async {
+      final h = wrap(
+        const RoomCard(speakerId: 'OS'),
+        household: offlineWithStreamHousehold(),
+      );
+      await t.pumpWidget(h.widget);
+
+      expect(find.byKey(const Key('room-play-OS')), findsNothing);
+      expect(find.byType(OtoSlider), findsNothing);
+      expect(
+        find.byType(Opacity),
+        findsWidgets,
+        reason: 'offline room is rendered dimmed even with a stale stream',
+      );
+    },
+  );
 }

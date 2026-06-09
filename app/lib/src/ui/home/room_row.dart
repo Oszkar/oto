@@ -32,7 +32,10 @@ class RoomRow extends ConsumerWidget {
     final group = ref.watch(householdProvider.select((h) => _groupOf(h, room)));
 
     final offline = !room.online;
-    final canResume = group?.hasActiveStream ?? false;
+    // Gate resume on online too: a room that drops offline mid-stream keeps a
+    // stale active stream (SubscriptionError clears online, not transport/track),
+    // which would otherwise render a live play button on a dimmed offline card.
+    final canResume = (group?.hasActiveStream ?? false) && !offline;
     final playing = group?.transport == PlaybackState.playing;
 
     final row = DecoratedBox(
