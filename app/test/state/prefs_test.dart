@@ -42,4 +42,10 @@ void main() {
     expect(container.read(settingsProvider).mode, ThemeMode.dark);
     expect(container.read(settingsProvider).layout, HomeLayout.stack);
   });
+
+  test('unknown/legacy stored accent falls back to teal (does not throw)', () async {
+    SharedPreferences.setMockInitialValues({'accent': 'crimson'});
+    final repo = PrefsRepository(await SharedPreferences.getInstance());
+    expect(repo.accent, Accent.teal);
+  });
 }
