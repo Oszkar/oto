@@ -29,7 +29,7 @@
       "files": ["app/lib/src/state/throttle.dart", "app/lib/src/state/commands.dart"]
     },
     {
-      "id": 13, "planTask": 5, "subject": "Task 5: Local prefs (theme, accent, default layout)", "status": "pending", "blockedBy": [8],
+      "id": 13, "planTask": 5, "subject": "Task 5: Local prefs (theme, accent, default layout)", "status": "pending", "blockedBy": [8, 9],
       "verifyCommand": "cd app && flutter test test/state/prefs_test.dart",
       "files": ["app/lib/src/state/prefs.dart"]
     },
@@ -44,7 +44,7 @@
       "files": ["app/lib/main.dart", "app/lib/src/ui/shell/oto_app.dart", "app/lib/src/ui/shell/home_page.dart", "app/lib/src/ui/shell/oto_scaffold.dart"]
     },
     {
-      "id": 16, "planTask": 8, "subject": "Task 8: Home leaf widgets — header, layout toggle, room card + row", "status": "pending", "blockedBy": [11, 12, 14],
+      "id": 16, "planTask": 8, "subject": "Task 8: Home leaf widgets — header, layout toggle, room card + row", "status": "pending", "blockedBy": [11, 12, 13, 14],
       "verifyCommand": "cd app && flutter test test/ui/home/",
       "files": ["app/lib/src/ui/home/home_header.dart", "app/lib/src/ui/home/room_card.dart", "app/lib/src/ui/home/room_row.dart"]
     },
