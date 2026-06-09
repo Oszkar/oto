@@ -173,4 +173,26 @@ void main() {
 
     expect(h.calls, contains('togglePlay(A0,playing)'));
   });
+
+  testWidgets('offline-coordinator source disables the strip play button', (
+    t,
+  ) async {
+    // `offlineWithStreamHousehold` (OS) is a source whose coordinator dropped
+    // offline mid-stream: the group still reads active, but the speaker is
+    // unreachable, so the play button must be disabled (onPressed null).
+    final h = wrap(
+      BottomStrip(onTapSource: (_) {}),
+      household: offlineWithStreamHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    final btn = t.widget<IconButton>(
+      find.byKey(const Key('strip-play-G_OS')),
+    );
+    expect(
+      btn.onPressed,
+      isNull,
+      reason: 'coordinator offline -> control disabled, not a dead button',
+    );
+  });
 }

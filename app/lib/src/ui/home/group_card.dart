@@ -265,6 +265,9 @@ class GroupCard extends ConsumerWidget {
     if (room == null) return const SizedBox.shrink();
 
     final hasVolume = room.volume != null;
+    // Offline member: it can carry a stale last-known volume, but its speaker is
+    // unreachable -> disable its slider (mirrors RoomCard/RoomRow's online gate).
+    final enabled = hasVolume && room.online;
     final value = (room.volume ?? 0) / 100;
     final ctrl = ref.read(playbackControllerProvider);
     return Row(
@@ -283,10 +286,10 @@ class GroupCard extends ConsumerWidget {
         Expanded(
           child: OtoSlider(
             value: value,
-            onChanged: hasVolume
+            onChanged: enabled
                 ? (v) => ctrl.setVolume(roomId, (v * 100).round())
                 : null,
-            onChangeEnd: hasVolume
+            onChangeEnd: enabled
                 ? (v) => ctrl.setVolumeEnd(roomId, (v * 100).round())
                 : null,
           ),

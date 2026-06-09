@@ -120,6 +120,16 @@ class _SourceRow extends ConsumerWidget {
     final transport = ref.watch(
       householdProvider.select((h) => h.groups[source.id]?.transport),
     );
+    // A source is controllable only if its coordinator is reachable. If the
+    // coordinator drops offline mid-stream the group still looks active (stale
+    // track/transport survives a SubscriptionError), so dim + disable the row
+    // rather than offer dead controls for an unreachable speaker.
+    final coordinatorOnline = ref.watch(
+      householdProvider.select((h) {
+        final g = h.groups[source.id];
+        return g == null ? true : (h.rooms[g.coordinatorId]?.online ?? true);
+      }),
+    );
     final playing = transport == PlaybackState.playing;
     final track = source.track;
 
@@ -128,77 +138,85 @@ class _SourceRow extends ConsumerWidget {
     // firing the row tap.
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        // JSX row inset `8px 10px 8px 12px`.
-        padding: const EdgeInsets.fromLTRB(
-          Space.gutter12,
-          Space.md8,
-          Space.lg10,
-          Space.md8,
-        ),
-        child: Row(
-          children: [
-            AlbumArt(track?.artUri, size: 40),
-            const SizedBox(width: Space.gutter12),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    track?.title ?? 'Playing',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyles.label,
-                  ),
-                  const SizedBox(height: 1),
-                  Row(
-                    children: [
-                      if (source.memberCount > 1) ...[
-                        OtoIcon('link', size: 10, color: oto.inkMute),
-                        const SizedBox(width: Space.xs4),
-                      ],
-                      Flexible(
-                        child: Text(
-                          _subtitle(track, source.label),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyles.caption.copyWith(
-                            color: oto.inkMute,
+      child: Opacity(
+        opacity: coordinatorOnline ? 1 : 0.55,
+        child: Padding(
+          // JSX row inset `8px 10px 8px 12px`.
+          padding: const EdgeInsets.fromLTRB(
+            Space.gutter12,
+            Space.md8,
+            Space.lg10,
+            Space.md8,
+          ),
+          child: Row(
+            children: [
+              AlbumArt(track?.artUri, size: 40),
+              const SizedBox(width: Space.gutter12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      track?.title ?? 'Playing',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyles.label,
+                    ),
+                    const SizedBox(height: 1),
+                    Row(
+                      children: [
+                        if (source.memberCount > 1) ...[
+                          OtoIcon('link', size: 10, color: oto.inkMute),
+                          const SizedBox(width: Space.xs4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            _subtitle(track, source.label),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyles.caption.copyWith(
+                              color: oto.inkMute,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Space.md8),
+              IconButton(
+                key: Key('strip-play-${source.id}'),
+                onPressed: coordinatorOnline
+                    ? () => ref
+                          .read(playbackControllerProvider)
+                          .togglePlay(
+                            source.id,
+                            transport ?? PlaybackState.paused,
+                          )
+                    : null,
+                icon: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: oto.fill,
+                    border: Border.all(color: oto.line),
+                    borderRadius: BorderRadius.circular(Radius_.pill999),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: Space.md8),
-            IconButton(
-              key: Key('strip-play-${source.id}'),
-              onPressed: () => ref
-                  .read(playbackControllerProvider)
-                  .togglePlay(source.id, transport ?? PlaybackState.paused),
-              icon: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: oto.fill,
-                  border: Border.all(color: oto.line),
-                  borderRadius: BorderRadius.circular(Radius_.pill999),
-                ),
-                alignment: Alignment.center,
-                child: OtoIcon(
-                  playing ? 'pause' : 'play',
-                  size: 15,
-                  color: oto.ink,
+                  alignment: Alignment.center,
+                  child: OtoIcon(
+                    playing ? 'pause' : 'play',
+                    size: 15,
+                    color: oto.ink,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: Space.xs4),
-            // Decorative affordance: the row body taps through to Now Playing.
-            OtoIcon('chevronRight', size: 12, color: oto.inkFaint),
-          ],
+              const SizedBox(width: Space.xs4),
+              // Decorative affordance: the row body taps through to Now Playing.
+              OtoIcon('chevronRight', size: 12, color: oto.inkFaint),
+            ],
+          ),
         ),
       ),
     );

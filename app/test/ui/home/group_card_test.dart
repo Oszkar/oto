@@ -140,6 +140,56 @@ void main() {
     expect(h.calls.any((c) => c.startsWith('setVolumeEnd(R1,')), isTrue);
   });
 
+  testWidgets('offline group member has a disabled level slider', (t) async {
+    // 2-member group: R0 (coordinator) online, R1 offline. R1 can carry a
+    // stale last-known volume, but its speaker is unreachable -> its level
+    // slider must be disabled (mirrors RoomCard/RoomRow's online gate).
+    final household = Household(
+      rooms: {
+        'R0': const RoomState(
+          id: 'R0',
+          name: 'Living Room',
+          kind: RoomKind.speaker,
+          volume: 20,
+          groupId: 'G',
+        ),
+        'R1': const RoomState(
+          id: 'R1',
+          name: 'Room 1',
+          kind: RoomKind.speaker,
+          volume: 25,
+          online: false,
+          groupId: 'G',
+        ),
+      },
+      groups: {
+        'G': const GroupState(
+          id: 'G',
+          coordinatorId: 'R0',
+          memberIds: ['R0', 'R1'],
+          transport: PlaybackState.playing,
+          track: Track(title: 'Strobe', artist: 'Deadmau5'),
+          groupVolume: 40,
+        ),
+      },
+    );
+    final h = wrap(const GroupCard(groupId: 'G'), household: household);
+    await t.pumpWidget(h.widget);
+
+    // Sliders in order: [group-master, R0 level, R1 level].
+    final sliders = find.byType(OtoSlider);
+    expect(
+      t.widget<OtoSlider>(sliders.at(1)).onChanged,
+      isNotNull,
+      reason: 'online member R0 stays enabled',
+    );
+    expect(
+      t.widget<OtoSlider>(sliders.at(2)).onChanged,
+      isNull,
+      reason: 'offline member R1 slider disabled',
+    );
+  });
+
   testWidgets('unknown group id renders nothing', (t) async {
     final h = wrap(
       const GroupCard(groupId: 'NOPE'),
