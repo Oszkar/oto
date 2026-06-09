@@ -1,15 +1,37 @@
-# oto
+<p align="center">
+  <img src="docs/design-system/brand/oto-mark-512.png" alt="oto logo" width="128" height="128" />
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![CI](https://img.shields.io/github/actions/workflow/status/Oszkar/oto/ci.yml?branch=main&label=CI)](https://github.com/Oszkar/oto/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Oszkar/oto?label=release)](https://github.com/Oszkar/oto/releases/latest)
+<h1 align="center">oto</h1>
+
+<p align="center">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" />
+  </a>
+  <a href="https://github.com/Oszkar/oto/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Oszkar/oto/ci.yml?branch=main&label=CI" alt="CI" />
+  </a>
+  <a href="https://github.com/Oszkar/oto/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Oszkar/oto?label=release" alt="Release" />
+  </a>
+</p>
 
 A fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI on top of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. Discovery and SOAP control stay in Rust via the [`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP; v0.4 live events build on the same SDK family's reactive state layer. The UI talks to Rust only through generated FRB bindings.
 
-> note: `oto` is a working name for now. It means `sound` in Japanese and it is a palindrome, just like Sonos 
+> note: `oto` is a working name for now. It means `sound` in Japanese and it is a palindrome, just like Sonos
+
+## Features & Capabilities
+
+- **Auto-Discovery:** Fast, multi-interface SSDP discovery that automatically detects Sonos speakers on your local network.
+- **Playback Control:** Play, pause, skip to next/previous track, adjust volume, and toggle mute.
+- **Real Grouping:** Full ZoneGroupTopology support allowing you to view and control room groups, manage coordinators, and coordinate volume/mute updates across speaker groups.
+- **Live Event Stream:** Reactively streams property-change events (GENA) for volume, mute, transport state, and track metadata to ensure the UI is kept instantly up-to-date.
+- **Robust FFI Bridge:** Clean decoupling of pure Rust domain logic and native Sonos network integrations from the Flutter UI via auto-generated `flutter_rust_bridge` bindings.
 
 ## Scope
 
 - **Platforms:** Android and Windows at the moment. macOS/iOS/Web scaffolding compiles, kept as a future potential target.
-- **Android floor:** `minSdk = 35` (Android 15, released Q4 2024). Sonos buyers tend to be on recent hardware and the scope reduction simplifies testing. Practical implication: APKs ship arm64-v8a + x86_64 only — see [LOCAL_PATCHES.md](LOCAL_PATCHES.md) for the cargokit patch that enforces this.
+- **Android floor:** `minSdk = 35` (Android 15, released Q4 2024). Sonos buyers tend to be on recent hardware and the scope reduction simplifies testing. Practical implication: APKs ship arm64-v8a + x86_64 only - see [LOCAL_PATCHES.md](LOCAL_PATCHES.md) for the cargokit patch that enforces this.
 
 ## Layout
 
@@ -23,11 +45,11 @@ oto/
 │  └─ flutter_rust_bridge.yaml
 ├─ native/               # Rust workspace
 │  ├─ Cargo.toml         # workspace root + FRB-exposed cdylib package (oto_native)
-│  ├─ src/api.rs         # FRB-exposed API surface — keep small, delegate inward
+│  ├─ src/api.rs         # FRB-exposed API surface - keep small, delegate inward
 │  ├─ src/map.rs         # domain → FRB-DTO map (off the bridged surface, so testable)
 │  ├─ src/lib.rs         # mounts api + map + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types + Wire trait
-│  ├─ crates/wire/       # oto-wire: production Wire — own SSDP + direct sonos-api SOAP + event subscriptions
+│  ├─ crates/wire/       # oto-wire: production Wire - own SSDP + direct sonos-api SOAP + event subscriptions
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests
 │  ├─ crates/app/        # oto-app: owns runtime state, routes discover + playback commands
 │  └─ rustfmt.toml
@@ -39,7 +61,7 @@ oto/
 └─ justfile
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design — layers, crate responsibilities, state ownership, and the command/event flow.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design - layers, crate responsibilities, state ownership, and the command/event flow.
 
 The Flutter plugin `app/rust_builder/` is the [Cargokit][cargokit] integration shim that compiles `native/` into the right shared library for each platform during a normal `flutter build`. Its CMake / Gradle / Podspec files point at `../../../native` (or deeper, on Windows where the symlink chain is longer); if you move `native/` or `rust_builder/`, update those paths.
 
@@ -72,7 +94,15 @@ winget install evilmartians.lefthook  # Windows
 just install-hooks
 ```
 
-`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that, once installed, runs **only one** check automatically before every commit: `scripts/verify_generated.dart` (catches stale generated source). CI runs the same check server-side — Lefthook just shortens the local feedback loop.
+`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that, once installed, runs **only one** check automatically before every commit: `scripts/verify_generated.dart` (catches stale generated source). CI runs the same check server-side - Lefthook just shortens the local feedback loop.
+
+## Local Network & Firewall Setup
+
+Since `oto` is local-first and communicates directly with Sonos devices on your LAN, check the following if devices are not discovered:
+
+- **SSDP Port (1900):** Sonos discovery uses SSDP multicast on port `1900` over UDP. Ensure your firewall (e.g. Windows Defender Firewall) allows inbound and outbound UDP traffic on port `1900` for `oto`.
+- **Multicast & Wi-Fi:** Ensure your Wi-Fi router does not block IP multicast or IGMP traffic (some guest network settings or "AP Isolation" settings block local device communication).
+- **Android Permissions:** Android requires the `CHANGE_WIFI_MULTICAST_STATE` permission to acquire a `MulticastLock` and listen to SSDP discovery messages. `oto` acquires this lock automatically via [MulticastLockHandler](file:///e:/Programming/oto/app/android/app/src/main/kotlin/me/oszkar/oto/MulticastLockHandler.kt) during discovery.
 
 ## Common commands
 
@@ -89,8 +119,8 @@ just build-win    # debug Windows desktop
 
 `just gen` runs in two stages:
 
-1. `flutter_rust_bridge_codegen generate` — reads `native/src/api.rs` and writes Dart bindings into `app/lib/src/rust/` plus Rust glue into `native/src/frb_generated*.rs`.
-2. `dart run build_runner build` — runs `riverpod_generator` over Dart sources and emits `*.g.dart` files alongside their inputs.
+1. `flutter_rust_bridge_codegen generate` - reads `native/src/api.rs` and writes Dart bindings into `app/lib/src/rust/` plus Rust glue into `native/src/frb_generated*.rs`.
+2. `dart run build_runner build` - runs `riverpod_generator` over Dart sources and emits `*.g.dart` files alongside their inputs.
 
 These generated source files are committed. That keeps a fresh clone usable in IDEs and on Windows/macOS/Linux without requiring every contributor to run codegen before `flutter analyze`, `flutter test`, or `cargo check`. CI and the optional Lefthook pre-commit hook run `scripts/verify_generated.dart`, which regenerates them and fails if the checked-in output is stale.
 
@@ -98,35 +128,35 @@ These generated source files are committed. That keeps a fresh clone usable in I
 
 Two workflows under `.github/workflows/`:
 
-- `ci.yml` — verifies generated source freshness, then runs lint + tests for Flutter and Rust on every PR. Jobs are split so they run in parallel and can be re-run independently.
-- `build.yml` — debug-builds the Android APK on pushes to `main` to catch toolchain rot. No Windows job — fluctuating runner minutes aren't worth it for a hobby project; dev machines catch Windows issues.
+- `ci.yml` - verifies generated source freshness, then runs lint + tests for Flutter and Rust on every PR. Jobs are split so they run in parallel and can be re-run independently.
+- `build.yml` - debug-builds the Android APK on pushes to `main` to catch toolchain rot. No Windows job - fluctuating runner minutes aren't worth it for a hobby project; dev machines catch Windows issues.
 
 ## Architecture
 
-System design — layers, crate responsibilities, state ownership, concurrency model, and the command/event flow — lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+System design - layers, crate responsibilities, state ownership, concurrency model, and the command/event flow - lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Releases
 
-Pre-1.0 (`0.y.z`) — surface and behavior may change between any releases. Versioning and the release process: [RELEASING.md](RELEASING.md); notable changes: [CHANGELOG.md](CHANGELOG.md).
+Pre-1.0 (`0.y.z`) - surface and behavior may change between any releases. Versioning and the release process: [RELEASING.md](RELEASING.md); notable changes: [CHANGELOG.md](CHANGELOG.md).
 
 ### Milestones
 
 Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust↔Dart bridge and verifiable without the real UI. `v1.0` is the planned bounded, externally-tested end state.
 
-| Version | Capability |
-|---|---|
-| v0.1 ✓ | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl. |
-| v0.2 ✓ | **Playback control** — play/pause/next/prev, volume, mute, one-shot state read. |
-| v0.3 ✓ | **Grouping** — real ZoneGroupTopology: multi-room groups, coordinator election, bonded satellites folded. Reads one-shot (no event streams yet). |
-| v0.4 ✓ | **Live property events** — reactive state via GENA for volume / mute / transport / track. One multiplexed FRB `Stream<ChangeEventDto>`; `speaker_state` reads from an event-fed cache. Topology events deferred to v0.5. |
-| v0.5 ✓ | **Hardening before UI** — topology change events, Android `MulticastLock`, model repopulate, in-band subscription-failure surfacing. Group form/break deferred to v0.5.1. |
-| v0.5.1 ✓ | **Group operations** — form/break (join/leave), group volume/mute (commands + live events), and fast topology refresh after a regroup (~tens of ms, no SSDP). |
-| v0.6.0 | **UI: foundation + Home + Now Playing** — theming, source-model state architecture, adaptive shell, persistence. Backend-true core: controls without backing are deferred, not faked. |
-| v0.6.1 | **UI: room management** — group editor + room detail. |
-| v0.6.2 | **UI: settings + states** — settings + empty / error / loading / offline. |
-| v0.6.3 | **UI: responsive** — tablet master-detail, desktop three-pane. |
-| v0.7 | **Hardening + polish** — SSDP hardening, cleanup TODOs, dogfooding finds. |
-| v1.0 | **Stable** — externally tested, packaged (signed Android, Windows). Maintenance-only thereafter. |
+| Version  | Capability                                                                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| v0.1 ✓   | Foundation + LAN **discovery**. Domain types, `Wire` trait, `oto-app`, `oto-wire` SSDP, FRB surface, mock impl.                                                                                                          |
+| v0.2 ✓   | **Playback control** - play/pause/next/prev, volume, mute, one-shot state read.                                                                                                                                          |
+| v0.3 ✓   | **Grouping** - real ZoneGroupTopology: multi-room groups, coordinator election, bonded satellites folded. Reads one-shot (no event streams yet).                                                                         |
+| v0.4 ✓   | **Live property events** - reactive state via GENA for volume / mute / transport / track. One multiplexed FRB `Stream<ChangeEventDto>`; `speaker_state` reads from an event-fed cache. Topology events deferred to v0.5. |
+| v0.5 ✓   | **Hardening before UI** - topology change events, Android `MulticastLock`, model repopulate, in-band subscription-failure surfacing. Group form/break deferred to v0.5.1.                                                |
+| v0.5.1 ✓ | **Group operations** - form/break (join/leave), group volume/mute (commands + live events), and fast topology refresh after a regroup (~tens of ms, no SSDP).                                                            |
+| v0.6.0   | **UI: foundation + Home + Now Playing** - theming, source-model state architecture, adaptive shell, persistence. Backend-true core: controls without backing are deferred, not faked.                                    |
+| v0.6.1   | **UI: room management** - group editor + room detail.                                                                                                                                                                    |
+| v0.6.2   | **UI: settings + states** - settings + empty / error / loading / offline.                                                                                                                                                |
+| v0.6.3   | **UI: responsive** - tablet master-detail, desktop three-pane.                                                                                                                                                           |
+| v0.7     | **Hardening + polish** - SSDP hardening, cleanup TODOs, dogfooding finds.                                                                                                                                                |
+| v1.0     | **Stable** - externally tested, packaged (signed Android, Windows). Maintenance-only thereafter.                                                                                                                         |
 
 See more details in the CHANGELOG file linked above.
 

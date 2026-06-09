@@ -15,16 +15,17 @@ just test       # cargo nextest + flutter test
 
 Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook pre-commit hook (`just install-hooks`) catches stale generated source locally; CI's `Generated source freshness` job catches it server-side.
 
-## Android cross-builds — build on Linux, macOS, or WSL
+## Android cross-builds - build on Linux, macOS, or WSL
 
 **Recommended: build the Android APK from Linux, macOS, or WSL.** The Android NDK ships no system OpenSSL, so the workspace's `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }` compiles OpenSSL from source, and OpenSSL's `Configure` is Perl-driven. Linux/macOS ship a complete Perl 5 by default, so `just build-apk` works out of the box; CI uses `ubuntu-latest` for the same reason. WSL counts as Linux here.
 
-Validated 2026-05-30 on WSL2 (Ubuntu) → real Pixel 7a, debug APK, discovery + events end-to-end (see [docs/evidence/v0.5-android-debug.md](docs/evidence/v0.5-android-debug.md)). Toolchain there: Java 21, Android SDK platform 36 + build-tools 36, NDK auto-selected by Gradle via `flutter.ndkVersion` (install nothing manually — the first build pulls the exact NDK it wants). For a phone attached to Windows, bridge it into WSL with wireless adb (`adb tcpip 5555` on the host, `adb connect <phone-ip>:5555` inside WSL).
+Validated 2026-05-30 on WSL2 (Ubuntu) → real Pixel 7a, debug APK, discovery + events end-to-end (see [docs/evidence/v0.5-android-debug.md](docs/evidence/v0.5-android-debug.md)). Toolchain there: Java 21, Android SDK platform 36 + build-tools 36, NDK auto-selected by Gradle via `flutter.ndkVersion` (install nothing manually - the first build pulls the exact NDK it wants). For a phone attached to Windows, bridge it into WSL with wireless adb (`adb tcpip 5555` on the host, `adb connect <phone-ip>:5555` inside WSL).
 
 **Windows-native cross-build is discouraged.** It works only with a Unix-aware Perl carrying the full standard module set, which is per-developer toolchain debt:
-- **Strawberry Perl** (MSWin32) — fails: "doesn't produce Unix-like paths" (OpenSSL's Linux config wants forward slashes).
-- **Git-for-Windows' bundled msys perl** — right path semantics, but minimal; missing standard modules like `Locale::Maketext::Simple` that `Configure` loads via `IPC::Cmd`.
-- **msys2** (`winget install MSYS2.MSYS2`, then prepend `C:\msys64\usr\bin` to PATH so `cargo` finds its full Perl) is the only Windows path that works — kept here for reference, but prefer WSL.
+
+- **Strawberry Perl** (MSWin32) - fails: "doesn't produce Unix-like paths" (OpenSSL's Linux config wants forward slashes).
+- **Git-for-Windows' bundled msys perl** - right path semantics, but minimal; missing standard modules like `Locale::Maketext::Simple` that `Configure` loads via `IPC::Cmd`.
+- **msys2** (`winget install MSYS2.MSYS2`, then prepend `C:\msys64\usr\bin` to PATH so `cargo` finds its full Perl) is the only Windows path that works - kept here for reference, but prefer WSL.
 
 Post-1.0 follow-up (per ROADMAP project-bound open items): a rustls migration via `[patch.crates-io]` would drop the vendored-OpenSSL/Perl requirement entirely. Document any new build-target prereqs here as they surface.
 
@@ -34,22 +35,22 @@ Toolchain and tooling versions are pinned in multiple files. Dependabot covers m
 
 ### Pinned in workflows (Dependabot updates these)
 
-- `dtolnay/rust-toolchain@<version>` — bumping this **must** be paired with the manual updates below (the action ref is what CI uses; the toolchain file is the source of truth for local development).
-- `subosito/flutter-action@vN` — major action version, automatic.
+- `dtolnay/rust-toolchain@<version>` - bumping this **must** be paired with the manual updates below (the action ref is what CI uses; the toolchain file is the source of truth for local development).
+- `subosito/flutter-action@vN` - major action version, automatic.
 - All other `uses:` action refs.
 
 ### Manual bump required (Dependabot doesn't see these)
 
 When the `dtolnay/rust-toolchain` Dependabot PR lands, update **in the same PR**:
 
-- `rust-toolchain.toml` — `channel = "X.Y.Z"`
-- `native/Cargo.toml` — `rust-version = "X.Y"` under `[workspace.package]`
+- `rust-toolchain.toml` - `channel = "X.Y.Z"`
+- `native/Cargo.toml` - `rust-version = "X.Y"` under `[workspace.package]`
 
 For Flutter, no Dependabot coverage exists. Bump together when needed:
 
-- `.github/workflows/ci.yml` — `flutter-version: X.Y.Z` (both occurrences)
-- `.github/workflows/build.yml` — `flutter-version: X.Y.Z`
-- `README.md` — "currently 3.38.x" mention
+- `.github/workflows/ci.yml` - `flutter-version: X.Y.Z` (both occurrences)
+- `.github/workflows/build.yml` - `flutter-version: X.Y.Z`
+- `README.md` - "currently 3.38.x" mention
 
 Other inline pins to grep for when a coordinated bump is needed:
 
@@ -60,11 +61,11 @@ The FRB codegen version and FRB crate version **must** stay aligned, or generate
 
 ### Cargo/pub dependencies
 
-Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). All bumps — patch, minor, and major — are reviewed and merged by hand; nothing auto-merges (pre-1.0 crates treat minor as breaking by SemVer convention, and the maintainer owns merges/tags/releases).
+Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). All bumps - patch, minor, and major - are reviewed and merged by hand; nothing auto-merges (pre-1.0 crates treat minor as breaking by SemVer convention, and the maintainer owns merges/tags/releases).
 
 ## Branch protection
 
-`main` is protected: a PR cannot merge until the `ci` workflow's checks pass — `Generated source freshness`, `Rust (lint + test)`, `Rust (supply-chain)`, `Android cross-compile (oto_native)`, and `Flutter (analyze + test)`. This gates manual merges (including Dependabot PRs) so nothing lands red. Configured under **Settings → Branches** (or via the `gh api .../branches/main/protection` call).
+`main` is protected: a PR cannot merge until the `ci` workflow's checks pass - `Generated source freshness`, `Rust (lint + test)`, `Rust (supply-chain)`, `Android cross-compile (oto_native)`, and `Flutter (analyze + test)`. This gates manual merges (including Dependabot PRs) so nothing lands red. Configured under **Settings → Branches** (or via the `gh api .../branches/main/protection` call).
 
 ## Commit messages
 
@@ -76,7 +77,7 @@ feat(core): add SSDP discovery loop
 fix(android): widen multicast lock to cover event subscription
 ```
 
-Keep the subject under ~72 chars and let the body explain *why*.
+Keep the subject under ~72 chars and let the body explain _why_.
 
 ## Pull requests
 
