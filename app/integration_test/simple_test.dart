@@ -1,8 +1,11 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:oto/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oto/src/rust/frb_generated.dart';
+import 'package:oto/src/state/prefs.dart';
+import 'package:oto/src/ui/shell/oto_app.dart';
 
 /// Bridge smoke: boots the full Flutter app on a host device, which forces
 /// `RustLib.init()` to dynamically load the FRB cdylib (`oto_native`). The
@@ -19,11 +22,19 @@ void main() {
   setUpAll(() async => RustLib.init());
 
   testWidgets('app boots with RustLib initialised', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: OtoApp()));
-    // The neutral placeholder scaffold (`main.dart`'s `HomePage`) renders
-    // exactly this string until v0.6 brings real UI. Asserting on it
-    // catches both "FRB cdylib failed to load" and "widget tree never
-    // mounted" without requiring any particular post-v0.6 layout.
-    expect(find.text('oto'), findsOneWidget);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+      ],
+      child: const OtoApp(),
+    ));
+    await tester.pump();
+    // The placeholder Home (`shell/home_page.dart`) renders a centered loading
+    // spinner until Task 11b brings the real HomeScreen. Asserting on it catches
+    // both "FRB cdylib failed to load" and "widget tree never mounted" without
+    // requiring any particular post-v0.6 layout.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
