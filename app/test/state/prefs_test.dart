@@ -48,4 +48,16 @@ void main() {
     final repo = PrefsRepository(await SharedPreferences.getInstance());
     expect(repo.accent, Accent.teal);
   });
+
+  test('unknown/legacy stored themeMode falls back to system', () async {
+    SharedPreferences.setMockInitialValues({'themeMode': 'sepia'});
+    final repo = PrefsRepository(await SharedPreferences.getInstance());
+    expect(repo.themeMode, ThemeMode.system);
+  });
+
+  test('unknown/legacy stored homeLayout falls back to cards', () async {
+    SharedPreferences.setMockInitialValues({'homeLayout': 'mosaic'});
+    final repo = PrefsRepository(await SharedPreferences.getInstance());
+    expect(repo.homeLayout, HomeLayout.cards);
+  });
 }
