@@ -4,27 +4,27 @@
   "note": "Native task IDs (8-20) map to plan Tasks 0-12. Full task bodies live in the native task store (TaskGet) and the plan .md; this file is the resume index.",
   "tasks": [
     {
-      "id": 8, "planTask": 0, "subject": "Task 0: Dependencies, fonts & assets", "status": "pending", "blockedBy": [],
+      "id": 8, "planTask": 0, "subject": "Task 0: Dependencies, fonts & assets", "status": "completed", "blockedBy": [],
       "verifyCommand": "cd app && flutter pub get && flutter analyze",
       "files": ["app/pubspec.yaml", "app/assets/"]
     },
     {
-      "id": 9, "planTask": 1, "subject": "Task 1: Theme — tokens, OtoColors extension, accent, ThemeData", "status": "pending", "blockedBy": [8],
+      "id": 9, "planTask": 1, "subject": "Task 1: Theme — tokens, OtoColors extension, accent, ThemeData", "status": "completed", "blockedBy": [8],
       "verifyCommand": "cd app && flutter test test/theme/oto_colors_test.dart",
       "files": ["app/lib/src/theme/tokens.dart", "app/lib/src/theme/oto_colors.dart", "app/lib/src/theme/accent.dart", "app/lib/src/theme/oto_theme.dart"]
     },
     {
-      "id": 10, "planTask": 2, "subject": "Task 2: View-model types + sourcesFromHousehold", "status": "pending", "blockedBy": [],
+      "id": 10, "planTask": 2, "subject": "Task 2: View-model types + sourcesFromHousehold", "status": "completed", "blockedBy": [],
       "verifyCommand": "cd app && flutter test test/state/model/",
       "files": ["app/lib/src/state/model/track.dart", "app/lib/src/state/model/room_state.dart", "app/lib/src/state/model/group_state.dart", "app/lib/src/state/model/household.dart", "app/lib/src/state/model/source.dart"]
     },
     {
-      "id": 11, "planTask": 3, "subject": "Task 3: Household reducer + householdNotifierProvider", "status": "pending", "blockedBy": [10],
+      "id": 11, "planTask": 3, "subject": "Task 3: Household reducer + householdNotifierProvider", "status": "completed", "blockedBy": [10],
       "verifyCommand": "cd app && flutter test test/state/household_reducer_test.dart",
       "files": ["app/lib/src/state/household_reducer.dart", "app/lib/src/state/household.dart", "app/lib/src/state/sources.dart"]
     },
     {
-      "id": 12, "planTask": 4, "subject": "Task 4: Optimistic, LAN-throttled command controllers", "status": "pending", "blockedBy": [11],
+      "id": 12, "planTask": 4, "subject": "Task 4: Optimistic, LAN-throttled command controllers", "status": "completed", "blockedBy": [11],
       "verifyCommand": "cd app && flutter test test/state/",
       "files": ["app/lib/src/state/throttle.dart", "app/lib/src/state/commands.dart"]
     },
