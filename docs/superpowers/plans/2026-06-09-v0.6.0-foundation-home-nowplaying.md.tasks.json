@@ -29,17 +29,17 @@
       "files": ["app/lib/src/state/throttle.dart", "app/lib/src/state/commands.dart"]
     },
     {
-      "id": 13, "planTask": 5, "subject": "Task 5: Local prefs (theme, accent, default layout)", "status": "pending", "blockedBy": [8, 9],
+      "id": 13, "planTask": 5, "subject": "Task 5: Local prefs (theme, accent, default layout)", "status": "completed", "blockedBy": [8, 9],
       "verifyCommand": "cd app && flutter test test/state/prefs_test.dart",
       "files": ["app/lib/src/state/prefs.dart"]
     },
     {
-      "id": 14, "planTask": 6, "subject": "Task 6: Shared widgets — icon, slider, album art, brand mark", "status": "pending", "blockedBy": [8, 9],
+      "id": 14, "planTask": 6, "subject": "Task 6: Shared widgets — icon, slider, album art, brand mark", "status": "completed", "blockedBy": [8, 9],
       "verifyCommand": "cd app && flutter test test/ui/widgets/",
       "files": ["app/lib/src/ui/widgets/oto_icon.dart", "app/lib/src/ui/widgets/oto_slider.dart", "app/lib/src/ui/widgets/album_art.dart", "app/lib/src/ui/widgets/oto_mark.dart"]
     },
     {
-      "id": 15, "planTask": 7, "subject": "Task 7: App shell — OtoApp + adaptive scaffold + nav", "status": "pending", "blockedBy": [9, 13],
+      "id": 15, "planTask": 7, "subject": "Task 7: App shell — OtoApp + adaptive scaffold + nav", "status": "completed", "blockedBy": [9, 13],
       "verifyCommand": "cd app && flutter test test/ui/shell/oto_app_test.dart",
       "files": ["app/lib/main.dart", "app/lib/src/ui/shell/oto_app.dart", "app/lib/src/ui/shell/home_page.dart", "app/lib/src/ui/shell/oto_scaffold.dart"]
     },
