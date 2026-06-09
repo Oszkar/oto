@@ -35,6 +35,11 @@ dependencies:
   riverpod_annotation: ^4.0.2
   freezed_annotation: ^3.1.0
 
+  # UI foundation (v0.6.0).
+  shared_preferences: ^2.3.0
+  flutter_svg: ^2.0.10
+  lucide_icons: ^0.257.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -42,6 +47,10 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+
+  # Deterministic virtual time for the Throttle unit test (transitive via
+  # flutter_test, pinned here for an explicit, stable import).
+  fake_async: ^1.3.1
 
   # Riverpod codegen. (riverpod_lint + custom_lint dropped: custom_lint
   # 0.8.1's plugin-client generator ignores pubspec.lock and resolved
@@ -56,3 +65,23 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/brand/
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Geist-Bold.ttf
+          weight: 700
+    - family: GeistMono
+      fonts:
+        - asset: assets/fonts/GeistMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/GeistMono-Medium.ttf
+          weight: 500
