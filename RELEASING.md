@@ -4,9 +4,9 @@
 
 ## Source of truth
 
-`app/pubspec.yaml` `version:` is canonical — the Flutter app is the only shippable artifact. Format: `MAJOR.MINOR.PATCH+BUILD`, where `+BUILD` is the Android `versionCode` and is incremented on every release.
+`app/pubspec.yaml` `version:` is canonical - the Flutter app is the only shippable artifact. Format: `MAJOR.MINOR.PATCH+BUILD`, where `+BUILD` is the Android `versionCode` and is incremented on every release.
 
-`native/Cargo.toml` `[workspace.package] version` is kept equal to the `MAJOR.MINOR.PATCH` by hand. The `native/crates/*` are `publish = false`, so this is cosmetic — there is intentionally no sync tooling and no separate `VERSION` file (a third place would only drift).
+`native/Cargo.toml` `[workspace.package] version` is kept equal to the `MAJOR.MINOR.PATCH` by hand. The `native/crates/*` are `publish = false`, so this is cosmetic - there is intentionally no sync tooling and no separate `VERSION` file (a third place would only drift).
 
 ## Cutting a release
 
@@ -19,7 +19,7 @@
 
 ## Deliberately deferred
 
-Not done yet, on purpose — revisit once there is a signed, distributable build worth shipping:
+Not done yet, on purpose - revisit once there is a signed, distributable build worth shipping:
 
 - **No release binaries.** Builds are debug-only and Android release signing is not set up; no installers are attached to releases.
 - **No release CI.** Tagging and the GitHub Release are manual.
