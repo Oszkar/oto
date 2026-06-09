@@ -151,7 +151,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
                         // attempts (a non-Sonos host fails to parse and is
                         // skipped), and `discover()` stops at the first
                         // responder that returns a parseable topology.
-                        // Harden in v0.6 (validate 200 + `ST`, require the
+                        // Harden in v0.7 (validate 200 + `ST`, require the
                         // LOCATION host == source IP, cap candidates) —
                         // wants a hardware re-validation pass on the LAN.
                         if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {
