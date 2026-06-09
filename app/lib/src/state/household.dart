@@ -1,0 +1,69 @@
+/// The accumulating household provider — the central state spine of the UI.
+///
+/// A keep-alive Notifier that seeds its skeleton from [discoveryProvider]
+/// (identity: rooms, groups, membership, coordinator) and folds the live
+/// [changeEventsProvider] deltas (volume, mute, transport, track, group
+/// volume/mute) on top via the pure [household_reducer]. Group volume/mute
+/// are event-only, so this accumulation is the only path to those values.
+///
+/// Optimistic mutators apply the same delta the authoritative event would,
+/// so a command-driven change shows in the UI instantly (Task 4 calls these).
+library;
+
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../rust/api.dart';
+import 'discovery.dart';
+import 'events.dart';
+import 'household_reducer.dart';
+import 'model/group_state.dart';
+import 'model/household.dart';
+
+part 'household.g.dart';
+
+@Riverpod(keepAlive: true)
+class HouseholdNotifier extends _$HouseholdNotifier {
+  @override
+  Household build() {
+    ref.listen(discoveryProvider, (_, next) {
+      next.whenData(
+        (topo) => state = householdFromTopology(topo, previous: state),
+      );
+    }, fireImmediately: true);
+    ref.listen(changeEventsProvider, (_, next) {
+      next.whenData((e) => state = applyEvent(state, e));
+    });
+    return const Household();
+  }
+
+  /// Optimistically reflect a per-speaker volume change before the event
+  /// echoes back. Mirrors a `Volume` event.
+  void setOptimisticVolume(String speakerId, int v) =>
+      state = applyEvent(
+        state,
+        ChangeEventDto.volume(speakerId: speakerId, volume: v),
+      );
+
+  /// Optimistically reflect a per-speaker mute change. Mirrors a `Mute` event.
+  void setOptimisticMuted(String speakerId, bool m) =>
+      state = applyEvent(
+        state,
+        ChangeEventDto.mute(speakerId: speakerId, muted: m),
+      );
+
+  /// Optimistically reflect a group master volume change. Mirrors a
+  /// `GroupVolume` event (the only path to a group volume value).
+  void setOptimisticGroupVolume(String groupId, int v) =>
+      state = applyEvent(
+        state,
+        ChangeEventDto.groupVolume(groupId: groupId, volume: v),
+      );
+
+  /// Optimistically reflect a group transport change. Mirrors a `Playback`
+  /// event; the view enum is mapped back to the DTO at the boundary.
+  void setOptimisticTransport(String groupId, PlaybackState t) =>
+      state = applyEvent(
+        state,
+        ChangeEventDto.playback(groupId: groupId, state: playbackStateToDto(t)),
+      );
+}

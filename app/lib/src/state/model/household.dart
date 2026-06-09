@@ -15,7 +15,7 @@ class Household {
   final Map<String, RoomState> rooms;
   final Map<String, GroupState> groups;
 
-  const Household({required this.rooms, required this.groups});
+  const Household({this.rooms = const {}, this.groups = const {}});
 
   Household copyWith({
     Map<String, RoomState>? rooms,
