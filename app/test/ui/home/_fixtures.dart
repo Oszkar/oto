@@ -46,6 +46,29 @@ class SpyPlayback extends PlaybackController {
   }
 }
 
+/// A [GroupingController] that records group-volume commands instead of hitting
+/// Rust. Used by the group-card test for the group-master slider.
+class SpyGrouping extends GroupingController {
+  SpyGrouping(Ref ref) : super(ref, const CommandApi());
+
+  final calls = <String>[];
+
+  @override
+  void setGroupVolume(String groupId, int v) {
+    calls.add('setGroupVolume($groupId,$v)');
+  }
+
+  @override
+  void setGroupVolumeEnd(String groupId, int v) {
+    calls.add('setGroupVolumeEnd($groupId,$v)');
+  }
+
+  @override
+  Future<void> setGroupMute(String groupId, bool muted) async {
+    calls.add('setGroupMute($groupId,$muted)');
+  }
+}
+
 /// A playing solo room `OF` (Office) — its group `G_OF` has a track + playing
 /// transport, so `hasActiveStream` is true.
 Household playingHousehold() {
@@ -206,31 +229,42 @@ Household mixedHousehold() {
   );
 }
 
-/// A handle returned by [wrap]: the widget to pump, plus a `calls` getter that
-/// resolves the spy lazily (the override runs on first provider read, i.e.
+/// A handle returned by [wrap]: the widget to pump, plus `calls` getters that
+/// resolve the spies lazily (the overrides run on first provider read, i.e.
 /// during the pump that happens after [wrap] returns).
 class WrapHandle {
-  WrapHandle(this.widget, this._resolveSpy);
+  WrapHandle(this.widget, this._resolvePlayback, this._resolveGrouping);
   final Widget widget;
-  final SpyPlayback Function() _resolveSpy;
+  final SpyPlayback Function() _resolvePlayback;
+  final SpyGrouping Function() _resolveGrouping;
 
-  /// Recorded controller calls (`togglePlay(...)`, `setVolume(...)`, ...).
-  List<String> get calls => _resolveSpy().calls;
+  /// Recorded playback-controller calls (`togglePlay(...)`, `setVolume(...)`).
+  List<String> get calls => _resolvePlayback().calls;
+
+  /// Recorded grouping-controller calls (`setGroupVolume(...)`, ...).
+  List<String> get groupingCalls => _resolveGrouping().calls;
 }
 
 /// Build the widget under test inside a [ProviderScope] seeded with [household],
-/// the oto theme, and a [SpyPlayback] controller capturing command calls.
+/// the oto theme, a [SpyPlayback] and a [SpyGrouping] controller capturing
+/// command calls.
 WrapHandle wrap(Widget child, {required Household household}) {
-  SpyPlayback? spy;
+  SpyPlayback? playback;
+  SpyGrouping? grouping;
   final widget = ProviderScope(
     overrides: [
       householdProvider.overrideWith(() => FixtureHousehold(household)),
-      playbackControllerProvider.overrideWith((ref) => spy = SpyPlayback(ref)),
+      playbackControllerProvider.overrideWith(
+        (ref) => playback = SpyPlayback(ref),
+      ),
+      groupingControllerProvider.overrideWith(
+        (ref) => grouping = SpyGrouping(ref),
+      ),
     ],
     child: MaterialApp(
       theme: otoTheme(Brightness.light, Accent.teal),
       home: Scaffold(body: child),
     ),
   );
-  return WrapHandle(widget, () => spy!);
+  return WrapHandle(widget, () => playback!, () => grouping!);
 }

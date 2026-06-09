@@ -1,0 +1,153 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:oto/src/state/model/group_state.dart';
+import 'package:oto/src/state/model/household.dart';
+import 'package:oto/src/state/model/room_state.dart';
+import 'package:oto/src/state/model/track.dart';
+import 'package:oto/src/ui/home/group_card.dart';
+import 'package:oto/src/ui/widgets/oto_slider.dart';
+
+import '_fixtures.dart';
+
+/// A multi-room group `G` with [count] member rooms (coordinator `R0` first).
+/// The group is playing with a known track and a group-master volume, so the
+/// header renders now-playing + a resume button and the master slider is live.
+///
+/// The coordinator (`R0`) is named "Living Room" so the header title does not
+/// collide with the per-room level labels "Room 1".."Room N-1" in finders.
+Household groupHousehold(int count) {
+  final rooms = <String, RoomState>{};
+  for (var i = 0; i < count; i++) {
+    rooms['R$i'] = RoomState(
+      id: 'R$i',
+      name: i == 0 ? 'Living Room' : 'Room $i',
+      kind: RoomKind.speaker,
+      volume: 20 + i * 5,
+      groupId: 'G',
+    );
+  }
+  return Household(
+    rooms: rooms,
+    groups: {
+      'G': GroupState(
+        id: 'G',
+        coordinatorId: 'R0',
+        memberIds: [for (var i = 0; i < count; i++) 'R$i'],
+        transport: PlaybackState.playing,
+        track: const Track(title: 'Strobe', artist: 'Deadmau5'),
+        groupVolume: 40,
+      ),
+    },
+  );
+}
+
+void main() {
+  testWidgets('6-member group renders exactly 4 level rows + "+2 more"', (
+    t,
+  ) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(6));
+    await t.pumpWidget(h.widget);
+
+    // 4 per-room level rows + the group-master = 5 sliders total.
+    expect(find.byType(OtoSlider), findsNWidgets(5));
+    // First 4 rooms visible (coordinator "Living Room" + Room 1..3), the last
+    // 2 (Room 4, Room 5) hidden behind the overflow.
+    expect(find.text('Room 1'), findsOneWidget);
+    expect(find.text('Room 3'), findsOneWidget);
+    expect(find.text('Room 4'), findsNothing);
+    expect(find.text('Room 5'), findsNothing);
+
+    // The overflow button, keyed and reading "+2 more".
+    expect(find.byKey(const Key('group-more-G')), findsOneWidget);
+    expect(
+      find.textContaining('2 more'),
+      findsOneWidget,
+      reason: '6 - 4 = 2 hidden rooms',
+    );
+  });
+
+  testWidgets('4-member group renders 4 level rows and no overflow', (t) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(4));
+    await t.pumpWidget(h.widget);
+
+    // 4 per-room level rows + the group-master = 5 sliders total.
+    expect(find.byType(OtoSlider), findsNWidgets(5));
+    expect(find.text('Room 3'), findsOneWidget);
+    expect(find.byKey(const Key('group-more-G')), findsNothing);
+  });
+
+  testWidgets('group play button is keyed and present when active', (t) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(2));
+    await t.pumpWidget(h.widget);
+
+    expect(find.byKey(const Key('group-play-G')), findsOneWidget);
+    // Now-playing line combines title + artist into one Text ("Strobe - ...").
+    expect(find.textContaining('Strobe'), findsOneWidget);
+  });
+
+  testWidgets('tapping the group play button calls togglePlay(groupId)', (
+    t,
+  ) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(2));
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('group-play-G')));
+    await t.pump();
+
+    expect(h.calls, contains('togglePlay(G,playing)'));
+  });
+
+  testWidgets('dragging the group-master slider calls the GroupingController', (
+    t,
+  ) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(2));
+    await t.pumpWidget(h.widget);
+
+    await t.drag(find.byKey(const Key('group-volume-G')), const Offset(40, 0));
+    await t.pumpAndSettle();
+
+    expect(
+      h.groupingCalls.any((c) => c.startsWith('setGroupVolume(G,')),
+      isTrue,
+      reason: 'mid-drag setGroupVolume routed to the grouping controller',
+    );
+    expect(
+      h.groupingCalls.any((c) => c.startsWith('setGroupVolumeEnd(G,')),
+      isTrue,
+      reason:
+          'drag release setGroupVolumeEnd routed to the grouping controller',
+    );
+    // The group-master must NOT route through the per-room playback path.
+    expect(h.calls.any((c) => c.startsWith('setVolume(')), isFalse);
+  });
+
+  testWidgets('dragging a per-room level slider calls setVolume for that room', (
+    t,
+  ) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(2));
+    await t.pumpWidget(h.widget);
+
+    // Sliders in order: [group-master, R0 level, R1 level]. Drag the R1 level.
+    final sliders = find.byType(OtoSlider);
+    await t.drag(sliders.at(2), const Offset(40, 0));
+    await t.pumpAndSettle();
+
+    expect(
+      h.calls.any((c) => c.startsWith('setVolume(R1,')),
+      isTrue,
+      reason: 'per-room level slider routes to that room id via setVolume',
+    );
+    expect(h.calls.any((c) => c.startsWith('setVolumeEnd(R1,')), isTrue);
+  });
+
+  testWidgets('unknown group id renders nothing', (t) async {
+    final h = wrap(
+      const GroupCard(groupId: 'NOPE'),
+      household: groupHousehold(2),
+    );
+    await t.pumpWidget(h.widget);
+
+    expect(find.byType(OtoSlider), findsNothing);
+    expect(find.byKey(const Key('group-play-NOPE')), findsNothing);
+  });
+}
