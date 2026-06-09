@@ -45,6 +45,26 @@ void main() {
     expect(h2.rooms['KT']!.groupId, 'G2');
   });
 
+  test('regroup carries group transport + track by coordinator (stable across group-id change)', () {
+    var h = householdFromTopology(_topo()); // G1: coord LR, members [LR, KT]
+    h = applyEvent(h, const ChangeEventDto.playback(groupId: 'G1', state: PlaybackStateDto.playing));
+    h = applyEvent(h, const ChangeEventDto.track(groupId: 'G1', track: TrackDto(title: 'Black Star')));
+    h = applyEvent(h, const ChangeEventDto.groupVolume(groupId: 'G1', volume: 36));
+    // Regroup: same coordinator LR, NEW group id G1b.
+    const topo2 = Topology(speakers: [
+      DiscoveredSpeaker(id: 'LR', roomName: 'Living Room', model: 'Beam', ip: '1'),
+      DiscoveredSpeaker(id: 'KT', roomName: 'Kitchen', model: 'One SL', ip: '2'),
+    ], groups: [
+      DiscoveredGroup(id: 'G1b', coordinator: 'LR', members: ['LR']),
+      DiscoveredGroup(id: 'G2', coordinator: 'KT', members: ['KT']),
+    ]);
+    final h2 = householdFromTopology(topo2, previous: h);
+    expect(h2.groups['G1b']!.transport, PlaybackState.playing, reason: 'transport carries by coordinator across new group id');
+    expect(h2.groups['G1b']!.track!.title, 'Black Star', reason: 'track carries by coordinator');
+    expect(h2.groups['G1b']!.groupVolume, 36, reason: 'group volume carries by coordinator');
+    expect(h2.groups['G2']!.transport, isNull, reason: 'a brand-new coordinator (KT) has no carried state');
+  });
+
   test('event for unknown id is ignored', () {
     final h = householdFromTopology(_topo());
     expect(() => applyEvent(h, const ChangeEventDto.volume(speakerId: 'GHOST', volume: 9)), returnsNormally);
