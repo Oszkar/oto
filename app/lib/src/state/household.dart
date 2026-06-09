@@ -59,6 +59,14 @@ class HouseholdNotifier extends _$HouseholdNotifier {
         ChangeEventDto.groupVolume(groupId: groupId, volume: v),
       );
 
+  /// Optimistically reflect a group master mute change. Mirrors a
+  /// `GroupMute` event (the only path to a group mute value).
+  void setOptimisticGroupMuted(String groupId, bool m) =>
+      state = applyEvent(
+        state,
+        ChangeEventDto.groupMute(groupId: groupId, muted: m),
+      );
+
   /// Optimistically reflect a group transport change. Mirrors a `Playback`
   /// event; the view enum is mapped back to the DTO at the boundary.
   void setOptimisticTransport(String groupId, PlaybackState t) =>

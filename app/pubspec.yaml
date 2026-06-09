@@ -48,6 +48,10 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
 
+  # Deterministic virtual time for the Throttle unit test (transitive via
+  # flutter_test, pinned here for an explicit, stable import).
+  fake_async: ^1.3.1
+
   # Riverpod codegen. (riverpod_lint + custom_lint dropped: custom_lint
   # 0.8.1's plugin-client generator ignores pubspec.lock and resolved
   # `riverpod_lint: ^3.0.0` against pub.dev's latest 3.1.3 while pub get
