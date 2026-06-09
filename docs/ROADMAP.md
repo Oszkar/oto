@@ -12,7 +12,11 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.4.0 | released | Live **property** events (GENA) — Rust → Dart event stream for volume / mute / transport / track |
 | v0.5.0 | released | **Hardening before UI** — topology events, SubscriptionError surfacing, Android `MulticastLock`, model repopulate (group form/break → v0.5.1) |
 | v0.5.1 | released | **Group operations** — form/break, group volume/mute (commands + read/event), fast topology refresh after a regroup (no SSDP re-discovery) |
-| v0.6   | next | The designed Flutter UI (on the now feature-complete capability layer) |
+| v0.6.0 | next | **UI: foundation + Home + Now Playing** — theming, source-model state architecture, adaptive shell, persistence |
+| v0.6.1 | planned | **UI: room management** — group editor + room detail |
+| v0.6.2 | planned | **UI: settings + states** — settings + empty/error/loading/offline states |
+| v0.6.3 | planned | **UI: responsive** — tablet master-detail, desktop three-pane |
+| v0.7.0 | planned | **Hardening + polish** — SSDP hardening, cleanup TODOs, dogfooding finds |
 | v1.0   | future | Stable — externally tested, packaged |
 
 v0.1–v0.4 are verified on Windows. **v0.5 hardware acceptance — PASS** (2026-06-02/03, 2-speaker LAN + a real Android device): live topology events (regroup → `TopologyChanged`; validated with a `refresh_topology` re-pull; no seed-induced rediscover loop), speaker-model repopulation, the v0.4 regression suite (incl. a 28.5 min renewal cycle), and **Android *release* discovery** working via the held `WifiManager.MulticastLock` (it was non-functional before). Evidence at [docs/evidence/v0.5-release/](evidence/v0.5-release/README.md). Earlier: v0.4 full evidence at [docs/evidence/v0.4-release/](evidence/v0.4-release/README.md); the Android debug-APK smoke at [docs/evidence/v0.5-android-debug.md](evidence/v0.5-android-debug.md).
@@ -78,7 +82,20 @@ Spike-gated, risk-ordered (spike → form/break → group volume → fast topolo
 
 ## v0.6 — UI
 
-The designed Flutter interface on the proven capability layers. Pure design + implementation work against a feature-complete `Wire` + event stream + FRB surface. No further capability-layer additions in this milestone.
+The designed Flutter interface on the proven capability layers — pure design + implementation, no new capability-layer work. The visual design system landed in [`docs/design-system/`](design-system/handoff/HANDOFF.md) (tokens, screens, states, responsive, brand). v0.6 builds the **backend-true core**: exactly the controls the `Wire` + event stream support today. Controls in the design that need new backend (shuffle/repeat/seek, queue, EQ/Sound) or are outside oto's scope (search/library, stereo pair, surround, TruePlay, add-speaker, sleep timer, telemetry) are **not rendered** — deferred to later milestones together with their backend work, never faked or shown disabled.
+
+Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0.5.1 cadence; each provable end-to-end and dogfoodable):
+
+- **v0.6.0 — Foundation + Home + Now Playing.** Theming (tokens → `ThemeData` + a `ThemeExtension` for the non-Material roles; bundled Geist; light/dark; user-selectable accent), the **source-model state architecture** (a keep-alive `householdProvider` that accumulates per-room / per-group state from discovery + the live event stream, a `sourcesFromRooms` derived selector, and optimistic command updates), the adaptive app shell, and local prefs persistence — then Home (Cards / Stack toggle) + Now Playing. This phase also de-risks the one genuinely novel piece: the event → view-model layer.
+- **v0.6.1 — Room management.** Group editor (join / leave / ungroup) + Room detail (now-playing + per-room volume; the Sound / TV / System sections need backend that doesn't exist yet, so they're deferred).
+- **v0.6.2 — Settings + states.** Settings (theme, default layout, about, read-only devices list) + the empty / error / loading / offline states.
+- **v0.6.3 — Responsive.** Tablet master-detail + desktop three-pane (Windows is first-class); the bottom strip dissolves into a persistent pane.
+
+The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.
+
+## v0.7 — Hardening + polish
+
+A small bucket after the UI: **SSDP hardening** (validate the `200` status line + `ST` + match the `LOCATION` host to the responder's source IP + cap the candidate count — the accepted, low-impact LAN risk documented in [ARCHITECTURE § Known constraints](ARCHITECTURE.md#known-constraints); the marker is the `TODO` in `native/crates/wire/src/ssdp.rs`), the cleanup TODOs (remove the dev `MockWire` injection seam once UI integration tests cover the path; stale doc comments), and whatever UI dogfooding surfaces. SSDP hardening lives entirely in `oto-wire` and is independent of the UI (its own PR), so it was sequenced *after* the UI rather than blocking it — ordering was a batching choice, not a dependency.
 
 ## v1.0 — Stable
 

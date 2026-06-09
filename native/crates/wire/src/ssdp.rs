@@ -137,7 +137,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
             loop {
                 match sockets[idx].recv_from(&mut buf) {
                     Ok((n, _)) => {
-                        // TODO(v0.6): accepted-risk hardening. We take any
+                        // TODO(v0.7): accepted-risk hardening. We take any
                         // datagram carrying a LOCATION header — we do NOT
                         // validate the SSDP status line or `ST`, match the
                         // LOCATION host against the responder's source
@@ -151,7 +151,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
                         // attempts (a non-Sonos host fails to parse and is
                         // skipped), and `discover()` stops at the first
                         // responder that returns a parseable topology.
-                        // Harden in v0.6 (validate 200 + `ST`, require the
+                        // Harden in v0.7 (validate 200 + `ST`, require the
                         // LOCATION host == source IP, cap candidates) —
                         // wants a hardware re-validation pass on the LAN.
                         if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {

@@ -1,0 +1,78 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-09-v0.6.0-foundation-home-nowplaying.md",
+  "specPath": "docs/superpowers/specs/2026-06-09-v0.6.0-foundation-home-nowplaying-design.md",
+  "note": "Native task IDs (8-20) map to plan Tasks 0-12. Full task bodies live in the native task store (TaskGet) and the plan .md; this file is the resume index.",
+  "tasks": [
+    {
+      "id": 8, "planTask": 0, "subject": "Task 0: Dependencies, fonts & assets", "status": "pending", "blockedBy": [],
+      "verifyCommand": "cd app && flutter pub get && flutter analyze",
+      "files": ["app/pubspec.yaml", "app/assets/"]
+    },
+    {
+      "id": 9, "planTask": 1, "subject": "Task 1: Theme — tokens, OtoColors extension, accent, ThemeData", "status": "pending", "blockedBy": [8],
+      "verifyCommand": "cd app && flutter test test/theme/oto_colors_test.dart",
+      "files": ["app/lib/src/theme/tokens.dart", "app/lib/src/theme/oto_colors.dart", "app/lib/src/theme/accent.dart", "app/lib/src/theme/oto_theme.dart"]
+    },
+    {
+      "id": 10, "planTask": 2, "subject": "Task 2: View-model types + sourcesFromHousehold", "status": "pending", "blockedBy": [],
+      "verifyCommand": "cd app && flutter test test/state/model/",
+      "files": ["app/lib/src/state/model/track.dart", "app/lib/src/state/model/room_state.dart", "app/lib/src/state/model/group_state.dart", "app/lib/src/state/model/household.dart", "app/lib/src/state/model/source.dart"]
+    },
+    {
+      "id": 11, "planTask": 3, "subject": "Task 3: Household reducer + householdNotifierProvider", "status": "pending", "blockedBy": [10],
+      "verifyCommand": "cd app && flutter test test/state/household_reducer_test.dart",
+      "files": ["app/lib/src/state/household_reducer.dart", "app/lib/src/state/household.dart", "app/lib/src/state/sources.dart"]
+    },
+    {
+      "id": 12, "planTask": 4, "subject": "Task 4: Optimistic, LAN-throttled command controllers", "status": "pending", "blockedBy": [11],
+      "verifyCommand": "cd app && flutter test test/state/",
+      "files": ["app/lib/src/state/throttle.dart", "app/lib/src/state/commands.dart"]
+    },
+    {
+      "id": 13, "planTask": 5, "subject": "Task 5: Local prefs (theme, accent, default layout)", "status": "pending", "blockedBy": [8, 9],
+      "verifyCommand": "cd app && flutter test test/state/prefs_test.dart",
+      "files": ["app/lib/src/state/prefs.dart"]
+    },
+    {
+      "id": 14, "planTask": 6, "subject": "Task 6: Shared widgets — icon, slider, album art, brand mark", "status": "pending", "blockedBy": [8, 9],
+      "verifyCommand": "cd app && flutter test test/ui/widgets/",
+      "files": ["app/lib/src/ui/widgets/oto_icon.dart", "app/lib/src/ui/widgets/oto_slider.dart", "app/lib/src/ui/widgets/album_art.dart", "app/lib/src/ui/widgets/oto_mark.dart"]
+    },
+    {
+      "id": 15, "planTask": 7, "subject": "Task 7: App shell — OtoApp + adaptive scaffold + nav", "status": "pending", "blockedBy": [9, 13],
+      "verifyCommand": "cd app && flutter test test/ui/shell/oto_app_test.dart",
+      "files": ["app/lib/main.dart", "app/lib/src/ui/shell/oto_app.dart", "app/lib/src/ui/shell/home_page.dart", "app/lib/src/ui/shell/oto_scaffold.dart"]
+    },
+    {
+      "id": 16, "planTask": 8, "subject": "Task 8: Home leaf widgets — header, layout toggle, room card + row", "status": "pending", "blockedBy": [11, 12, 13, 14],
+      "verifyCommand": "cd app && flutter test test/ui/home/",
+      "files": ["app/lib/src/ui/home/home_header.dart", "app/lib/src/ui/home/room_card.dart", "app/lib/src/ui/home/room_row.dart"]
+    },
+    {
+      "id": 17, "planTask": 9, "subject": "Task 9: Home — merged group card", "status": "pending", "blockedBy": [11, 12, 14],
+      "verifyCommand": "cd app && flutter test test/ui/home/group_card_test.dart",
+      "files": ["app/lib/src/ui/home/group_card.dart"]
+    },
+    {
+      "id": 18, "planTask": 10, "subject": "Task 10: Home — adaptive bottom strip", "status": "pending", "blockedBy": [10, 11, 12, 14],
+      "verifyCommand": "cd app && flutter test test/ui/home/bottom_strip_test.dart",
+      "files": ["app/lib/src/ui/home/bottom_strip.dart"]
+    },
+    {
+      "id": 19, "planTask": 11, "subject": "Task 11: Now Playing + locally-derived position", "status": "pending", "blockedBy": [11, 12, 14],
+      "verifyCommand": "cd app && flutter test test/state/now_playing_test.dart test/ui/now_playing/",
+      "files": ["app/lib/src/state/now_playing.dart", "app/lib/src/ui/now_playing/now_playing_screen.dart"]
+    },
+    {
+      "id": 21, "planTask": "11b", "subject": "Task 11b: Home composition — group/solo body + strip + Now Playing route", "status": "pending", "blockedBy": [15, 16, 17, 18, 19],
+      "verifyCommand": "cd app && flutter test test/ui/home/home_screen_test.dart",
+      "files": ["app/lib/src/ui/home/home_screen.dart", "app/lib/src/ui/shell/home_page.dart"]
+    },
+    {
+      "id": 20, "planTask": 12, "subject": "Task 12: Wire-up, topology follow & end-to-end integration test", "status": "pending", "blockedBy": [21],
+      "verifyCommand": "cd app && flutter test && flutter analyze",
+      "files": ["app/lib/src/ui/shell/home_page.dart", "app/integration_test/v0_6_0_ui_test.dart"]
+    }
+  ],
+  "lastUpdated": "2026-06-09"
+}
