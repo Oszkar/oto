@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'oto_scaffold.dart';
+import '../home/home_screen.dart';
 
-/// Placeholder Home. Task 11b replaces this body with the real HomeScreen.
+/// The shell's Home entry point. Renders the assembled [HomeScreen]; the shell
+/// (`OtoApp`) points [MaterialApp.home] at this widget.
 ///
-/// Kept a [ConsumerWidget] (even though it reads no providers yet) so the swap
-/// in Task 11b is a body-only change. Intentionally depends on no Home widgets.
+/// Kept a thin [ConsumerWidget] so the shell wiring stays stable; [HomeScreen]
+/// owns the scaffold and all Home state.
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const OtoScaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const HomeScreen();
   }
 }
