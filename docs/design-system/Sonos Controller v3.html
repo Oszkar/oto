@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sonos Controller — v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: "Geist", ui-sans-serif, system-ui, sans-serif; }
+  body[data-hf-theme="dark"] .dc-bg { background: #0a0a0c !important; }
+  body[data-hf-theme="dark"] { color: rgba(255,255,255,.92); }
+  body[data-hf-theme="light"] .dc-bg { background: #ecebe5 !important; }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="hifi-primitives.jsx"></script>
+<script type="text/babel" src="hifi-unified.jsx"></script>
+<script type="text/babel" src="hifi-states.jsx"></script>
+<script type="text/babel" src="hifi-responsive.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dark": false,
+  "accent": "#0f7a72"
+}/*EDITMODE-END*/;
+
+const ACCENT_MAP = {
+  '#0f7a72': 'teal',
+  '#3f4cb8': 'indigo',
+  '#a85a1a': 'amber',
+  '#3a4554': 'slate',
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  window.__hfTheme = { dark: t.dark, accent: ACCENT_MAP[t.accent] || 'teal' };
+  React.useEffect(() => {
+    document.body.dataset.hfTheme = t.dark ? 'dark' : 'light';
+  }, [t.dark]);
+  const themeKey = `${t.dark}-${t.accent}`;
+
+  const T = hfTokens();
+
+  return (
+    <div className="dc-bg" key={themeKey}>
+      <DesignCanvas>
+        <DCSection id="intro" title="Sonos controller — v3 · unified"
+          subtitle="One product. Home is the hub — no tab bar. The Cards vs Stack choice becomes a user preference (toggle in the header). Multi-source playback is handled by an adaptive bottom strip. Per-room sound stays in Room detail; system & user prefs in Settings; Queue reached only from Now Playing.">
+          <DCArtboard id="legend" label="What changed" width={480} height={460}>
+            <div style={{
+              padding: 26, height:'100%', boxSizing:'border-box',
+              background: t.dark ? '#16161a' : '#ffffff',
+              color: t.dark ? 'rgba(255,255,255,.92)' : 'rgba(15,15,15,.92)',
+              fontFamily: '"Geist", ui-sans-serif, system-ui, sans-serif',
+              display:'flex', flexDirection:'column', gap: 16, borderRadius: 4,
+              letterSpacing:'-0.005em',
+            }}>
+              <div style={{fontSize: 22, fontWeight: 700, letterSpacing:'-0.02em'}}>
+                From two directions to one
+              </div>
+              <div style={{fontSize: 13, lineHeight: 1.55, color: t.dark?'rgba(255,255,255,.72)':'rgba(15,15,15,.72)'}}>
+                The Cards and Stack experiments converged on the same Now Playing,
+                Group editor, and Room detail. The only real difference was Home
+                density — so that's a <b>preference</b>, not a fork.
+              </div>
+              <div style={{display:'flex', flexDirection:'column', gap: 8, fontSize: 12.5,
+                color: t.dark?'rgba(255,255,255,.7)':'rgba(15,15,15,.7)', lineHeight: 1.5}}>
+                <div>· <b>Home is the hub.</b> No bottom tab bar.</div>
+                <div>· <b>Layout toggle</b> in the Home header (grid / list).</div>
+                <div>· <b>Bottom strip is adaptive:</b><br/>
+                  &nbsp;&nbsp;&nbsp;0 playing → nothing<br/>
+                  &nbsp;&nbsp;&nbsp;1 group → floating mini-player<br/>
+                  &nbsp;&nbsp;&nbsp;2+ sources → "N sources playing" switcher</div>
+                <div>· <b>Settings:</b> system + user prefs (theme, default layout, privacy).</div>
+                <div>· <b>Room detail:</b> per-room sound, EQ, TV, sleep timer.</div>
+                <div>· <b>Queue:</b> reached only from Now Playing.</div>
+              </div>
+              <div style={{
+                marginTop:'auto', padding:'12px 14px', borderRadius: 10,
+                border: `1px solid ${t.dark?'rgba(255,255,255,.12)':'rgba(15,15,15,.10)'}`,
+                background: t.dark ? 'rgba(255,255,255,.03)' : 'rgba(15,15,15,.03)',
+                fontSize: 12, color: t.dark?'rgba(255,255,255,.7)':'rgba(15,15,15,.7)', lineHeight: 1.5,
+              }}>
+                <b>Tweaks ↘</b>  Dark mode, accent color.
+              </div>
+            </div>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="home" title="Home · the hub"
+          subtitle="Same screen, two layouts via the header toggle. Cards and Stack reflect the live room state (two sources active — the Living Room + Kitchen group and Office); the third frame shows the single-source state for comparison. The bottom strip is derived from the rooms, never hand-set.">
+          <DCArtboard id="home-cards" label="Home · Cards · 2 sources" width={HF.W} height={HF.H}>
+            <V3HomeCards/>
+          </DCArtboard>
+          <DCArtboard id="home-stack" label="Home · Stack · 2 sources" width={HF.W} height={HF.H}>
+            <V3HomeStack/>
+          </DCArtboard>
+          <DCArtboard id="home-single" label="Home · single source" width={HF.W} height={HF.H}>
+            <V3HomeSingle/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="group-card" title="Merged group card · scaling"
+          subtitle="A group is ONE source: one shared now-playing + ONE transport (pausing it pauses every room). Volume is the exception — a group master plus per-room levels nested in the card. Past 4 rooms the room list caps with a '+N more' that opens Room detail, so the card can't run away vertically.">
+          <DCArtboard id="grp-2" label="2 rooms grouped" width={HF.W} height={300}>
+            <V3GroupDemo count={2}/>
+          </DCArtboard>
+          <DCArtboard id="grp-3" label="3 rooms grouped" width={HF.W} height={336}>
+            <V3GroupDemo count={3}/>
+          </DCArtboard>
+          <DCArtboard id="grp-4" label="4 rooms grouped" width={HF.W} height={372}>
+            <V3GroupDemo count={4}/>
+          </DCArtboard>
+          <DCArtboard id="grp-6" label="6 rooms (capped + overflow)" width={HF.W} height={372}>
+            <V3GroupDemo count={6}/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="playback" title="Playback"
+          subtitle="Now Playing (reached from the bottom strip) and Queue (reached only from Now Playing).">
+          <DCArtboard id="np" label="Now Playing" width={HF.W} height={HF.H}>
+            <V3NowPlaying/>
+          </DCArtboard>
+          <DCArtboard id="queue" label="Queue" width={HF.W} height={HF.H}>
+            <V3Queue/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="rooms" title="Room management"
+          subtitle="Group editor opens from the Home group bar. Room detail opens from tapping a room.">
+          <DCArtboard id="group" label="Group rooms" width={HF.W} height={HF.H}>
+            <V3Group/>
+          </DCArtboard>
+          <DCArtboard id="detail" label="Room detail" width={HF.W} height={HF.H}>
+            <V3RoomDetail/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="system" title="System"
+          subtitle="Reached from the gear icon in the Home header. System config + user preferences only — no audio settings.">
+          <DCArtboard id="settings" label="Settings" width={HF.W} height={HF.H}>
+            <V3Settings/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="states" title="Empty, error & loading states"
+          subtitle="Real apps spend 30% of their time not in the happy path. Local-only / UPnP framing: failure surfaces as a system-level banner with retry; cached state is shown but locked.">
+          <DCArtboard id="first-run" label="First run · no speakers" width={HF.W} height={HF.H}>
+            <V3StateFirstRun/>
+          </DCArtboard>
+          <DCArtboard id="discovering" label="Discovering · skeleton" width={HF.W} height={HF.H}>
+            <V3StateDiscovering/>
+          </DCArtboard>
+          <DCArtboard id="offline" label="System offline · cached" width={HF.W} height={HF.H}>
+            <V3StateOffline/>
+          </DCArtboard>
+          <DCArtboard id="room-offline" label="One room offline" width={HF.W} height={HF.H}>
+            <V3StateRoomOffline/>
+          </DCArtboard>
+          <DCArtboard id="nothing" label="Nothing playing" width={HF.W} height={HF.H}>
+            <V3StateNothingPlaying/>
+          </DCArtboard>
+          <DCArtboard id="empty-queue" label="Empty queue" width={HF.W} height={HF.H}>
+            <V3StateEmptyQueue/>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="responsive" title="Tablet & desktop"
+          subtitle="Master/detail at tablet width; three-pane (rooms / now playing / queue) at desktop. Same IA, same controls — the bottom strip dissolves into a persistent pane.">
+          <DCArtboard id="tablet" label="Tablet · 1024×768" width={TABLET.W} height={TABLET.H}>
+            <V3Tablet/>
+          </DCArtboard>
+          <DCArtboard id="desktop" label="Desktop · 1440×900" width={DESKTOP.W} height={DESKTOP.H}>
+            <V3Desktop/>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel>
+        <TweakSection label="Theme"/>
+        <TweakToggle label="Dark mode" value={t.dark} onChange={v => setTweak('dark', v)}/>
+        <TweakSection label="Accent"/>
+        <TweakColor label="Color" value={t.accent}
+          options={['#0f7a72','#3f4cb8','#a85a1a','#3a4554']}
+          onChange={v => setTweak('accent', v)}/>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+</body>
+</html>
