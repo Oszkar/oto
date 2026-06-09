@@ -46,6 +46,11 @@ Duration positionAt(
   return clamped;
 }
 
+/// Wall-clock source, injectable for deterministic tests. Defaults to the real
+/// clock; only tests override it (production behavior is unchanged).
+@riverpod
+DateTime Function() clock(Ref ref) => DateTime.now;
+
 /// A ticking, locally-derived playback position for one group, keyed by
 /// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
 /// timer while playing and freezes otherwise.
@@ -83,7 +88,9 @@ class NowPlayingPosition extends _$NowPlayingPosition {
     final duration = group?.track?.duration;
     final trackKey = _trackKey(group?.track);
 
-    final now = DateTime.now();
+    // Single wall-clock source, injectable for deterministic tests.
+    final clock = ref.read(clockProvider);
+    final now = clock();
     final trackChanged = _seenTrack && trackKey != _lastTrackKey;
     final leftPlaying =
         !trackChanged &&
@@ -134,7 +141,7 @@ class NowPlayingPosition extends _$NowPlayingPosition {
     if (transport == PlaybackState.playing) {
       _timer = Timer.periodic(_tick, (_) {
         state = positionAt(
-          DateTime.now(),
+          clock(),
           anchorTime: _anchorTime,
           anchorPosition: _anchorPosition,
           state: PlaybackState.playing,

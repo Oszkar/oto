@@ -1,0 +1,208 @@
+// Notifier-level regression tests for the [NowPlayingPosition] re-anchor state
+// machine — the novel, riskiest part of Now Playing (the pure `positionAt` and
+// the static widget render are covered elsewhere).
+//
+// Wiring (mirrors `commands_test.dart`): the REAL `householdProvider` is driven
+// off Rust via an overridden `discoveryProvider` (fake topology seed) plus an
+// overridden `changeEventsProvider` (a controllable `StreamController`) — so the
+// real household reducer folds the events we push. The wall clock is injected
+// via `clockProvider` so transport transitions are evaluated against a fake,
+// monotonic `fakeNow` we advance by hand. No real 500 ms timer is needed:
+// rebuilds are driven by household mutations + the fake clock, fully
+// deterministically.
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:oto/src/rust/api.dart';
+import 'package:oto/src/state/discovery.dart';
+import 'package:oto/src/state/events.dart';
+import 'package:oto/src/state/household.dart';
+import 'package:oto/src/state/now_playing.dart';
+
+/// Two solo groups so we have an UNRELATED group (`G2`) to mutate without
+/// touching `G1`'s track/transport (the spurious-re-anchor guard test).
+const _topo = Topology(
+  speakers: [
+    DiscoveredSpeaker(id: 'LR', roomName: 'Living Room', model: 'Beam', ip: '1'),
+    DiscoveredSpeaker(id: 'KT', roomName: 'Kitchen', model: 'One SL', ip: '2'),
+  ],
+  groups: [
+    DiscoveredGroup(id: 'G1', coordinator: 'LR', members: ['LR']),
+    DiscoveredGroup(id: 'G2', coordinator: 'KT', members: ['KT']),
+  ],
+);
+
+class _FakeDiscovery extends Discovery {
+  @override
+  Future<Topology> build() async => _topo;
+}
+
+/// A handle over the wired-up container: push events, advance the clock, and
+/// re-read the position. `events.add(...)` folds through the real reducer; we
+/// pump microtasks so the `householdProvider` listener applies it before the
+/// next position read re-runs `build` with the (possibly advanced) fake clock.
+class _Harness {
+  _Harness(this.container, this._events, this._setNow, this._watch);
+  final ProviderContainer container;
+  final StreamController<ChangeEventDto> _events;
+  final void Function(DateTime) _setNow;
+  final String _watch;
+
+  DateTime _now = DateTime(2026, 1, 1);
+
+  /// Advance the fake wall-clock by [d].
+  void advance(Duration d) {
+    _now = _now.add(d);
+    _setNow(_now);
+  }
+
+  /// Push an event through the real change-event stream and let the household
+  /// listener fold it (microtask drain), then force the watched group's `build`
+  /// to re-run AT THE CURRENT CLOCK. Reading eagerly after each step is what
+  /// makes the state machine deterministic: each transport transition is
+  /// evaluated against the `fakeNow` in effect when that event arrived (a
+  /// deferred read would collapse several transitions into one rebuild and
+  /// anchor against the wrong clock).
+  Future<void> push(ChangeEventDto e) async {
+    _events.add(e);
+    await Future<void>.delayed(Duration.zero);
+    container.read(nowPlayingPositionProvider(_watch));
+  }
+
+  /// Current locally-derived position for [groupId] (re-runs `build`).
+  Duration position(String groupId) =>
+      container.read(nowPlayingPositionProvider(groupId));
+}
+
+/// Build the harness: fake discovery seed + controllable event stream + a
+/// mutable fake clock. Keeps `G1`'s position provider listened so it stays
+/// alive and rebuilds on every household change.
+Future<_Harness> _harness({String watch = 'G1'}) async {
+  final events = StreamController<ChangeEventDto>.broadcast();
+  var fakeNow = DateTime(2026, 1, 1);
+  final container = ProviderContainer(
+    overrides: [
+      discoveryProvider.overrideWith(_FakeDiscovery.new),
+      changeEventsProvider.overrideWith((ref) => events.stream),
+      clockProvider.overrideWithValue(() => fakeNow),
+    ],
+  );
+  addTearDown(container.dispose);
+  addTearDown(events.close);
+
+  // Instantiate the household notifier (starts its listens) and resolve the
+  // seed so the groups exist before we drive transitions.
+  container.read(householdProvider);
+  await container.read(discoveryProvider.future);
+
+  // Keep the watched group's position alive across mutations so its `build`
+  // re-runs (instance fields + anchor bookkeeping persist between rebuilds).
+  container.listen(nowPlayingPositionProvider(watch), (_, _) {});
+
+  return _Harness(container, events, (n) => fakeNow = n, watch);
+}
+
+const _trackA = ChangeEventDto.track(
+  groupId: 'G1',
+  track: TrackDto(id: 'a', title: 'Strobe'),
+);
+const _trackB = ChangeEventDto.track(
+  groupId: 'G1',
+  track: TrackDto(id: 'b', title: 'Ghosts n Stuff'),
+);
+const _play = ChangeEventDto.playback(
+  groupId: 'G1',
+  state: PlaybackStateDto.playing,
+);
+const _pause = ChangeEventDto.playback(
+  groupId: 'G1',
+  state: PlaybackStateDto.paused,
+);
+
+/// Within ~50 ms (well inside the assertions' second-scale tolerances).
+Matcher _approx(Duration target) => predicate<Duration>(
+  (p) => (p - target).abs() < const Duration(milliseconds: 50),
+  'within 50ms of ${target.inMilliseconds}ms',
+);
+
+void main() {
+  test('advances by wall-clock while playing', () async {
+    final h = await _harness();
+    await h.push(_trackA);
+    await h.push(_play); // non-playing -> playing: anchors at fakeNow, pos 0.
+    expect(h.position('G1'), _approx(Duration.zero));
+
+    h.advance(const Duration(seconds: 5));
+    // Re-run build via an UNRELATED mutation so the anchor is untouched but the
+    // fake clock has moved: position should reflect +5s.
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 30));
+    expect(h.position('G1'), _approx(const Duration(seconds: 5)));
+  });
+
+  test('track change resets to 0 (not the old advanced value)', () async {
+    final h = await _harness();
+    await h.push(_trackA);
+    await h.push(_play);
+    h.advance(const Duration(seconds: 7));
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
+    expect(h.position('G1'), _approx(const Duration(seconds: 7)),
+        reason: 'sanity: advanced before the track change');
+
+    await h.push(_trackB); // distinct track key -> re-anchor at 0.
+    expect(h.position('G1'), _approx(Duration.zero),
+        reason: 'a new track restarts the position at 0, NOT the advanced 7s');
+  });
+
+  test('resume continues from the FROZEN position, not 0 (load-bearing)',
+      () async {
+    final h = await _harness();
+    await h.push(_trackA);
+    await h.push(_play);
+
+    h.advance(const Duration(seconds: 10));
+    await h.push(_pause); // playing -> paused: snapshot elapsed (~10s), freeze.
+    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
+        reason: 'pause snapshots the elapsed position');
+
+    // Time passes while paused: the frozen position must NOT advance.
+    h.advance(const Duration(seconds: 30));
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 1));
+    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
+        reason: 'paused position is frozen — 30s of wall time does not move it');
+
+    // Resume: must re-anchor from the frozen ~10s, NOT snap to 0.
+    await h.push(_play);
+    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
+        reason: 'resume re-anchors from the frozen 10s, never 0');
+
+    // ...and continues upward from there.
+    h.advance(const Duration(seconds: 2));
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 2));
+    expect(h.position('G1'), _approx(const Duration(seconds: 12)),
+        reason: 'after resume it advances: 10s frozen + 2s elapsed');
+  });
+
+  test('an unrelated household change does NOT re-anchor (spurious guard)',
+      () async {
+    final h = await _harness();
+    await h.push(_trackA);
+    await h.push(_play);
+    h.advance(const Duration(seconds: 8));
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 5));
+    expect(h.position('G1'), _approx(const Duration(seconds: 8)),
+        reason: 'sanity: advanced to ~8s while playing');
+
+    // A different room's volume event mutates the household (G1 build re-runs)
+    // but touches neither G1's track nor its transport: position must hold.
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 6));
+    expect(h.position('G1'), _approx(const Duration(seconds: 8)),
+        reason: 'an unrelated change must NOT reset G1 to 0');
+
+    // ...and it keeps advancing normally afterwards.
+    h.advance(const Duration(seconds: 2));
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 7));
+    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
+        reason: 'position continues advancing after the unrelated change');
+  });
+}

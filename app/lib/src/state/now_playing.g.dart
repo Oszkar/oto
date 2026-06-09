@@ -8,6 +8,61 @@ part of 'now_playing.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// Wall-clock source, injectable for deterministic tests. Defaults to the real
+/// clock; only tests override it (production behavior is unchanged).
+
+@ProviderFor(clock)
+final clockProvider = ClockProvider._();
+
+/// Wall-clock source, injectable for deterministic tests. Defaults to the real
+/// clock; only tests override it (production behavior is unchanged).
+
+final class ClockProvider
+    extends
+        $FunctionalProvider<
+          DateTime Function(),
+          DateTime Function(),
+          DateTime Function()
+        >
+    with $Provider<DateTime Function()> {
+  /// Wall-clock source, injectable for deterministic tests. Defaults to the real
+  /// clock; only tests override it (production behavior is unchanged).
+  ClockProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'clockProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$clockHash();
+
+  @$internal
+  @override
+  $ProviderElement<DateTime Function()> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  DateTime Function() create(Ref ref) {
+    return clock(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(DateTime Function() value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<DateTime Function()>(value),
+    );
+  }
+}
+
+String _$clockHash() => r'3b571c5a0c08b7391c0eed04391003191bab6ccf';
+
 /// A ticking, locally-derived playback position for one group, keyed by
 /// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
 /// timer while playing and freezes otherwise.
@@ -86,7 +141,7 @@ final class NowPlayingPositionProvider
 }
 
 String _$nowPlayingPositionHash() =>
-    r'9f5f1f008f557b102cb3e7080eb1258642ba3607';
+    r'f8afde1cc9de5f97a16132bfdd37c04262e4c5a9';
 
 /// A ticking, locally-derived playback position for one group, keyed by
 /// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
