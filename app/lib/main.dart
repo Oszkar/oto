@@ -1,29 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:oto/src/rust/frb_generated.dart';
+import 'package:oto/src/state/prefs.dart';
+import 'package:oto/src/ui/shell/oto_app.dart';
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
-  runApp(const ProviderScope(child: OtoApp()));
-}
-
-class OtoApp extends StatelessWidget {
-  const OtoApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(title: 'oto', home: HomePage());
-  }
-}
-
-/// Neutral placeholder scaffold. Real UI is v0.6.
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Text('oto')),
-    );
-  }
+  final prefs = await SharedPreferences.getInstance();
+  runApp(ProviderScope(
+    overrides: [
+      prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+    ],
+    child: const OtoApp(),
+  ));
 }
