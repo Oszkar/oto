@@ -57,7 +57,7 @@ The FRB codegen version and FRB crate version **must** stay aligned, or generate
 
 ### Cargo/pub dependencies
 
-Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). All bumps - patch, minor, and major - are reviewed and merged by hand; nothing auto-merges (pre-1.0 crates treat minor as breaking by SemVer convention, and the maintainer owns merges/tags/releases).
+Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `app/` and `app/rust_builder/`). A narrow subset auto-merges once the required checks pass, via `.github/workflows/dependabot-auto-merge.yml`: patch updates, plus minor updates on development-only dependencies. Everything else is reviewed and merged by hand - production minors (pre-1.0 crates treat minor as breaking by SemVer convention), all majors, and ANY bump touching the contract-pinned dependencies (`sonos-api` / `sonos-sdk-*` / `quick-xml` / `ureq` / `flutter_rust_bridge`, see AGENTS.md 2.1), which the workflow excludes even at patch level. For grouped PRs, fetch-metadata reports the highest bump in the group, so a group containing one production minor is held for review.
 
 ## Branch protection
 

@@ -45,13 +45,24 @@ jobs:
       - name: Enable auto-merge for eligible updates
         # NB: fetch-metadata reports Dependabot's internal ecosystem ids
         # ('github_actions', 'cargo', 'pub'), NOT the dependabot.yml names.
+        #
+        # Contract-pinned dependencies are NEVER auto-merged, not even as
+        # patches: AGENTS.md 2.1 pins sonos-api / sonos-sdk-* exact (=0.5.2,
+        # bumps require re-running the v0.4 acceptance gate on hardware),
+        # quick-xml must stay unified with sonos-api, ureq is pinned exact,
+        # and flutter_rust_bridge must stay aligned with the codegen version
+        # (RELEASING.md). Those PRs always get a human.
         if: >
           (steps.meta.outputs.package-ecosystem == 'github_actions' ||
           steps.meta.outputs.package-ecosystem == 'cargo' ||
           steps.meta.outputs.package-ecosystem == 'pub') &&
           (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
           (steps.meta.outputs.update-type == 'version-update:semver-minor' &&
-          steps.meta.outputs.dependency-type == 'direct:development'))
+          steps.meta.outputs.dependency-type == 'direct:development')) &&
+          !contains(steps.meta.outputs.dependency-names, 'sonos-') &&
+          !contains(steps.meta.outputs.dependency-names, 'quick-xml') &&
+          !contains(steps.meta.outputs.dependency-names, 'ureq') &&
+          !contains(steps.meta.outputs.dependency-names, 'flutter_rust_bridge')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
