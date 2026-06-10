@@ -415,14 +415,14 @@ pub fn take_event_stream_with_generation() -> Option<(u64, std::sync::mpsc::Rece
     held.wire.take_event_stream().map(|rx| (generation, rx))
 }
 
-/// Generation-aware apply — no-op if `gen` doesn't match the current
+/// Generation-aware apply — no-op if `generation` doesn't match the current
 /// `state_manager` generation. The FRB consumer loop captures the
 /// generation once at start, then passes it on every event so a
 /// `discover_with` that bumps mid-stream causes any in-flight writes
 /// from the OLD wire's consumer to be dropped before they corrupt the
 /// NEW wire's freshly-seeded cache.
-pub fn apply_event_at_generation(gen: u64, event: &ChangeEvent) {
-    state_manager().apply_event_at_generation(gen, event);
+pub fn apply_event_at_generation(generation: u64, event: &ChangeEvent) {
+    state_manager().apply_event_at_generation(generation, event);
 }
 
 /// Snapshot the current `state_manager` generation. Captured by the
@@ -520,7 +520,7 @@ pub mod test_helpers {
     /// the stale (pre-bump) generation.
     pub fn process_pending_events(timeout: std::time::Duration) -> usize {
         let deadline = std::time::Instant::now() + timeout;
-        // `gen` is paired with the receiver whenever we (re)take the
+        // `generation` is paired with the receiver whenever we (re)take the
         // stream via `take_event_stream_with_generation` (the refill
         // below + the `Disconnected` arm). For OLD-wire events buffered
         // before a gen bump, the captured OLD gen is correct — the apply
@@ -528,7 +528,7 @@ pub mod test_helpers {
         // bumped (matching production semantics). For NEW-wire events
         // arriving after a refresh, the re-paired gen ensures they reach
         // the cache.
-        let mut gen = current_generation();
+        let mut generation = current_generation();
         let mut count = 0;
         loop {
             if std::time::Instant::now() >= deadline {
@@ -546,7 +546,7 @@ pub mod test_helpers {
                 // production consumer's atomic pairing).
                 match take_event_stream_with_generation() {
                     Some((g, rx)) => {
-                        gen = g;
+                        generation = g;
                         *slot_guard = Some(rx);
                     }
                     // No wire installed.
@@ -564,7 +564,7 @@ pub mod test_helpers {
             let step = remaining.min(std::time::Duration::from_millis(10));
             match rx.recv_timeout(step) {
                 Ok(ev) => {
-                    apply_event_at_generation(gen, &ev);
+                    apply_event_at_generation(generation, &ev);
                     count += 1;
                     // Put the receiver back so the next iteration can
                     // continue draining.
@@ -578,9 +578,9 @@ pub mod test_helpers {
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     // Wire was replaced — drop this rx, leave the slot
-                    // empty so the next iteration re-takes (rx, gen)
+                    // empty so the next iteration re-takes (rx, generation)
                     // together via `take_event_stream_with_generation`,
-                    // which re-pairs `gen` with the NEW wire (mirroring
+                    // which re-pairs `generation` with the NEW wire (mirroring
                     // the production NEW consumer in
                     // `api.rs::subscribe_change_events`).
                     drop(rx);
@@ -928,9 +928,9 @@ mod tests {
     /// (the app-bus sibling channel). Mirrors the FRB consumer, which drains with
     /// the wire generation it captured at start.
     fn drain_app_events() -> Vec<ChangeEvent> {
-        let gen = current_generation();
+        let generation = current_generation();
         let mut out = Vec::new();
-        while let Some(e) = try_recv_app_event(gen) {
+        while let Some(e) = try_recv_app_event(generation) {
             out.push(e);
         }
         out
@@ -1135,8 +1135,8 @@ mod tests {
     /// second thread would observe the first still inside.
     #[test]
     fn discover_with_serialises_concurrent_calls() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::thread;
         use std::time::Duration;
 

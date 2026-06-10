@@ -72,7 +72,7 @@ We carry one **local patch** against vendored Cargokit to drop 32-bit Android AB
 
 ## Prerequisites
 
-- Flutter stable
+- Flutter stable (`.fvmrc` is the canonical version - currently 3.44.0; CI reads it from there)
 - Rust 1.94+ via `rust-toolchain.toml` (auto-installed by rustup)
 - Cargo extensions: `flutter_rust_bridge_codegen`, `cargo-ndk`, `cargo-nextest`, `cargo-deny`
 - Optional: [`lefthook`][lefthook] for local Git hooks
@@ -86,7 +86,7 @@ cargo install flutter_rust_bridge_codegen --version 2.12.0 --locked
 cargo install cargo-ndk cargo-nextest cargo-deny --locked
 ```
 
-Install Lefthook separately if you want the pre-commit generated-source check:
+Install Lefthook separately if you want the local git hooks:
 
 ```bash
 brew install lefthook      # macOS/Linux
@@ -94,7 +94,7 @@ winget install evilmartians.lefthook  # Windows
 just install-hooks
 ```
 
-`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that, once installed, runs **only one** check automatically before every commit: `scripts/verify_generated.dart` (catches stale generated source). CI runs the same check server-side - Lefthook just shortens the local feedback loop.
+`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that mirrors CI locally once installed: pre-commit runs `scripts/verify_generated.dart` (catches stale generated source) and `cargo fmt --check`; pre-push runs clippy and cargo-nextest; commit-msg enforces a Conventional Commits subject line (CI applies the same gate to PR titles, which are what land on `main` under squash-merge). CI runs the same checks server-side - Lefthook just shortens the local feedback loop.
 
 ## Local Network & Firewall Setup
 

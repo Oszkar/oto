@@ -156,7 +156,7 @@ mod tests {
     fn backend_while_errored_does_not_recover() {
         let t = HealthTracker::new();
         assert!(t.observe(&sid(), &net()).is_some()); // → Errored
-                                                      // A Backend error is still an error — must NOT recover.
+        // A Backend error is still an error — must NOT recover.
         assert!(t.observe(&sid(), &backend()).is_none());
         // And the speaker is still Errored: a real Ok now recovers.
         assert!(matches!(
@@ -181,7 +181,7 @@ mod tests {
         let a = SpeakerId::new("RINCON_A");
         let b = SpeakerId::new("RINCON_B");
         assert!(t.observe(&a, &net()).is_some()); // A → Errored
-                                                  // B is independent: Ok while Healthy → no event.
+        // B is independent: Ok while Healthy → no event.
         assert!(t.observe(&b, &ok()).is_none());
         // A recovers independently.
         assert!(matches!(

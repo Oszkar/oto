@@ -26,8 +26,8 @@
 //! `push` from concurrent command threads needs no extra guard.
 
 use std::sync::{
-    mpsc::{self, Receiver, Sender},
     Mutex, OnceLock,
+    mpsc::{self, Receiver, Sender},
 };
 
 use oto_core::ChangeEvent;
@@ -69,8 +69,8 @@ pub(crate) fn push(generation: u64, event: ChangeEvent) {
 /// has no matching event left this tick.
 pub fn try_recv_app_event(consumer_gen: u64) -> Option<ChangeEvent> {
     let rx = bus().rx.lock().unwrap_or_else(|p| p.into_inner());
-    while let Ok((gen, event)) = rx.try_recv() {
-        if gen == consumer_gen {
+    while let Ok((generation, event)) = rx.try_recv() {
+        if generation == consumer_gen {
             return Some(event);
         }
         // Stale (different wire era) — drop and keep draining.

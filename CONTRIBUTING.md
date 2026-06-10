@@ -13,7 +13,7 @@ just check      # gen-check + cargo fmt + clippy + flutter analyze + cargo deny
 just test       # cargo nextest + flutter test
 ```
 
-Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook pre-commit hook (`just install-hooks`) catches stale generated source locally; CI's `Generated source freshness` job catches it server-side.
+Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook hooks (`just install-hooks`) mirror CI locally: pre-commit catches stale generated source and rustfmt drift, pre-push runs clippy + cargo-nextest, and commit-msg enforces Conventional Commits. CI's `Generated source freshness` job catches stale generated source server-side.
 
 ## Android cross-builds - build on Linux, macOS, or WSL
 
@@ -46,11 +46,7 @@ When the `dtolnay/rust-toolchain` Dependabot PR lands, update **in the same PR**
 - `rust-toolchain.toml` - `channel = "X.Y.Z"`
 - `native/Cargo.toml` - `rust-version = "X.Y"` under `[workspace.package]`
 
-For Flutter, no Dependabot coverage exists. Bump together when needed:
-
-- `.github/workflows/ci.yml` - `flutter-version: X.Y.Z` (both occurrences)
-- `.github/workflows/build.yml` - `flutter-version: X.Y.Z`
-- `README.md` - "currently 3.38.x" mention
+For Flutter, no Dependabot coverage exists. `.fvmrc` at the repo root is the canonical Flutter version - the CI workflows read it (the `Read Flutter version` step in `ci.yml` / `build.yml`), so bumping `.fvmrc` (`{"flutter": "X.Y.Z"}`) propagates automatically. Update the "currently X.Y.Z" mention in `README.md` in the same PR.
 
 Other inline pins to grep for when a coordinated bump is needed:
 
@@ -69,7 +65,7 @@ Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `ap
 
 ## Commit messages
 
-Conventional Commits, lowercase scope when relevant:
+Conventional Commits, lowercase scope when relevant. Enforced locally by the lefthook `commit-msg` hook and in CI on PR titles (`.github/workflows/pr-title.yml`); allowed types: feat, fix, chore, docs, style, refactor, perf, test, build, ci, revert.
 
 ```
 chore(app): polish scaffolding, target Android 15+ (64-bit only)

@@ -2,17 +2,17 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
-use std::sync::Mutex;
 use std::time::Duration;
 
 use oto_core::{
     ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, SpeakerIdentity,
     SpeakerState, Volume, Wire, WireError,
 };
-use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::SonosClient;
+use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 
 use crate::events::{EventPump, PumpInputs};
 use crate::{control, grouping, ssdp};

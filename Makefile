@@ -9,8 +9,12 @@ default:
 
 gen: gen-rust gen-dart
 
+# The trailing rustfmt re-formats FRB's output with the workspace rustfmt
+# (edition 2024) - FRB pins `rustfmt --edition 2018` internally. Mirrored in
+# the justfile and scripts/verify_generated.dart.
 gen-rust:
 	cd app && flutter_rust_bridge_codegen generate
+	cd native && rustfmt src/frb_generated.rs
 
 gen-dart:
 	cd app && dart run build_runner build

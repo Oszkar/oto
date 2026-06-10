@@ -16,6 +16,13 @@ Future<void> main() async {
   await _run('flutter_rust_bridge_codegen', [
     'generate',
   ], workingDirectory: '$root/app');
+  // FRB pins `rustfmt --edition 2018` for its generated output, which fights
+  // the workspace's edition-2024 style (import ordering). Re-format with the
+  // workspace rustfmt (reads native/rustfmt.toml) so the committed form
+  // matches `cargo fmt --check`. Mirrored in `just gen-rust` / Makefile.
+  await _run('rustfmt', [
+    'src/frb_generated.rs',
+  ], workingDirectory: '$root/native');
   await _run('dart', [
     'run',
     'build_runner',

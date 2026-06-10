@@ -9,8 +9,8 @@ use std::time::Duration;
 use oto_core::{PlaybackState, SpeakerState, Track, TrackId, TransportState, Volume, WireError};
 use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::{
-    services::{av_transport, rendering_control, zone_group_topology},
     ApiError, SonosClient,
+    services::{av_transport, rendering_control, zone_group_topology},
 };
 
 // ---------------------------------------------------------------------------
@@ -118,8 +118,8 @@ pub(crate) fn parse_track_didl(xml: &str) -> Option<Track> {
         return None;
     }
 
-    use quick_xml::events::Event;
     use quick_xml::Reader;
+    use quick_xml::events::Event;
 
     let mut reader = Reader::from_str(xml);
     reader.trim_text(true);
@@ -362,7 +362,7 @@ pub(crate) fn soap_speaker_state(
                             volume,
                             muted,
                             transport: None,
-                        })
+                        });
                     }
                 };
 

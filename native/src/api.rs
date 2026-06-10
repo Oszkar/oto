@@ -457,14 +457,14 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // pair (under a single slot lock). A concurrent `discover_with` bumps
     // the generation together with installing the new wire, so this pair
     // is always self-consistent: this rx belongs to a wire installed at
-    // exactly `gen`. Once a future `discover_with` bumps past `gen`, our
+    // exactly `generation`. Once a future `discover_with` bumps past it, our
     // `apply_event_at_generation` calls no-op, so we cannot pollute the
     // NEW wire's freshly-seeded cache with leftover events from the OLD
     // wire's channel. The `sink.add(...)` path still surfaces these events
     // to the Dart subscriber on the OLD stream until the rx Sender is
     // dropped and `recv()` returns Err — correct, because the OLD
     // subscriber is the one listening on this sink.
-    let Some((gen, rx)) = oto_app::take_event_stream_with_generation() else {
+    let Some((generation, rx)) = oto_app::take_event_stream_with_generation() else {
         // No wire installed yet, or stream already taken. The Dart
         // provider depends on `discoveryProvider`; once discover()
         // succeeds, this fn will be called again against the new wire.
@@ -473,7 +473,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // Apply one event to the cache + forward it to Dart. Returns `false`
     // if the Dart subscriber cancelled (the caller should then return).
     let emit = |event: oto_core::ChangeEvent| -> bool {
-        oto_app::apply_event_at_generation(gen, &event);
+        oto_app::apply_event_at_generation(generation, &event);
         sink.add(crate::map::to_change_event_dto(event)).is_ok()
     };
     loop {
@@ -490,7 +490,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         // is dropped, not forwarded onto this stream (review #67-followup
         // #3). The app bus never disconnects (it's process-global), so only
         // the wire channel drives loop exit.
-        while let Some(event) = oto_app::try_recv_app_event(gen) {
+        while let Some(event) = oto_app::try_recv_app_event(generation) {
             if !emit(event) {
                 return;
             }

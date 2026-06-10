@@ -22,10 +22,15 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # .fvmrc is the canonical Flutter version (see AGENTS.md / CONTRIBUTING.md).
+      - name: Read Flutter version
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.0
+          flutter-version: ${{ steps.fvm.outputs.version }}
           channel: stable
           cache: true
 
@@ -33,6 +38,9 @@ jobs:
         uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: aarch64-linux-android,x86_64-linux-android
+          # verify_generated.dart re-formats FRB's Rust output with the
+          # workspace rustfmt (edition 2024).
+          components: rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:

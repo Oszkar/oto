@@ -1,4 +1,31 @@
+# Git hooks, managed by lefthook. Install with `just install-hooks`.
+
 pre-commit:
+  parallel: true
   commands:
     generated:
       run: dart scripts/verify_generated.dart
+    # Mirrors CI's `cargo fmt` gate so formatting drift never reaches a PR.
+    rustfmt:
+      glob: "native/**/*.rs"
+      run: cargo fmt --all --manifest-path native/Cargo.toml -- --check
+      fail_text: Run `cargo fmt --all --manifest-path native/Cargo.toml`, then re-stage.
+
+pre-push:
+  parallel: false
+  commands:
+    # Mirrors CI's lint + test gates; catches red pushes before the PR does.
+    clippy:
+      run: cargo clippy --workspace --all-targets --manifest-path native/Cargo.toml -- -D warnings
+    # cargo-nextest is a prerequisite, same as CI: `cargo install cargo-nextest`.
+    test:
+      root: "native/"
+      run: cargo nextest run --workspace
+
+commit-msg:
+  scripts:
+    # Conventional Commits subject-line gate; CI enforces the same shape on
+    # PR titles (.github/workflows/pr-title.yml) since squash-merge means
+    # only the title lands on main.
+    "conventional.sh":
+      runner: sh

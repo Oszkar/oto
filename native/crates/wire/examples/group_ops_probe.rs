@@ -37,14 +37,14 @@ fn main() {
     use oto_wire::SonosWire;
 
     use sonos_api::{
-        services::{av_transport, group_rendering_control, zone_group_topology},
         SonosClient,
+        services::{av_transport, group_rendering_control, zone_group_topology},
     };
     use sonos_event_manager::{Device, SonosEventManager};
     use sonos_state::{
+        GroupId as SdkGroupId, GroupMute, GroupVolume, SpeakerId as SdkSpeakerId, StateManager,
         model::Speaker as SdkSpeaker,
         property::{GroupInfo, Property, Topology},
-        GroupId as SdkGroupId, GroupMute, GroupVolume, SpeakerId as SdkSpeakerId, StateManager,
     };
 
     // =========================================================================
@@ -372,10 +372,14 @@ fn main() {
 
             // Probe over-100 clamping: the SDK validates at build time (desired_volume: u16
             // with validate_basic rejecting > 100), so this tests the builder's validation.
-            println!("  SetGroupVolume(101) [over-100 clamping test — expect build-time ValidationError]:");
+            println!(
+                "  SetGroupVolume(101) [over-100 clamping test — expect build-time ValidationError]:"
+            );
             match group_rendering_control::set_group_volume(101).build() {
                 Ok(op) => match client.execute_enhanced(cip, op) {
-                    Ok(_) => println!("    → OK (device accepted 101 — NOTE: no SDK clamp, device clamped or accepted)"),
+                    Ok(_) => println!(
+                        "    → OK (device accepted 101 — NOTE: no SDK clamp, device clamped or accepted)"
+                    ),
                     Err(e) => println!("    → device ERR: {e:?}"),
                 },
                 Err(e) => println!("    → build-time Err (clamped by SDK validator): {e:?}"),

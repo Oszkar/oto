@@ -179,10 +179,10 @@ fn operator_volume_change_emits_event() {
     // are seeds (or no-ops), not the operator's action.
     let mut baseline: HashMap<SpeakerId, u8> = HashMap::new();
     for s in &snap.speakers {
-        if let Ok(state) = wire.speaker_state(&s.id) {
-            if let Some(v) = state.volume {
-                baseline.insert(s.id.clone(), v.get());
-            }
+        if let Ok(state) = wire.speaker_state(&s.id)
+            && let Some(v) = state.volume
+        {
+            baseline.insert(s.id.clone(), v.get());
         }
     }
     println!(
@@ -324,10 +324,10 @@ fn operator_play_pause_emits_per_group_event() {
     // events. See the docstring for why the filter was removed.
     let mut baseline: HashMap<GroupId, PlaybackState> = HashMap::new();
     for g in &snap.groups {
-        if let Ok(state) = wire.speaker_state(&g.coordinator) {
-            if let Some(t) = state.transport {
-                baseline.insert(g.id.clone(), t.state);
-            }
+        if let Ok(state) = wire.speaker_state(&g.coordinator)
+            && let Some(t) = state.transport
+        {
+            baseline.insert(g.id.clone(), t.state);
         }
     }
     println!(
