@@ -72,7 +72,7 @@ We carry one **local patch** against vendored Cargokit to drop 32-bit Android AB
 
 ## Prerequisites
 
-- Flutter stable (`.fvmrc` is the canonical version - currently 3.44.0; CI reads it from there)
+- Flutter stable (`.fvmrc` is the canonical version - currently 3.44.1; CI reads it from there)
 - Rust 1.94+ via `rust-toolchain.toml` (auto-installed by rustup)
 - Cargo extensions: `flutter_rust_bridge_codegen`, `cargo-ndk`, `cargo-nextest`, `cargo-deny`
 - Optional: [`lefthook`][lefthook] for local Git hooks

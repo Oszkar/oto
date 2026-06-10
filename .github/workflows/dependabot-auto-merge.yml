@@ -1,0 +1,58 @@
+# Auto-merge eligible Dependabot PRs once the required status checks pass
+# (Generated source freshness, Rust lint+test, Rust supply-chain,
+# Flutter analyze+test - enforced by the main ruleset).
+#
+# Conservative policy (deliberately narrow):
+#   - patch updates, any ecosystem / dep type                  -> auto-merge
+#   - minor updates on DEVELOPMENT dependencies only           -> auto-merge
+#   - production minors, ANY major, indirect-only ambiguity    -> left for manual review
+#
+# Covered ecosystems (see .github/dependabot.yml): github-actions (/),
+# cargo (/native), pub (/app and /app/rust_builder). For grouped PRs,
+# fetch-metadata reports the HIGHEST semver bump in the group, so a group
+# containing one minor production bump is correctly held for review.
+#
+# Uses GitHub's documented Dependabot pattern: `on: pull_request` + an explicit
+# `permissions:` block, which elevates the otherwise read-only GITHUB_TOKEN for
+# Dependabot-triggered runs. We never check out or run PR code - this job only
+# reads Dependabot metadata and arms GitHub-native auto-merge.
+#
+# Requires: repo setting "Allow auto-merge" enabled (it is), and the required
+# status checks above configured on `main` (otherwise there is nothing for
+# --auto to wait on). Because this runs from the PR branch, existing Dependabot
+# PRs must be rebased onto main once to pick it up; new ones inherit it
+# automatically.
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for eligible updates
+        # NB: fetch-metadata reports Dependabot's internal ecosystem ids
+        # ('github_actions', 'cargo', 'pub'), NOT the dependabot.yml names.
+        if: >
+          (steps.meta.outputs.package-ecosystem == 'github_actions' ||
+          steps.meta.outputs.package-ecosystem == 'cargo' ||
+          steps.meta.outputs.package-ecosystem == 'pub') &&
+          (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          (steps.meta.outputs.update-type == 'version-update:semver-minor' &&
+          steps.meta.outputs.dependency-type == 'direct:development'))
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
