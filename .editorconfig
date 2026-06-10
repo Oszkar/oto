@@ -22,9 +22,7 @@ trim_trailing_whitespace = false
 [Makefile]
 indent_style = tab
 
-[*.{bat,cmd}]
-end_of_line = crlf
-
-# Repo-specific note: the previous config also forced CRLF on *.ps1.
-# Dropped deliberately - PowerShell 7+ handles LF fine; only cmd.exe
-# scripts (bat/cmd) genuinely need CRLF.
+# Repo-specific note: the previous config forced CRLF on *.ps1 and
+# bat/cmd. Dropped deliberately - PowerShell 7+ handles LF fine, no
+# bat/cmd files exist, and .gitattributes forces LF on all text files
+# anyway (a CRLF editor rule would just create dirty-file churn).
