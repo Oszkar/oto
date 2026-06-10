@@ -23,6 +23,7 @@ Not done yet, on purpose - revisit once there is a signed, distributable build w
 
 - **No release binaries.** Builds are debug-only and Android release signing is not set up; no installers are attached to releases.
 - **No release CI.** Tagging and the GitHub Release are manual.
-- **No conventional-commit enforcement.**
+
+Conventional Commits are no longer deferred: they are enforced locally by the lefthook `commit-msg` hook (`.lefthook/commit-msg/conventional.sh`) and in CI by the PR-title workflow (`.github/workflows/pr-title.yml`), which lints the PR title - the only line that lands on `main` under squash-merge.
 
 [semver]: https://semver.org/spec/v2.0.0.html

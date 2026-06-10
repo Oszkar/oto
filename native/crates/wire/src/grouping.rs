@@ -10,8 +10,8 @@ use std::net::SocketAddr;
 
 use oto_core::{Volume, WireError};
 use sonos_api::{
-    services::{av_transport, group_rendering_control},
     SonosClient,
+    services::{av_transport, group_rendering_control},
 };
 
 use crate::control::map_sdk_err;

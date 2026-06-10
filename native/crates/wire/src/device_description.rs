@@ -17,8 +17,8 @@ use std::net::IpAddr;
 use std::time::Duration;
 
 use oto_core::SpeakerId;
-use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::events::Event;
 
 /// Per-speaker connect timeout. Short — the speaker is on the LAN and was
 /// just reached for ZGT; a slow connect means it's gone, skip it.

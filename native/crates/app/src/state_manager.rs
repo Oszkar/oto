@@ -13,8 +13,8 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
         RwLock,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -122,7 +122,7 @@ impl StateManager {
         Self::default()
     }
 
-    /// Generation-aware apply. No-op if `gen` doesn't match the
+    /// Generation-aware apply. No-op if `generation` doesn't match the
     /// current generation — used by `subscribe_change_events` to drop
     /// in-flight writes from an old wire's consumer loop after a
     /// `discover_with` replacement.
@@ -141,25 +141,25 @@ impl StateManager {
     /// The check uses `Ordering::Acquire` to pair with the `Release`
     /// store in `bump_and_clear`: a thread that observes the bump
     /// will not subsequently write into a stale cache.
-    pub fn apply_event_at_generation(&self, gen: u64, event: &ChangeEvent) {
+    pub fn apply_event_at_generation(&self, generation: u64, event: &ChangeEvent) {
         match event {
             ChangeEvent::Volume { speaker, volume } => {
                 let mut guard = self.speakers.write().unwrap_or_else(|p| p.into_inner());
-                if self.generation.load(Ordering::Acquire) != gen {
+                if self.generation.load(Ordering::Acquire) != generation {
                     return;
                 }
                 guard.entry(speaker.clone()).or_default().volume = Some(*volume);
             }
             ChangeEvent::Mute { speaker, muted } => {
                 let mut guard = self.speakers.write().unwrap_or_else(|p| p.into_inner());
-                if self.generation.load(Ordering::Acquire) != gen {
+                if self.generation.load(Ordering::Acquire) != generation {
                     return;
                 }
                 guard.entry(speaker.clone()).or_default().muted = Some(*muted);
             }
             ChangeEvent::Playback { group, state } => {
                 let mut guard = self.groups.write().unwrap_or_else(|p| p.into_inner());
-                if self.generation.load(Ordering::Acquire) != gen {
+                if self.generation.load(Ordering::Acquire) != generation {
                     return;
                 }
                 let entry = guard.entry(group.clone()).or_default();
@@ -181,7 +181,7 @@ impl StateManager {
             }
             ChangeEvent::Track { group, track } => {
                 let mut guard = self.groups.write().unwrap_or_else(|p| p.into_inner());
-                if self.generation.load(Ordering::Acquire) != gen {
+                if self.generation.load(Ordering::Acquire) != generation {
                     return;
                 }
                 let entry = guard.entry(group.clone()).or_default();
@@ -203,7 +203,7 @@ impl StateManager {
             }
             ChangeEvent::GroupVolume { group, volume } => {
                 let mut guard = self.group_render.write().unwrap_or_else(|p| p.into_inner());
-                if self.generation.load(Ordering::Acquire) != gen {
+                if self.generation.load(Ordering::Acquire) != generation {
                     return;
                 }
                 // Last-wins (no dedup): a group-volume drag fires ~23 events;
@@ -212,7 +212,7 @@ impl StateManager {
             }
             ChangeEvent::GroupMute { group, muted } => {
                 let mut guard = self.group_render.write().unwrap_or_else(|p| p.into_inner());
-                if self.generation.load(Ordering::Acquire) != gen {
+                if self.generation.load(Ordering::Acquire) != generation {
                     return;
                 }
                 guard.entry(group.clone()).or_default().muted = Some(*muted);
@@ -237,8 +237,8 @@ impl StateManager {
     /// generation so the dispatch logic lives in exactly one place.
     #[cfg(test)]
     pub(crate) fn apply_event(&self, event: &ChangeEvent) {
-        let gen = self.generation.load(Ordering::Acquire);
-        self.apply_event_at_generation(gen, event);
+        let generation = self.generation.load(Ordering::Acquire);
+        self.apply_event_at_generation(generation, event);
     }
 
     /// Read a speaker's cached volume (None if no event seen yet).
@@ -726,11 +726,11 @@ mod tests {
     fn apply_event_at_generation_with_wrong_generation_is_noop() {
         let sm = StateManager::new();
         let k = SpeakerId::new("RINCON_K");
-        let gen = sm.current_generation();
-        // Bump so the captured `gen` is now stale.
+        let generation = sm.current_generation();
+        // Bump so the captured `generation` is now stale.
         sm.bump_and_clear();
         sm.apply_event_at_generation(
-            gen,
+            generation,
             &ChangeEvent::Volume {
                 speaker: k.clone(),
                 volume: Volume::new(99).unwrap(),
@@ -746,9 +746,9 @@ mod tests {
     fn apply_event_at_generation_with_right_generation_mutates_cache() {
         let sm = StateManager::new();
         let k = SpeakerId::new("RINCON_K");
-        let gen = sm.current_generation();
+        let generation = sm.current_generation();
         sm.apply_event_at_generation(
-            gen,
+            generation,
             &ChangeEvent::Volume {
                 speaker: k.clone(),
                 volume: Volume::new(60).unwrap(),
@@ -965,10 +965,11 @@ mod tests {
             group: GroupId::new("RINCON_K:0"),
             state: PlaybackState::Playing,
         });
-        assert!(sm
-            .speaker_state(&SpeakerId::new("RINCON_K"))
-            .transport
-            .is_some());
+        assert!(
+            sm.speaker_state(&SpeakerId::new("RINCON_K"))
+                .transport
+                .is_some()
+        );
 
         sm.bump_and_clear();
 

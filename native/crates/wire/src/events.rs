@@ -21,9 +21,9 @@ use std::{
     collections::{HashMap, HashSet},
     net::IpAddr,
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc,
     },
     thread::JoinHandle,
     time::Duration,
@@ -786,16 +786,17 @@ mod tests {
     fn first_topology_event_per_speaker_is_suppressed_as_seed() {
         let mut f = TopologyFilter::new();
         // First group_membership for a speaker is the subscribe seed → drop.
-        assert!(f
-            .admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged)
-            .is_none());
+        assert!(
+            f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged)
+                .is_none()
+        );
     }
 
     #[test]
     fn second_topology_event_emits_and_marks_dirty() {
         let mut f = TopologyFilter::new();
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
-                                                                         // A real regroup (2nd group_membership for the speaker) is forwarded.
+        // A real regroup (2nd group_membership for the speaker) is forwarded.
         assert!(matches!(
             f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged),
             Some(ChangeEvent::TopologyChanged)
@@ -806,16 +807,19 @@ mod tests {
     fn seeds_are_per_speaker() {
         let mut f = TopologyFilter::new();
         // Each speaker's FIRST event is its own seed (suppressed).
-        assert!(f
-            .admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
-            .is_none());
-        assert!(f
-            .admit(&sid("RINCON_B"), ChangeEvent::TopologyChanged)
-            .is_none());
+        assert!(
+            f.admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
+                .is_none()
+        );
+        assert!(
+            f.admit(&sid("RINCON_B"), ChangeEvent::TopologyChanged)
+                .is_none()
+        );
         // A's second is a real change.
-        assert!(f
-            .admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
-            .is_some());
+        assert!(
+            f.admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
+                .is_some()
+        );
     }
 
     /// The loop-prevention invariant: a burst of seed-only events (one per
@@ -845,20 +849,21 @@ mod tests {
         let mut f = TopologyFilter::new();
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // real → dirty
-                                                                         // Group-addressed events now carry stale routing → dropped.
+        // Group-addressed events now carry stale routing → dropped.
         assert!(f.admit(&sid("RINCON_K"), playback_ev("G:stale")).is_none());
         assert!(f.admit(&sid("RINCON_K"), track_ev("G:stale")).is_none());
         // Per-speaker events are grouping-independent → still flow.
         assert!(f.admit(&sid("RINCON_K"), volume_ev("RINCON_K")).is_some());
-        assert!(f
-            .admit(
+        assert!(
+            f.admit(
                 &sid("RINCON_K"),
                 ChangeEvent::Mute {
                     speaker: sid("RINCON_K"),
                     muted: true
                 }
             )
-            .is_some());
+            .is_some()
+        );
     }
 
     #[test]
@@ -887,30 +892,32 @@ mod tests {
         );
         // Per-speaker Volume/Mute are grouping-independent → still flow.
         assert!(f.admit(&sid("RINCON_K"), volume_ev("RINCON_K")).is_some());
-        assert!(f
-            .admit(
+        assert!(
+            f.admit(
                 &sid("RINCON_K"),
                 ChangeEvent::Mute {
                     speaker: sid("RINCON_K"),
                     muted: false
                 }
             )
-            .is_some());
+            .is_some()
+        );
     }
 
     #[test]
     fn group_volume_passes_before_a_regroup() {
         let mut f = TopologyFilter::new();
         assert!(f.admit(&sid("RINCON_K"), group_volume_ev("G:1")).is_some());
-        assert!(f
-            .admit(
+        assert!(
+            f.admit(
                 &sid("RINCON_K"),
                 ChangeEvent::GroupMute {
                     group: gid("G:1"),
                     muted: true
                 }
             )
-            .is_some());
+            .is_some()
+        );
     }
 
     // ── map_playback_state ────────────────────────────────────────────

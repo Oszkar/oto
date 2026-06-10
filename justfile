@@ -15,8 +15,15 @@ default:
 gen: gen-rust gen-dart
 
 [working-directory: 'app']
-gen-rust:
+gen-rust: && gen-rust-fmt
     flutter_rust_bridge_codegen generate
+
+# FRB formats its output with `rustfmt --edition 2018`; re-format with the
+# workspace rustfmt (edition 2024, via native/rustfmt.toml) so the generated
+# file satisfies `cargo fmt --check`. Mirrored in scripts/verify_generated.dart.
+[working-directory: 'native']
+gen-rust-fmt:
+    rustfmt src/frb_generated.rs
 
 [working-directory: 'app']
 gen-dart:

@@ -111,11 +111,11 @@ fn main() {
             // or a per-socket hard error (e.g. Windows WSAECONNRESET from an
             // ICMP port-unreachable to our M-SEARCH) — both benign for a
             // diagnostic, so we ignore the Err arm and keep polling the rest.
-            if let Ok((n, from)) = probe.sock.recv_from(&mut buf) {
-                if is_ssdp_reply(&buf[..n]) {
-                    probe.responders.insert(from.ip());
-                    progressed = true;
-                }
+            if let Ok((n, from)) = probe.sock.recv_from(&mut buf)
+                && is_ssdp_reply(&buf[..n])
+            {
+                probe.responders.insert(from.ip());
+                progressed = true;
             }
         }
         if !progressed {
