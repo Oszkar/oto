@@ -82,6 +82,13 @@ deny:
 install-hooks:
     lefthook install
 
+# Run the Flutter app on the host desktop (the documented manual-verify
+# loop, see AGENTS.md). Needs Sonos devices on the LAN to do anything
+# useful; Flutter picks the local device or prompts when several exist.
+[working-directory: 'app']
+dev:
+    flutter run
+
 # Debug builds.
 [working-directory: 'app']
 build-apk:
