@@ -2,10 +2,10 @@
 # clone can run `make check` without installing anything extra.
 
 .PHONY: default gen gen-rust gen-dart gen-check check fmt fmt-fix clippy analyze test \
-        test-rust test-dart test-integration deny install-hooks build-apk build-win bootstrap clean
+        test-rust test-dart test-integration deny install-hooks dev build-apk build-win bootstrap clean
 
 default:
-	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart test-integration deny install-hooks build-apk build-win bootstrap clean"
+	@echo "Recipes: gen gen-check check fmt fmt-fix clippy analyze test test-rust test-dart test-integration deny install-hooks dev build-apk build-win bootstrap clean"
 
 gen: gen-rust gen-dart
 
@@ -53,6 +53,10 @@ deny:
 
 install-hooks:
 	lefthook install
+
+# Run the Flutter app on the host desktop - see justfile for full rationale.
+dev:
+	cd app && flutter run
 
 build-apk:
 	cd app && flutter build apk --debug

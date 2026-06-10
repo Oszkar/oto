@@ -1,25 +1,30 @@
+# Shared editor baseline across the fleet (degner / oto / balanze / norrix).
+# 4-space default; 2-space only where the language's formatter or ecosystem
+# convention is firmly 2 (web stack, YAML, Dart). LF everywhere (matching
+# .gitattributes); trailing whitespace trimmed except in Markdown (hard
+# line breaks are syntax there).
 root = true
 
 [*]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
-trim_trailing_whitespace = true
 indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{js,mjs,cjs,ts,svelte,json,jsonc,html,css,scss,yml,yaml,dart}]
 indent_size = 2
 
-# Rust + JVM languages use 4-space indent by community convention.
-[*.{rs,kt,kts,java,gradle}]
-indent_size = 4
-
-# Makefiles require tab indentation.
-[Makefile]
-indent_style = tab
-
-# Trailing whitespace in Markdown can be a hard line break (two spaces).
 [*.md]
 trim_trailing_whitespace = false
 
-# Windows-native files stay CRLF.
-[*.{bat,cmd,ps1}]
+[Makefile]
+indent_style = tab
+
+[*.{bat,cmd}]
 end_of_line = crlf
+
+# Repo-specific note: the previous config also forced CRLF on *.ps1.
+# Dropped deliberately - PowerShell 7+ handles LF fine; only cmd.exe
+# scripts (bat/cmd) genuinely need CRLF.
