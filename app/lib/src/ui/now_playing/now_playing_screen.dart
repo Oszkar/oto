@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/commands.dart';
 import '../../state/household.dart';
 import '../../state/model/group_state.dart';
-import '../../state/now_playing.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
@@ -17,10 +16,13 @@ import '../widgets/oto_slider.dart';
 /// the Spotify-origin pill (v0.6.0 spec §7) - oto is backend-true and the
 /// backend exposes none of those.
 ///
-/// The progress bar is READ-ONLY (a fill, not a [Slider]): the backend does not
-/// event playback position, so the bar is locally derived from the last
-/// transport anchor plus the wall clock via [nowPlayingPositionProvider]. There
-/// is no seek/scrub.
+/// The progress/seek bar is intentionally ABSENT in v0.6.0. The SDK's reactive
+/// `CurrentTrack` carries no duration and the backend does not event playback
+/// position, so a bar would have no length and nothing to anchor to (it showed
+/// `--:--` and reset to 0 on every open). v0.6.1 restores it by polling
+/// `speakerState` (GetPositionInfo) for the real duration + position anchor,
+/// then ticking locally. The tested `positionAt`/`NowPlayingPosition` logic in
+/// `now_playing.dart` is kept dormant for that work. See ROADMAP v0.6.1.
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key, required this.groupId});
 
@@ -28,16 +30,6 @@ class NowPlayingScreen extends ConsumerWidget {
 
   /// Album-art inset from the screen edge, matching the JSX `HF.W - 88`.
   static const double _artInset = 88;
-
-  /// Format a [Duration] as `m:ss` (or `h:mm:ss` past an hour) for the
-  /// position/duration labels.
-  static String _fmt(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60);
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$s';
-    return '$m:$s';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,8 +54,6 @@ class NowPlayingScreen extends ConsumerWidget {
                   _art(context, group),
                   const SizedBox(height: Space.screen18),
                   _trackInfo(context, group),
-                  const SizedBox(height: Space.screen18),
-                  _progress(context, ref, group),
                   const SizedBox(height: Space.screen18),
                   _transport(context, ref, group),
                   const SizedBox(height: Space.screen18),
@@ -113,50 +103,6 @@ class NowPlayingScreen extends ConsumerWidget {
       ],
     );
   }
-
-  /// Read-only progress bar: a fill from the locally-derived position over the
-  /// track duration, with `m:ss / m:ss` labels. NOT a slider - there is no seek.
-  Widget _progress(BuildContext context, WidgetRef ref, GroupState group) {
-    final oto = context.oto;
-    final position = ref.watch(nowPlayingPositionProvider(groupId));
-    final total = group.track?.duration;
-    final fraction = (total == null || total.inMilliseconds == 0)
-        ? 0.0
-        : (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(Radius_.pill999),
-          child: LinearProgressIndicator(
-            key: Key('np-progress-$groupId'),
-            value: fraction,
-            minHeight: 3,
-            backgroundColor: oto.fillStrong,
-            valueColor: AlwaysStoppedAnimation<Color>(oto.accent),
-          ),
-        ),
-        const SizedBox(height: Space.sm6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(_fmt(position), style: _timeStyle(oto)),
-            Text(
-              total == null ? '--:--' : _fmt(total),
-              style: _timeStyle(oto),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  TextStyle _timeStyle(OtoColors oto) => TextStyles.caption.copyWith(
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: oto.inkMute,
-  );
 
   /// prev / play-pause / next. No shuffle or repeat (backend-true: §7).
   Widget _transport(BuildContext context, WidgetRef ref, GroupState group) {

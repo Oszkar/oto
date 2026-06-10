@@ -8,9 +8,9 @@ import 'package:oto/src/ui/now_playing/now_playing_screen.dart';
 
 import '../home/_fixtures.dart';
 
-/// A playing solo group `G_OF` (room `OF`) with a known track that has a
-/// duration and a group-master volume, so the position label + group slider
-/// render.
+/// A playing solo group `G_OF` (room `OF`) with a known track and a group-master
+/// volume. (The track still carries a duration as a fixture for v0.6.1's
+/// position work; v0.6.0 renders no progress bar.)
 Household nowPlayingHousehold() {
   return const Household(
     rooms: {
@@ -54,17 +54,6 @@ void main() {
     expect(find.textContaining('Deadmau5'), findsOneWidget);
   });
 
-  testWidgets('shows the duration label (m:ss)', (t) async {
-    final h = wrap(
-      const NowPlayingScreen(groupId: 'G_OF'),
-      household: nowPlayingHousehold(),
-    );
-    await t.pumpWidget(h.widget);
-
-    // Track duration 4:08 renders as the total label.
-    expect(find.text('4:08'), findsOneWidget);
-  });
-
   testWidgets('tapping play/pause calls togglePlay', (t) async {
     final h = wrap(
       const NowPlayingScreen(groupId: 'G_OF'),
@@ -104,19 +93,18 @@ void main() {
     expect(h.calls, contains('next(G_OF)'));
   });
 
-  testWidgets('progress bar is a read-only indicator, not a slider', (t) async {
+  testWidgets('no progress/seek bar in v0.6.0 (deferred to v0.6.1)', (t) async {
     final h = wrap(
       const NowPlayingScreen(groupId: 'G_OF'),
       household: nowPlayingHousehold(),
     );
     await t.pumpWidget(h.widget);
 
-    // The position bar is a LinearProgressIndicator (read-only), never a Slider
-    // dressed as a scrubber. The only Slider on screen is the group-volume one.
-    expect(
-      find.byKey(const Key('np-progress-G_OF')),
-      findsOneWidget,
-    );
+    // The progress bar is intentionally absent: the backend provides neither
+    // track duration nor a position anchor yet (restored in v0.6.1 via a
+    // speakerState/GetPositionInfo poll). The only Slider on screen is the
+    // group-volume control.
+    expect(find.byKey(const Key('np-progress-G_OF')), findsNothing);
     expect(find.byType(Slider), findsOneWidget); // group volume only
   });
 }

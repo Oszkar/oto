@@ -1,5 +1,13 @@
 /// Locally-derived, read-only playback position for the Now Playing screen.
 ///
+/// DORMANT in v0.6.0: NowPlayingScreen renders no progress bar yet. The live
+/// `Track` event carries no duration (the SDK's reactive CurrentTrack lacks it)
+/// and there is no position anchor, so a bar showed `--:--` and reset to 0 on
+/// every open. v0.6.1 wires it up by polling `speakerState` (GetPositionInfo)
+/// for the real duration + position anchor on open/track-change/resume, then
+/// ticking locally. This tested logic (`positionAt` + the re-anchor state
+/// machine) is kept in place for that. See ROADMAP v0.6.1.
+///
 /// The backend deliberately does NOT event playback position (backend-true
 /// core: see ARCHITECTURE / sonos-notes). So we derive the position bar from
 /// the last transport anchor plus the wall clock: the pure [positionAt] is the
