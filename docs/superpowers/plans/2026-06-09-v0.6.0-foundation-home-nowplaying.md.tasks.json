@@ -44,32 +44,32 @@
       "files": ["app/lib/main.dart", "app/lib/src/ui/shell/oto_app.dart", "app/lib/src/ui/shell/home_page.dart", "app/lib/src/ui/shell/oto_scaffold.dart"]
     },
     {
-      "id": 16, "planTask": 8, "subject": "Task 8: Home leaf widgets — header, layout toggle, room card + row", "status": "pending", "blockedBy": [11, 12, 13, 14],
+      "id": 16, "planTask": 8, "subject": "Task 8: Home leaf widgets — header, layout toggle, room card + row", "status": "completed", "blockedBy": [11, 12, 13, 14],
       "verifyCommand": "cd app && flutter test test/ui/home/",
       "files": ["app/lib/src/ui/home/home_header.dart", "app/lib/src/ui/home/room_card.dart", "app/lib/src/ui/home/room_row.dart"]
     },
     {
-      "id": 17, "planTask": 9, "subject": "Task 9: Home — merged group card", "status": "pending", "blockedBy": [11, 12, 14],
+      "id": 17, "planTask": 9, "subject": "Task 9: Home — merged group card", "status": "completed", "blockedBy": [11, 12, 14],
       "verifyCommand": "cd app && flutter test test/ui/home/group_card_test.dart",
       "files": ["app/lib/src/ui/home/group_card.dart"]
     },
     {
-      "id": 18, "planTask": 10, "subject": "Task 10: Home — adaptive bottom strip", "status": "pending", "blockedBy": [10, 11, 12, 14],
+      "id": 18, "planTask": 10, "subject": "Task 10: Home — adaptive bottom strip", "status": "completed", "blockedBy": [10, 11, 12, 14],
       "verifyCommand": "cd app && flutter test test/ui/home/bottom_strip_test.dart",
       "files": ["app/lib/src/ui/home/bottom_strip.dart"]
     },
     {
-      "id": 19, "planTask": 11, "subject": "Task 11: Now Playing + locally-derived position", "status": "pending", "blockedBy": [11, 12, 14],
+      "id": 19, "planTask": 11, "subject": "Task 11: Now Playing + locally-derived position", "status": "completed", "blockedBy": [11, 12, 14],
       "verifyCommand": "cd app && flutter test test/state/now_playing_test.dart test/ui/now_playing/",
       "files": ["app/lib/src/state/now_playing.dart", "app/lib/src/ui/now_playing/now_playing_screen.dart"]
     },
     {
-      "id": 21, "planTask": "11b", "subject": "Task 11b: Home composition — group/solo body + strip + Now Playing route", "status": "pending", "blockedBy": [15, 16, 17, 18, 19],
+      "id": 21, "planTask": "11b", "subject": "Task 11b: Home composition — group/solo body + strip + Now Playing route", "status": "completed", "blockedBy": [15, 16, 17, 18, 19],
       "verifyCommand": "cd app && flutter test test/ui/home/home_screen_test.dart",
       "files": ["app/lib/src/ui/home/home_screen.dart", "app/lib/src/ui/shell/home_page.dart"]
     },
     {
-      "id": 20, "planTask": 12, "subject": "Task 12: Wire-up, topology follow & end-to-end integration test", "status": "pending", "blockedBy": [21],
+      "id": 20, "planTask": 12, "subject": "Task 12: Wire-up, topology follow & end-to-end integration test", "status": "completed", "blockedBy": [21],
       "verifyCommand": "cd app && flutter test && flutter analyze",
       "files": ["app/lib/src/ui/shell/home_page.dart", "app/integration_test/v0_6_0_ui_test.dart"]
     }

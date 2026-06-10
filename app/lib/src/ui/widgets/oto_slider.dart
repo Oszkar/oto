@@ -11,7 +11,9 @@ import '../../theme/oto_colors.dart';
 /// touch target clears the >=44px floor.
 ///
 /// [onChanged] fires continuously during a drag; [onChangeEnd] fires once on
-/// release.
+/// release. A null [onChanged] renders a disabled (non-interactive) slider —
+/// the idiomatic Material way to show a read-only/unknown value (e.g. a volume
+/// that hasn't been reported yet), rather than a draggable no-op.
 class OtoSlider extends StatelessWidget {
   const OtoSlider({
     super.key,
@@ -23,8 +25,9 @@ class OtoSlider extends StatelessWidget {
   /// Current value, clamped to `0..1` on build.
   final double value;
 
-  /// Fires with the live value during a drag.
-  final ValueChanged<double> onChanged;
+  /// Fires with the live value during a drag. When null, the slider is
+  /// disabled (greyed, non-interactive).
+  final ValueChanged<double>? onChanged;
 
   /// Fires once with the final value when the drag is released.
   final ValueChanged<double>? onChangeEnd;
