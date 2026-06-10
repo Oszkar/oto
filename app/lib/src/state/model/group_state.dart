@@ -37,12 +37,23 @@ class GroupState {
     this.groupMuted,
   });
 
-  /// Whether this group is currently a "source": it has a track, or a
-  /// transport that is set and not stopped. Idle/stopped groups are not
+  /// Whether this group is currently a "source": something is playing here, or
+  /// a real track is loaded and paused/transitioning. Idle/stopped groups, and
+  /// groups carrying only a stale/empty track (Sonos emits an EMPTY track on
+  /// stop, which the reducer can't null out — see [Track.hasContent]), are NOT
   /// sources.
+  ///
+  /// - `playing` is always a source (true even before track metadata lands).
+  /// - otherwise a content-bearing track that isn't stopped (paused /
+  ///   transitioning) is a resumable source.
+  /// A non-stopped transport with no real track (a cleared/empty track or a
+  /// bare paused state) is NOT a source — that was the phantom-"Playing" bug.
   bool get hasActiveStream =>
-      track != null ||
-      (transport != null && transport != PlaybackState.stopped);
+      transport == PlaybackState.playing ||
+      (track != null &&
+          track!.hasContent &&
+          transport != null &&
+          transport != PlaybackState.stopped);
 
   GroupState copyWith({
     String? id,

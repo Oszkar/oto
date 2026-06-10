@@ -29,6 +29,21 @@ class Track {
     this.uri,
   });
 
+  /// Whether this track carries any real now-playing content. The backend
+  /// emits an EMPTY `Track` (all fields null) when a group stops or clears its
+  /// queue, and the reducer can't null a track back out (`copyWith` keeps the
+  /// prior value on null) — so a stopped group keeps a non-null-but-empty
+  /// track. `hasContent` lets `GroupState.hasActiveStream` ignore those, rather
+  /// than treating a cleared track as an active stream. `id`/`trackNumber`/
+  /// `duration` don't count as content on their own; a stream always has at
+  /// least a `uri` (usually a `title`).
+  bool get hasContent =>
+      title != null ||
+      artist != null ||
+      album != null ||
+      uri != null ||
+      artUri != null;
+
   /// Map the backend DTO to the view type. `durationSecs` (`BigInt?`)
   /// becomes a `Duration?`.
   factory Track.fromDto(TrackDto d) => Track(
