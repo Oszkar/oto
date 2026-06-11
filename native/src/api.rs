@@ -490,7 +490,9 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         // is dropped, not forwarded onto this stream (review #67-followup
         // #3). The app bus never disconnects (it's process-global), so only
         // the wire channel drives loop exit.
-        while let Some(event) = oto_app::try_recv_app_event(generation) {
+        while let Some(event) =
+            oto_app::try_recv_app_event(generation, oto_app::current_generation())
+        {
             if !emit(event) {
                 return;
             }
