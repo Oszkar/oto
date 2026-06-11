@@ -437,8 +437,11 @@ pub(crate) fn soap_track_position(
             } else {
                 parse_hms(&r.rel_time)
             };
-            // track_duration is the track length; a zero duration
-            // ("0:00:00", e.g. a live stream) is "unknown" -> None.
+            // Duration comes from GetPositionInfo's top-level track_duration field -
+            // no DIDL <res duration> re-parse needed here (unlike soap_speaker_state's
+            // merge_track_duration), because that field is the track length and is
+            // sufficient for a position read. A zero value ("0:00:00", e.g. a live
+            // stream) is the "unknown" sentinel -> None.
             let duration = parse_hms(&r.track_duration).filter(|d| !d.is_zero());
             Ok(TrackPosition { position, duration })
         }

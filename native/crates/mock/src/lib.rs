@@ -1503,4 +1503,48 @@ mod tests {
         let r = wire.track_position(&GroupId::new("nope"));
         assert!(matches!(r, Err(WireError::NotFound(_))));
     }
+
+    #[test]
+    fn track_position_reads_coordinator_position_and_duration() {
+        use std::time::Duration;
+
+        use oto_core::Track;
+
+        let wire = MockWire::default();
+        // Seed the Kitchen coordinator's transport with a known position and a
+        // current_track carrying a known duration - directly via the private
+        // model (test-internal access, same module).
+        {
+            let mut guard = lock!(wire);
+            let kitchen = SpeakerId::new("RINCON_KITCHEN");
+            let entry = guard.speakers.get_mut(&kitchen).unwrap();
+            entry.transport = Some(TransportState {
+                state: PlaybackState::Playing,
+                current_track: Some(Track {
+                    id: None,
+                    title: None,
+                    artist: None,
+                    album: None,
+                    track_number: None,
+                    duration: Some(Duration::from_secs(200)),
+                    art_uri: None,
+                    uri: None,
+                }),
+                position: Some(Duration::from_secs(42)),
+            });
+        }
+        let pos = wire
+            .track_position(&GroupId::new("RINCON_KITCHEN:1"))
+            .unwrap();
+        assert_eq!(
+            pos.position,
+            Some(Duration::from_secs(42)),
+            "position must come from coordinator's transport.position"
+        );
+        assert_eq!(
+            pos.duration,
+            Some(Duration::from_secs(200)),
+            "duration must come from coordinator's transport.current_track.duration"
+        );
+    }
 }
