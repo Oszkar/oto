@@ -14,11 +14,13 @@
 //! `u64` seconds (Sonos SOAP time fields carry no sub-second component, so
 //! this is lossless in practice).
 
-use oto_core::{ChangeEvent, DiscoverySnapshot, PlaybackState, SpeakerState, Track, WireError};
+use oto_core::{
+    ChangeEvent, DiscoverySnapshot, PlaybackState, SpeakerState, Track, TrackPosition, WireError,
+};
 
 use crate::api::{
     ChangeEventDto, CommandError, DiscoveredGroup, DiscoveredSpeaker, DiscoveryError,
-    PlaybackStateDto, SpeakerStateDto, Topology, TrackDto, TransportDto,
+    PlaybackStateDto, SpeakerStateDto, Topology, TrackDto, TrackPositionDto, TransportDto,
 };
 
 /// `WireError` → the FRB-facing `DiscoveryError` (1:1; `Backend`/`NotFound` → `Sdk`).
@@ -109,6 +111,15 @@ pub fn to_speaker_state_dto(state: SpeakerState) -> SpeakerStateDto {
             position_secs: t.position.map(|d| d.as_secs()),
             current_track: t.current_track.map(to_track_dto),
         }),
+    }
+}
+
+/// `TrackPosition` -> `TrackPositionDto`. `Duration` -> whole `u64` seconds,
+/// the same lossless narrowing used for `position_secs` elsewhere.
+pub fn to_track_position_dto(p: TrackPosition) -> TrackPositionDto {
+    TrackPositionDto {
+        position_secs: p.position.map(|d| d.as_secs()),
+        duration_secs: p.duration.map(|d| d.as_secs()),
     }
 }
 
@@ -438,6 +449,28 @@ mod tests {
             }
             _ => panic!("expected GroupMute DTO"),
         }
+    }
+
+    // ── TrackPositionDto pinning tests ───────────────────────────────────────
+
+    #[test]
+    fn track_position_dto_maps_both_fields() {
+        let dto = to_track_position_dto(oto_core::TrackPosition {
+            position: Some(Duration::from_secs(84)),
+            duration: Some(Duration::from_secs(248)),
+        });
+        assert_eq!(dto.position_secs, Some(84));
+        assert_eq!(dto.duration_secs, Some(248));
+    }
+
+    #[test]
+    fn track_position_dto_maps_none() {
+        let dto = to_track_position_dto(oto_core::TrackPosition {
+            position: None,
+            duration: None,
+        });
+        assert!(dto.position_secs.is_none());
+        assert!(dto.duration_secs.is_none());
     }
 
     #[test]

@@ -67,7 +67,8 @@ mod state_manager;
 use std::sync::{Mutex, OnceLock};
 
 use oto_core::{
-    ChangeEvent, DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, Volume, Wire, WireError,
+    ChangeEvent, DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, TrackPosition, Volume, Wire,
+    WireError,
 };
 use oto_wire::SonosWire;
 
@@ -410,6 +411,19 @@ pub fn speaker_state(speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
     Ok(state_manager().speaker_state(speaker))
 }
 
+/// Live read of a group's current track position + duration, by SOAP to its
+/// coordinator. Unlike `speaker_state` (a cache read), this dispatches
+/// `Wire::track_position` through the held slot (lock across the SOAP call,
+/// the standard command serialization). Used only by the Now Playing bar,
+/// event-triggered (open / track-change / resume), never in a poll loop.
+/// Position and duration are NOT evented (neither GENA nor the v0.4 cache
+/// carry them), so there is no cache to read here.
+pub fn track_position(group: &GroupId) -> Result<TrackPosition, WireError> {
+    let (wire_gen, result) = with_wire_gen(|w| w.track_position(group));
+    observe_group_health(wire_gen, group, &result);
+    result
+}
+
 /// Hand the v0.4 event-stream receiver to the FRB consumer loop.
 /// Called by `api.rs::subscribe_change_events`. Returns `None` if no
 /// wire is installed yet, or if the receiver has already been taken
@@ -707,6 +721,9 @@ mod tests {
         }
         fn speaker_state(&self, s: &SpeakerId) -> Result<SpeakerState, WireError> {
             self.0.speaker_state(s)
+        }
+        fn track_position(&self, g: &GroupId) -> Result<TrackPosition, WireError> {
+            self.0.track_position(g)
         }
         fn subscribe_speakers(&self) -> Result<(), WireError> {
             self.0.subscribe_speakers()
@@ -1325,6 +1342,46 @@ mod tests {
             paired_1, paired_2,
             "the two wires' receivers carry distinct generations — an OLD-wire \
              event applied at paired_1 no-ops once paired_2 is current"
+        );
+    }
+
+    /// v0.6.1: `track_position` routes through the slot like `play` — lock
+    /// held across the SOAP call, NOT a cache read. Verify:
+    ///   1. Pre-discover -> NotFound (no wire in slot).
+    ///   2. Unknown group after discover -> NotFound.
+    ///   3. Known group returns Ok (validates slot dispatch; mock default
+    ///      seeds position/duration as None — both fields are tested in
+    ///      `oto-mock`'s own unit tests; routing correctness is proven here).
+    #[test]
+    fn track_position_routes_through_slot() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        clear_slot();
+
+        // 1. Pre-discover: no wire -> NotFound.
+        let unknown_group = GroupId::new("RINCON_KITCHEN:1");
+        assert!(
+            matches!(track_position(&unknown_group), Err(WireError::NotFound(_))),
+            "pre-discover track_position must return NotFound"
+        );
+
+        // 2. After discover: unknown group -> NotFound.
+        discover_with(|| Box::new(MockWire::default())).expect("discover ok");
+        let nope = GroupId::new("RINCON_NOPE:0");
+        assert!(
+            matches!(track_position(&nope), Err(WireError::NotFound(_))),
+            "unknown group must return NotFound after discover"
+        );
+
+        // 3. Known group -> Ok. Mock default seeds position/duration as None
+        // (no track playing); the routing is what this test validates.
+        let kitchen_group = GroupId::new("RINCON_KITCHEN:1");
+        let pos = track_position(&kitchen_group).expect("known group must succeed");
+        // Default transport has no current track, so duration is None.
+        assert!(
+            pos.duration.is_none(),
+            "default mock has no current track — duration must be None"
         );
     }
 }

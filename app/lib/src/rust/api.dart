@@ -107,6 +107,15 @@ Future<void> leaveGroup({required String speakerId}) =>
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
 
+/// v0.6.1: live SOAP read of `group_id`'s current track position + duration
+/// (for the Now Playing progress bar). Blocking SOAP round-trip; Dart `Future`.
+/// Reads the coordinator via `Wire::track_position` through the held slot
+/// (lock across the SOAP call). Unknown group -> `CommandError::NotFound`.
+/// NOT a cache read (unlike `speaker_state`) - position/duration are not
+/// evented (neither GENA nor the v0.4 cache carry them).
+Future<TrackPositionDto> trackPosition({required String groupId}) =>
+    RustLib.instance.api.crateApiTrackPosition(groupId: groupId);
+
 /// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
 /// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
 /// symbol is preserved so FRB-generated bindings still link, but the
@@ -361,6 +370,29 @@ class TrackDto {
           durationSecs == other.durationSecs &&
           artUri == other.artUri &&
           uri == other.uri;
+}
+
+/// v0.6.1: point-in-time SOAP read of a group's current track position +
+/// duration. Both fields are independently optional: a stream source may
+/// report a position with no duration, and a stopped group may report
+/// neither. `Duration` narrowed to whole `u64` seconds (lossless — Sonos
+/// SOAP time fields carry no sub-second component).
+class TrackPositionDto {
+  final BigInt? positionSecs;
+  final BigInt? durationSecs;
+
+  const TrackPositionDto({this.positionSecs, this.durationSecs});
+
+  @override
+  int get hashCode => positionSecs.hashCode ^ durationSecs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TrackPositionDto &&
+          runtimeType == other.runtimeType &&
+          positionSecs == other.positionSecs &&
+          durationSecs == other.durationSecs;
 }
 
 class TransportDto {
