@@ -19,7 +19,7 @@ use std::{
 
 use oto_core::{
     ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, PlaybackState, SpeakerId,
-    SpeakerIdentity, SpeakerState, TransportState, Volume, Wire, WireError,
+    SpeakerIdentity, SpeakerState, TrackPosition, TransportState, Volume, Wire, WireError,
 };
 
 // ── Internal model ───────────────────────────────────────────────────────────
@@ -549,6 +549,23 @@ impl Wire for MockWire {
             volume: own.volume,
             muted: own.muted,
             transport,
+        })
+    }
+
+    fn track_position(&self, group: &GroupId) -> Result<TrackPosition, WireError> {
+        let guard = lock!(self);
+        let coord = guard
+            .coords
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        let transport = guard.speakers.get(&coord).and_then(|s| s.transport.clone());
+        Ok(TrackPosition {
+            position: transport.as_ref().and_then(|t| t.position),
+            duration: transport
+                .as_ref()
+                .and_then(|t| t.current_track.as_ref())
+                .and_then(|tr| tr.duration),
         })
     }
 
@@ -1476,5 +1493,14 @@ mod tests {
             PlaybackState::Playing,
             "the moved coordinator now follows its new group (Office)"
         );
+    }
+
+    // ── v0.6.1 track_position ─────────────────────────────────────────────
+
+    #[test]
+    fn track_position_unknown_group_is_not_found() {
+        let wire = MockWire::default();
+        let r = wire.track_position(&GroupId::new("nope"));
+        assert!(matches!(r, Err(WireError::NotFound(_))));
     }
 }

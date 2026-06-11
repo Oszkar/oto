@@ -10,7 +10,7 @@ part 'api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_group_mute`, `set_group_volume`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_group_mute`, `set_group_volume`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`, `track_position`
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the

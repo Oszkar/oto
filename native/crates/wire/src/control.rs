@@ -6,7 +6,9 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use oto_core::{PlaybackState, SpeakerState, Track, TrackId, TransportState, Volume, WireError};
+use oto_core::{
+    PlaybackState, SpeakerState, Track, TrackId, TrackPosition, TransportState, Volume, WireError,
+};
 use sonos_api::services::zone_group_topology::ZoneGroupInfo;
 use sonos_api::{
     ApiError, SonosClient,
@@ -407,6 +409,42 @@ pub(crate) fn soap_speaker_state(
     })
 }
 
+/// Read just the current track's position + duration for a coordinator.
+///
+/// Position/duration only - transport state and track metadata come from the
+/// event cache, so this issues a single `GetPositionInfo` to `addr` (the
+/// group coordinator). A failed/absent read yields all-`None` (honest-partial),
+/// never an error; only an unresolvable group is an error (handled by the
+/// adapter before calling this).
+pub(crate) fn soap_track_position(
+    client: &SonosClient,
+    addr: SocketAddr,
+) -> Result<TrackPosition, WireError> {
+    let pi = av_transport::get_position_info()
+        .build()
+        .ok()
+        .and_then(|o| client.execute_enhanced(&addr.ip().to_string(), o).ok());
+    match pi {
+        None => Ok(TrackPosition {
+            position: None,
+            duration: None,
+        }),
+        Some(r) => {
+            // rel_count == i32::MAX is the "position absent" sentinel
+            // (sonos-notes GetPositionInfoResponse sentinels).
+            let position = if r.rel_count == i32::MAX {
+                None
+            } else {
+                parse_hms(&r.rel_time)
+            };
+            // track_duration is the track length; a zero duration
+            // ("0:00:00", e.g. a live stream) is "unknown" -> None.
+            let duration = parse_hms(&r.track_duration).filter(|d| !d.is_zero());
+            Ok(TrackPosition { position, duration })
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests — LAN-free, pure helper coverage
 // ---------------------------------------------------------------------------
@@ -542,6 +580,12 @@ mod tests {
     #[test]
     fn parse_hms_zeros() {
         assert_eq!(parse_hms("0:00:00"), Some(Duration::from_secs(0)));
+    }
+
+    #[test]
+    fn zero_duration_is_treated_as_unknown() {
+        assert_eq!(parse_hms("0:00:00").filter(|d| !d.is_zero()), None);
+        assert_eq!(parse_hms("0:03:17"), Some(Duration::from_secs(197)));
     }
 
     // -----------------------------------------------------------------------

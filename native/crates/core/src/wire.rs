@@ -9,7 +9,7 @@ use crate::{
     events::ChangeEvent,
     identifiers::{GroupId, SpeakerId},
     identity::DiscoverySnapshot,
-    state::SpeakerState,
+    state::{SpeakerState, TrackPosition},
     volume::Volume,
 };
 
@@ -61,6 +61,14 @@ pub trait Wire {
     fn leave_group(&self, speaker: &SpeakerId) -> Result<(), WireError>;
 
     fn speaker_state(&self, speaker: &SpeakerId) -> Result<SpeakerState, WireError>;
+
+    /// Read the current track's elapsed position and total duration for a
+    /// group, by querying its coordinator. Unlike `speaker_state` (a cached
+    /// read), this is a live SOAP round-trip: neither GENA NOTIFYs nor the
+    /// event cache carry position/duration, so the Now Playing progress bar
+    /// reads it directly on open / track-change / resume and ticks locally.
+    /// Unknown group -> `WireError::NotFound`.
+    fn track_position(&self, group: &GroupId) -> Result<TrackPosition, WireError>;
 
     /// Register v0.4 property-event interest for all currently-known
     /// speakers (per the latest `discover()`). Activates the upstream

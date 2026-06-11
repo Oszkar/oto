@@ -427,6 +427,12 @@ impl oto_core::Wire for MockWireArc {
     ) -> Result<oto_core::SpeakerState, oto_core::WireError> {
         self.0.speaker_state(speaker)
     }
+    fn track_position(
+        &self,
+        group: &oto_core::GroupId,
+    ) -> Result<oto_core::TrackPosition, oto_core::WireError> {
+        self.0.track_position(group)
+    }
     fn subscribe_speakers(&self) -> Result<(), oto_core::WireError> {
         self.0.subscribe_speakers()
     }
