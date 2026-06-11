@@ -57,7 +57,12 @@ PrefsRepository prefsRepository(Ref ref) => throw UnimplementedError(
 );
 
 /// Current persisted settings. Restores from the repo on build; every setter
-/// writes through to the repo AND updates state so the UI reacts immediately.
+/// reflects the choice in state immediately, then persists best-effort.
+///
+/// State-first ordering keeps a cosmetic toggle instant (no lag on disk I/O)
+/// and applies the user's choice for the session even if the write fails; a
+/// rare persistence failure (e.g. full disk) is swallowed rather than crashing
+/// the toggle - the only consequence is the setting not surviving a restart.
 @Riverpod(keepAlive: true)
 class SettingsNotifier extends _$SettingsNotifier {
   @override
@@ -67,17 +72,23 @@ class SettingsNotifier extends _$SettingsNotifier {
   }
 
   Future<void> setThemeMode(ThemeMode m) async {
-    await ref.read(prefsRepositoryProvider).setThemeMode(m);
     state = (mode: m, accent: state.accent, layout: state.layout);
+    try {
+      await ref.read(prefsRepositoryProvider).setThemeMode(m);
+    } catch (_) {}
   }
 
   Future<void> setAccent(Accent a) async {
-    await ref.read(prefsRepositoryProvider).setAccent(a);
     state = (mode: state.mode, accent: a, layout: state.layout);
+    try {
+      await ref.read(prefsRepositoryProvider).setAccent(a);
+    } catch (_) {}
   }
 
   Future<void> setHomeLayout(HomeLayout l) async {
-    await ref.read(prefsRepositoryProvider).setHomeLayout(l);
     state = (mode: state.mode, accent: state.accent, layout: l);
+    try {
+      await ref.read(prefsRepositoryProvider).setHomeLayout(l);
+    } catch (_) {}
   }
 }

@@ -63,7 +63,10 @@ Household householdFromTopology(Topology topo, {Household? previous}) {
     groups[g.id] = GroupState(
       id: g.id,
       coordinatorId: g.coordinator,
-      memberIds: g.members,
+      // Defensive copy: the model claims immutability but exposes a plain
+      // `List`; `g.members` is an FRB-owned list. Wrap so a holder can't
+      // mutate it out from under Riverpod's value equality.
+      memberIds: List.unmodifiable(g.members),
       transport: carry?.transport,
       track: carry?.track,
       groupVolume: carry?.groupVolume,
@@ -71,7 +74,11 @@ Household householdFromTopology(Topology topo, {Household? previous}) {
     );
   }
 
-  return Household(rooms: rooms, groups: groups);
+  // Wrap the maps too - every production Household is then deeply immutable.
+  return Household(
+    rooms: Map.unmodifiable(rooms),
+    groups: Map.unmodifiable(groups),
+  );
 }
 
 /// Fold one [ChangeEventDto] delta into a new [Household].
@@ -117,7 +124,7 @@ Household applyEvent(Household h, ChangeEventDto e) {
 Household _updateRoom(Household h, String id, RoomState Function(RoomState) f) {
   final r = h.rooms[id];
   if (r == null) return h;
-  return h.copyWith(rooms: {...h.rooms, id: f(r)});
+  return h.copyWith(rooms: Map.unmodifiable({...h.rooms, id: f(r)}));
 }
 
 /// Apply [f] to the group [id] if it exists, returning a new household;
@@ -129,7 +136,7 @@ Household _updateGroup(
 ) {
   final g = h.groups[id];
   if (g == null) return h;
-  return h.copyWith(groups: {...h.groups, id: f(g)});
+  return h.copyWith(groups: Map.unmodifiable({...h.groups, id: f(g)}));
 }
 
 /// Map the backend transport DTO to the view-model enum. The DTO boundary

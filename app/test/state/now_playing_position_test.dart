@@ -183,6 +183,31 @@ void main() {
         reason: 'after resume it advances: 10s frozen + 2s elapsed');
   });
 
+  test('a URI-only stream change re-anchors (uri participates in the key) - N6',
+      () async {
+    final h = await _harness();
+    // Radio-stream tracks: no id, no title - only a distinct uri. These are
+    // real content per Track.hasContent, so they must key the track.
+    await h.push(const ChangeEventDto.track(
+      groupId: 'G1',
+      track: TrackDto(uri: 'x-rinconmp3radio://streamA'),
+    ));
+    await h.push(_play);
+    h.advance(const Duration(seconds: 9));
+    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 3));
+    expect(h.position('G1'), _approx(const Duration(seconds: 9)),
+        reason: 'sanity: advanced while the first stream played');
+
+    // A DIFFERENT uri-only stream is a new track → restart at 0. Keying on
+    // id/title alone (both null here) would miss this and keep advancing.
+    await h.push(const ChangeEventDto.track(
+      groupId: 'G1',
+      track: TrackDto(uri: 'x-rinconmp3radio://streamB'),
+    ));
+    expect(h.position('G1'), _approx(Duration.zero),
+        reason: 'a distinct uri-only stream re-anchors at 0');
+  });
+
   test('an unrelated household change does NOT re-anchor (spurious guard)',
       () async {
     final h = await _harness();

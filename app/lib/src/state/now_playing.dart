@@ -82,9 +82,14 @@ class NowPlayingPosition extends _$NowPlayingPosition {
   PlaybackState? _lastTransport;
   Timer? _timer;
 
-  /// A stable identity for a track across rebuilds: prefer `id`, fall back to
-  /// `title`. Distinct tracks with neither are treated as the same (best-effort).
-  static String? _trackKey(Track? t) => t == null ? null : (t.id ?? t.title);
+  /// A stable identity for a track across rebuilds: prefer `id`, then `uri`,
+  /// then `title`. `uri` is included because a URI-only track (e.g. a radio
+  /// stream with no id/title) is real content per [Track.hasContent] - keying
+  /// on id/title alone would treat two distinct streams as the same track and
+  /// miss the re-anchor. Distinct tracks with none of the three are treated as
+  /// the same (best-effort).
+  static String? _trackKey(Track? t) =>
+      t == null ? null : (t.id ?? t.uri ?? t.title);
 
   @override
   Duration build(String groupId) {
