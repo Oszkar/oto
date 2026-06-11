@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-11
+
+v0.6.0 - The first real interface. Until now oto was a proven backend behind a test scaffold; this release ships the designed Flutter UI - Home and Now Playing - on the existing capability layers. Phased: room management, settings, and responsive layouts follow in v0.6.1-.3.
+
+### Added
+
+- **Home screen.** Your rooms and groups at a glance, in a Cards or Stack layout (toggle in the header). Each shows what's playing with album art, online/offline state, a master volume, and per-room levels inside a group. Play or pause any active source straight from an adaptive bottom strip.
+- **Now Playing screen.** A full-screen view of a group's current track - art, title and artist, and transport controls.
+- **Theming.** Light and dark themes with a user-selectable accent colour, on the bundled Geist typeface and the design-system tokens.
+- **Persistent preferences.** Theme, accent, and default Home layout are remembered across launches.
+- **Live, optimistic UI.** The interface follows the live event stream - volume, playback, track, and grouping changes made elsewhere (the Sonos app, another controller) show up without a refresh - and your own actions apply instantly, then reconcile.
+
+### Known issues
+
+- **Now Playing has no progress bar yet** - the track position/duration path lands in v0.6.1.
+- Controls the backend can't drive yet (shuffle/repeat/seek, queue, EQ/sound) are intentionally not shown rather than faked; they arrive with their backend in later milestones.
+- Room management (group editor, room detail) is v0.6.1; the settings screen and responsive tablet/desktop layouts are v0.6.2-.3.
+
 ## [0.5.1] - 2026-06-05
 
 v0.5.1 - Group operations: form/break, group volume/mute, and a much faster regroup refresh. The last capability release before the v0.6 UI; all event additions ride the existing single change-event stream.
@@ -128,7 +146,8 @@ v0.1 - Foundation + LAN discovery. Identity-only discovery proven end-to-end thr
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone - fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Oszkar/oto/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Oszkar/oto/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Oszkar/oto/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Oszkar/oto/compare/v0.3.0...v0.4.0
