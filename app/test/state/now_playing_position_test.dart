@@ -183,10 +183,10 @@ void main() {
         reason: 'after resume it advances: 10s frozen + 2s elapsed');
   });
 
-  test('a URI-only stream change re-anchors (uri participates in the key) — N6',
+  test('a URI-only stream change re-anchors (uri participates in the key) - N6',
       () async {
     final h = await _harness();
-    // Radio-stream tracks: no id, no title — only a distinct uri. These are
+    // Radio-stream tracks: no id, no title - only a distinct uri. These are
     // real content per Track.hasContent, so they must key the track.
     await h.push(const ChangeEventDto.track(
       groupId: 'G1',

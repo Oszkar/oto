@@ -69,7 +69,7 @@ mixin _Reconciling {
   }
 }
 
-/// One throttled, optimistic scalar (a volume) per target id — shared by the
+/// One throttled, optimistic scalar (a volume) per target id - shared by the
 /// per-speaker and per-group volume paths so the drag bookkeeping lives once.
 ///
 /// Encapsulates: pre-gesture anchor capture, the LAN throttle (≤1 SOAP /
@@ -79,7 +79,7 @@ mixin _Reconciling {
 /// send then fails *after* the final send succeeded, a naive rollback would
 /// revert the UI to the pre-gesture value, clobbering the value the user
 /// actually set. Each send bumps a per-id sequence, and a send only rolls back
-/// if it is still the latest — so a superseded send fails silently.
+/// if it is still the latest - so a superseded send fails silently.
 class _ThrottledScalar {
   _ThrottledScalar({
     required this.readCurrent,
@@ -88,7 +88,7 @@ class _ThrottledScalar {
     required this.reconcile,
   });
 
-  /// Current authoritative value for [id] — the rollback target (anchor).
+  /// Current authoritative value for [id] - the rollback target (anchor).
   final int? Function(String id) readCurrent;
 
   /// Apply an optimistic [value] for [id] to local household state.
@@ -97,7 +97,7 @@ class _ThrottledScalar {
   /// Fire the SOAP command for [id] at [value].
   final Future<void> Function(String id, int value) command;
 
-  /// The shared reconciler — [_Reconciling.send].
+  /// The shared reconciler - [_Reconciling.send].
   final Future<void> Function(
     Future<void> Function(), {
     void Function()? rollback,
@@ -118,13 +118,13 @@ class _ThrottledScalar {
   }
 
   /// Drag release: send the final value exactly once. Cancel the pending
-  /// trailing send (dispose, do NOT flush — flush + this send would double-fire).
+  /// trailing send (dispose, do NOT flush - flush + this send would double-fire).
   void end(String id, int value) {
     _anchor.putIfAbsent(id, () => readCurrent(id));
     applyOptimistic(id, value);
     _throttle.remove(id)?.dispose();
     _fire(id, value).whenComplete(() {
-      // Gesture done — release the per-id bookkeeping.
+      // Gesture done - release the per-id bookkeeping.
       _anchor.remove(id);
       _seq.remove(id);
     });

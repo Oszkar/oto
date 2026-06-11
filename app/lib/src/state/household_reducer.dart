@@ -74,7 +74,7 @@ Household householdFromTopology(Topology topo, {Household? previous}) {
     );
   }
 
-  // Wrap the maps too — every production Household is then deeply immutable.
+  // Wrap the maps too - every production Household is then deeply immutable.
   return Household(
     rooms: Map.unmodifiable(rooms),
     groups: Map.unmodifiable(groups),

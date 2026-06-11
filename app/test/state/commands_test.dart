@@ -212,7 +212,7 @@ void main() {
 
     final c = container.read(playbackControllerProvider);
     c.setVolume('KT', 30); // arms the 150ms throttle (mid-drag).
-    // Let the throttle fire the mid-drag send — it is now in flight (deferred).
+    // Let the throttle fire the mid-drag send - it is now in flight (deferred).
     await Future<void>.delayed(const Duration(milliseconds: 160));
     expect(spy.volumeCompleters.length, 1, reason: 'mid-drag send fired');
 
