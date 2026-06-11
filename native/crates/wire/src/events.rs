@@ -26,7 +26,7 @@ use std::{
         mpsc::{self, Receiver, Sender},
     },
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use oto_core::{ChangeEvent, GroupId, SpeakerId, WireError};
@@ -37,6 +37,18 @@ use oto_core::{ChangeEvent, GroupId, SpeakerId, WireError};
 /// shutdown wait and well over typical event arrival cadence — the timeout
 /// rarely fires on a busy LAN.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// How long after pump spawn a *first* `GroupMembership` per speaker is
+/// treated as the subscribe seed (and swallowed). Seeds arrive in a burst
+/// right after the SDK's SUBSCRIBE (~1 s on a healthy LAN per sonos-notes);
+/// a first-ever `GroupMembership` arriving LATER than this is a genuine
+/// regroup whose seed was dropped or delayed (e.g. a speaker asleep at
+/// subscribe time), so it must be emitted, not mistaken for a seed. Bounding
+/// the seed-vs-real ambiguity in time — not by ordinal position — closes the
+/// missed-seed hole without re-opening the seed → rediscover → seed loop (a
+/// fresh pump still swallows its own in-window seed burst). 5 s gives generous
+/// margin over the observed ~1 s seed latency.
+const SEED_WINDOW: Duration = Duration::from_secs(5);
 
 /// Inputs the pump needs from the wire's discover-built caches.
 ///
@@ -450,8 +462,10 @@ fn pump_loop(
 ///    would map to `TopologyChanged`. The Dart controller reacts to
 ///    `TopologyChanged` with a full re-discover — which spawns a new pump,
 ///    which emits new seeds, which trigger another re-discover: an infinite
-///    loop. So we drop the FIRST `group_membership` per speaker (the seed)
-///    and only emit on the 2nd+ (a real regroup).
+///    loop. So we drop the FIRST `group_membership` per speaker **while it
+///    arrives inside the seed window** (the burst right after SUBSCRIBE) and
+///    only emit on the 2nd+, or on any first event arriving after the window
+///    (a real regroup whose seed never landed — see [`SEED_WINDOW`]).
 ///
 /// 2. **Post-regroup group-event drop (#4).** The pump's `coord_to_group` /
 ///    `speaker_to_coord` maps are captured by value at spawn and frozen.
@@ -462,18 +476,31 @@ fn pump_loop(
 ///    unaffected by grouping and keep flowing.
 struct TopologyFilter {
     /// Speakers whose initial (seed) `group_membership` we've already
-    /// swallowed. Absent ↔ "next group_membership is this speaker's seed".
+    /// swallowed. Absent + within [`SEED_WINDOW`] ↔ "next group_membership
+    /// is this speaker's seed".
     seen_seed: HashSet<SpeakerId>,
     /// Set once a real (post-seed) topology change is observed. While set,
     /// group-addressed events are dropped (stale routing).
     dirty: bool,
+    /// After this instant, a first-ever `group_membership` for a speaker is a
+    /// real regroup, not a seed (see [`SEED_WINDOW`]). Anchored at pump
+    /// spawn (when `TopologyFilter::new` runs in `pump_loop`).
+    seed_deadline: Instant,
 }
 
 impl TopologyFilter {
     fn new() -> Self {
+        Self::with_seed_window(SEED_WINDOW)
+    }
+
+    /// Construct with an explicit seed window. `new()` uses [`SEED_WINDOW`];
+    /// tests pass a zero/elapsed window to drive the post-window path
+    /// deterministically.
+    fn with_seed_window(window: Duration) -> Self {
         Self {
             seen_seed: HashSet::new(),
             dirty: false,
+            seed_deadline: Instant::now() + window,
         }
     }
 
@@ -482,9 +509,15 @@ impl TopologyFilter {
     fn admit(&mut self, speaker: &SpeakerId, event: ChangeEvent) -> Option<ChangeEvent> {
         match &event {
             ChangeEvent::TopologyChanged => {
-                // `insert` returns true the FIRST time for this speaker — that
-                // first group_membership is the subscribe seed: swallow it.
-                if self.seen_seed.insert(speaker.clone()) {
+                // The FIRST `group_membership` per speaker is the subscribe
+                // seed — but ONLY while still inside the seed window. A
+                // first-ever event arriving after the window is a real
+                // regroup whose seed was dropped/delayed (e.g. a speaker
+                // asleep at subscribe time); emit it rather than swallowing
+                // it forever. `insert` still records the speaker so a genuine
+                // 2nd event is always treated as real.
+                let first_for_speaker = self.seen_seed.insert(speaker.clone());
+                if first_for_speaker && Instant::now() < self.seed_deadline {
                     return None;
                 }
                 // A real regroup: routing is now stale until pump rebuild.
@@ -789,6 +822,28 @@ mod tests {
         assert!(
             f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged)
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn first_topology_event_after_seed_window_is_a_real_regroup() {
+        // A speaker whose seed NOTIFY never arrived inside the window: its
+        // first group_membership is a genuine regroup, not a seed — it must be
+        // emitted (and mark the pump dirty), not swallowed forever. Regression
+        // for the positional-seed hole (a first-ever event was always treated
+        // as the seed regardless of timing).
+        let mut f = TopologyFilter::with_seed_window(Duration::ZERO);
+        assert!(
+            matches!(
+                f.admit(&sid("RINCON_LATE"), ChangeEvent::TopologyChanged),
+                Some(ChangeEvent::TopologyChanged)
+            ),
+            "first event past the seed window is a real regroup, not a seed"
+        );
+        // …and the pump is now dirty, like after any real regroup.
+        assert!(
+            f.admit(&sid("RINCON_LATE"), playback_ev("G:1")).is_none(),
+            "a post-window first event marks routing stale (dirty)"
         );
     }
 

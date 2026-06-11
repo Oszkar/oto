@@ -67,7 +67,20 @@ pub(crate) fn push(generation: u64, event: ChangeEvent) {
 /// Events stamped with a different generation are stale — drained and
 /// dropped here so they never reach the new stream. `None` once the channel
 /// has no matching event left this tick.
-pub fn try_recv_app_event(consumer_gen: u64) -> Option<ChangeEvent> {
+///
+/// **Only the CURRENT-generation consumer may drain.** The bus has a single
+/// shared receiver. After a rediscover, a lingering OLD-generation consumer
+/// keeps looping until its wire channel disconnects; if it drained here it
+/// would consume-and-discard events stamped for the NEW generation before the
+/// new consumer ever reads them. So a consumer whose `consumer_gen` no longer
+/// equals `current_gen` does not drain at all — it returns `None` and exits
+/// soon after on its wire channel's `Disconnected`. (Any events still queued
+/// against the old generation were already dropped by [`clear`] in
+/// `discover_with`.)
+pub fn try_recv_app_event(consumer_gen: u64, current_gen: u64) -> Option<ChangeEvent> {
+    if consumer_gen != current_gen {
+        return None;
+    }
     let rx = bus().rx.lock().unwrap_or_else(|p| p.into_inner());
     while let Ok((generation, event)) = rx.try_recv() {
         if generation == consumer_gen {

@@ -234,6 +234,15 @@ macro_rules! lock {
     };
 }
 
+/// Emit a `TopologyChanged` on the event stream if a pump is active — mirrors
+/// the real wire surfacing a regroup as a `GroupMembership` NOTIFY →
+/// `ChangeEvent::TopologyChanged`. No-op before `subscribe_speakers` (no `tx`).
+fn emit_topology_changed(model: &Model) {
+    if let Some(tx) = &model.tx {
+        let _ = tx.send(ChangeEvent::TopologyChanged);
+    }
+}
+
 impl MockWire {
     /// Push an arbitrary `ChangeEvent` into the unified channel.
     /// Test-only affordance for adversarial scenarios
@@ -492,6 +501,7 @@ impl Wire for MockWire {
             .member_to_coord
             .insert(speaker.clone(), coordinator.clone());
         guard.reelect_orphans(speaker);
+        emit_topology_changed(&guard);
         Ok(())
     }
 
@@ -517,6 +527,7 @@ impl Wire for MockWire {
             GroupId::new(format!("{}:0", speaker.as_str())),
             speaker.clone(),
         );
+        emit_topology_changed(&guard);
         Ok(())
     }
 
@@ -636,9 +647,41 @@ impl Wire for MockWire {
     }
 
     fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
-        // Return the same snapshot `discover()` would return. The mock
-        // has no post-discover mutation, so the clone is always "fresh".
-        self.outcome.clone()
+        // Re-pull authoritative topology reflecting any join/leave mutations
+        // since discover() — mirrors SonosWire's GetZoneGroupState re-pull (a
+        // plain `self.outcome.clone()` would return the stale original fixture
+        // after a regroup). The original snapshot supplies speaker IDENTITY
+        // (room / model / ip); the live model supplies the current GROUPING.
+        // The `?` propagates a `failing()` mock's discovery error unchanged.
+        let base = self.outcome.clone()?;
+        let guard = lock!(self);
+        let mut members_by_coord: HashMap<SpeakerId, Vec<SpeakerId>> = HashMap::new();
+        for (member, coord) in &guard.member_to_coord {
+            members_by_coord
+                .entry(coord.clone())
+                .or_default()
+                .push(member.clone());
+        }
+        // Deterministic member + group ordering so the synthesized snapshot is
+        // stable across HashMap iteration nondeterminism (tests rely on `==`).
+        let mut groups: Vec<GroupIdentity> = guard
+            .coords
+            .iter()
+            .map(|(gid, coord)| {
+                let mut members = members_by_coord.get(coord).cloned().unwrap_or_default();
+                members.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+                GroupIdentity {
+                    id: gid.clone(),
+                    coordinator: coord.clone(),
+                    members,
+                }
+            })
+            .collect();
+        groups.sort_by(|a, b| a.id.to_string().cmp(&b.id.to_string()));
+        Ok(DiscoverySnapshot {
+            speakers: base.speakers,
+            groups,
+        })
     }
 
     fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
@@ -1093,6 +1136,76 @@ mod tests {
     fn refresh_topology_errors_on_failing_mock() {
         let w = MockWire::failing(WireError::NoDevicesFound);
         assert_eq!(w.refresh_topology(), Err(WireError::NoDevicesFound));
+    }
+
+    /// refresh_topology must reflect a post-discover regroup (mirrors
+    /// SonosWire's GetZoneGroupState re-pull), not return the stale fixture.
+    #[test]
+    fn refresh_topology_reflects_join_mutation() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        let office = SpeakerId::new("RINCON_OFFICE");
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        w.join_group(&office, &kitchen).unwrap();
+
+        let snap = w.refresh_topology().unwrap();
+        assert_eq!(
+            snap.speakers.len(),
+            3,
+            "identity set is unchanged by a regroup"
+        );
+        assert!(
+            !snap
+                .groups
+                .iter()
+                .any(|g| g.id == GroupId::new("RINCON_OFFICE:0")),
+            "joiner's former solo group must not appear in the refreshed snapshot"
+        );
+        let kitchen_grp = snap
+            .groups
+            .iter()
+            .find(|g| g.coordinator == kitchen)
+            .expect("Kitchen group present");
+        assert!(
+            kitchen_grp.members.contains(&office),
+            "refreshed snapshot must show Office folded into Kitchen's group"
+        );
+    }
+
+    /// A regroup surfaces as `TopologyChanged` on the stream — the real wire's
+    /// GroupMembership NOTIFY equivalent, which drives the Dart re-discover.
+    #[test]
+    fn join_group_emits_topology_changed_when_subscribed() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        w.join_group(
+            &SpeakerId::new("RINCON_OFFICE"),
+            &SpeakerId::new("RINCON_KITCHEN"),
+        )
+        .unwrap();
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100))
+                .unwrap(),
+            ChangeEvent::TopologyChanged
+        ));
+    }
+
+    #[test]
+    fn leave_group_emits_topology_changed_when_subscribed() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+        w.leave_group(&SpeakerId::new("RINCON_DINING")).unwrap();
+        assert!(matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100))
+                .unwrap(),
+            ChangeEvent::TopologyChanged
+        ));
     }
 
     #[test]
