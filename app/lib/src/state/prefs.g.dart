@@ -71,13 +71,23 @@ final class PrefsRepositoryProvider
 String _$prefsRepositoryHash() => r'a6b506423cd9f15e8edc194c722216e8ac395d40';
 
 /// Current persisted settings. Restores from the repo on build; every setter
-/// writes through to the repo AND updates state so the UI reacts immediately.
+/// reflects the choice in state immediately, then persists best-effort.
+///
+/// State-first ordering keeps a cosmetic toggle instant (no lag on disk I/O)
+/// and applies the user's choice for the session even if the write fails; a
+/// rare persistence failure (e.g. full disk) is swallowed rather than crashing
+/// the toggle - the only consequence is the setting not surviving a restart.
 
 @ProviderFor(SettingsNotifier)
 final settingsProvider = SettingsNotifierProvider._();
 
 /// Current persisted settings. Restores from the repo on build; every setter
-/// writes through to the repo AND updates state so the UI reacts immediately.
+/// reflects the choice in state immediately, then persists best-effort.
+///
+/// State-first ordering keeps a cosmetic toggle instant (no lag on disk I/O)
+/// and applies the user's choice for the session even if the write fails; a
+/// rare persistence failure (e.g. full disk) is swallowed rather than crashing
+/// the toggle - the only consequence is the setting not surviving a restart.
 final class SettingsNotifierProvider
     extends
         $NotifierProvider<
@@ -85,7 +95,12 @@ final class SettingsNotifierProvider
           ({Accent accent, HomeLayout layout, ThemeMode mode})
         > {
   /// Current persisted settings. Restores from the repo on build; every setter
-  /// writes through to the repo AND updates state so the UI reacts immediately.
+  /// reflects the choice in state immediately, then persists best-effort.
+  ///
+  /// State-first ordering keeps a cosmetic toggle instant (no lag on disk I/O)
+  /// and applies the user's choice for the session even if the write fails; a
+  /// rare persistence failure (e.g. full disk) is swallowed rather than crashing
+  /// the toggle - the only consequence is the setting not surviving a restart.
   SettingsNotifierProvider._()
     : super(
         from: null,
@@ -118,10 +133,15 @@ final class SettingsNotifierProvider
   }
 }
 
-String _$settingsNotifierHash() => r'8dcd94566582bcfa45feb1bbec664892d9484217';
+String _$settingsNotifierHash() => r'3fc9b8f82b5175f7aa7478e5056fbed01dcb22e6';
 
 /// Current persisted settings. Restores from the repo on build; every setter
-/// writes through to the repo AND updates state so the UI reacts immediately.
+/// reflects the choice in state immediately, then persists best-effort.
+///
+/// State-first ordering keeps a cosmetic toggle instant (no lag on disk I/O)
+/// and applies the user's choice for the session even if the write fails; a
+/// rare persistence failure (e.g. full disk) is swallowed rather than crashing
+/// the toggle - the only consequence is the setting not surviving a restart.
 
 abstract class _$SettingsNotifier
     extends $Notifier<({Accent accent, HomeLayout layout, ThemeMode mode})> {

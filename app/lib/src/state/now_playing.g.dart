@@ -141,7 +141,7 @@ final class NowPlayingPositionProvider
 }
 
 String _$nowPlayingPositionHash() =>
-    r'f8afde1cc9de5f97a16132bfdd37c04262e4c5a9';
+    r'e9df99d4da0a6df31e90847097a5090949975a3b';
 
 /// A ticking, locally-derived playback position for one group, keyed by
 /// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms

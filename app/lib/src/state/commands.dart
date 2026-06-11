@@ -69,15 +69,98 @@ mixin _Reconciling {
   }
 }
 
+/// One throttled, optimistic scalar (a volume) per target id — shared by the
+/// per-speaker and per-group volume paths so the drag bookkeeping lives once.
+///
+/// Encapsulates: pre-gesture anchor capture, the LAN throttle (≤1 SOAP /
+/// 150 ms, trailing), a single final send on release, and **sequence-gated**
+/// rollback. The sequence gate fixes a real race: release (`end`) can fire
+/// while an earlier throttled mid-drag send is still in flight; if that stale
+/// send then fails *after* the final send succeeded, a naive rollback would
+/// revert the UI to the pre-gesture value, clobbering the value the user
+/// actually set. Each send bumps a per-id sequence, and a send only rolls back
+/// if it is still the latest — so a superseded send fails silently.
+class _ThrottledScalar {
+  _ThrottledScalar({
+    required this.readCurrent,
+    required this.applyOptimistic,
+    required this.command,
+    required this.reconcile,
+  });
+
+  /// Current authoritative value for [id] — the rollback target (anchor).
+  final int? Function(String id) readCurrent;
+
+  /// Apply an optimistic [value] for [id] to local household state.
+  final void Function(String id, int value) applyOptimistic;
+
+  /// Fire the SOAP command for [id] at [value].
+  final Future<void> Function(String id, int value) command;
+
+  /// The shared reconciler — [_Reconciling.send].
+  final Future<void> Function(
+    Future<void> Function(), {
+    void Function()? rollback,
+  })
+  reconcile;
+
+  final _throttle = <String, Throttle>{};
+  final _anchor = <String, int?>{};
+  final _seq = <String, int>{};
+
+  /// Mid-drag: optimistic now, SOAP send throttled to the trailing edge.
+  void drag(String id, int value) {
+    _anchor.putIfAbsent(id, () => readCurrent(id));
+    applyOptimistic(id, value);
+    _throttle
+        .putIfAbsent(id, () => Throttle(const Duration(milliseconds: 150)))
+        .run(() => _fire(id, value));
+  }
+
+  /// Drag release: send the final value exactly once. Cancel the pending
+  /// trailing send (dispose, do NOT flush — flush + this send would double-fire).
+  void end(String id, int value) {
+    _anchor.putIfAbsent(id, () => readCurrent(id));
+    applyOptimistic(id, value);
+    _throttle.remove(id)?.dispose();
+    _fire(id, value).whenComplete(() {
+      // Gesture done — release the per-id bookkeeping.
+      _anchor.remove(id);
+      _seq.remove(id);
+    });
+  }
+
+  Future<void> _fire(String id, int value) {
+    // This send is now the latest for [id]. An older in-flight send that fails
+    // later will find a newer (or cleared) seq and skip its rollback, so a
+    // stale mid-drag failure can't clobber the final value.
+    final mySeq = (_seq[id] ?? 0) + 1;
+    _seq[id] = mySeq;
+    return reconcile(
+      () => command(id, value),
+      rollback: () {
+        if (_seq[id] != mySeq) return; // superseded by a newer gesture.
+        final prev = _anchor[id];
+        if (prev != null) applyOptimistic(id, prev);
+      },
+    );
+  }
+}
+
 /// Transport + per-speaker volume commands, optimistic and LAN-throttled.
 class PlaybackController with _Reconciling {
-  PlaybackController(this.ref, this.api);
+  PlaybackController(this.ref, this.api) {
+    _volume = _ThrottledScalar(
+      readCurrent: (id) => ref.read(householdProvider).rooms[id]?.volume,
+      applyOptimistic: (id, v) => _h.setOptimisticVolume(id, v),
+      command: (id, v) => api.setVolume(id, v),
+      reconcile: send,
+    );
+  }
   @override
   final Ref ref;
   final CommandApi api;
-  final _volThrottle = <String, Throttle>{};
-  // Pre-gesture volume per speaker, captured once per drag, for rollback.
-  final _volAnchor = <String, int?>{};
+  late final _ThrottledScalar _volume;
 
   HouseholdNotifier get _h => ref.read(householdProvider.notifier);
 
@@ -103,53 +186,28 @@ class PlaybackController with _Reconciling {
   Future<void> previous(String groupId) => send(() => api.previous(groupId));
 
   /// Mid-drag volume: optimistic now, SOAP send throttled to the trailing edge.
-  void setVolume(String speakerId, int v) {
-    _volAnchor.putIfAbsent(
-      speakerId,
-      () => ref.read(householdProvider).rooms[speakerId]?.volume,
-    );
-    _h.setOptimisticVolume(speakerId, v);
-    _volThrottle
-        .putIfAbsent(speakerId, () => Throttle(const Duration(milliseconds: 150)))
-        .run(() => send(
-              () => api.setVolume(speakerId, v),
-              rollback: () => _rollbackVolume(speakerId),
-            ));
-  }
+  void setVolume(String speakerId, int v) => _volume.drag(speakerId, v);
 
-  /// Drag release: send the final value exactly once. Cancel the pending
-  /// trailing send (dispose, do NOT flush) — flush() + this explicit send would
-  /// double-fire the SOAP call.
-  void setVolumeEnd(String speakerId, int v) {
-    // Capture the anchor if a mid-drag setVolume never ran (e.g. a tap-to-set,
-    // or the end fires alone) so the rollback target is the pre-gesture value.
-    _volAnchor.putIfAbsent(
-      speakerId,
-      () => ref.read(householdProvider).rooms[speakerId]?.volume,
-    );
-    _h.setOptimisticVolume(speakerId, v);
-    _volThrottle.remove(speakerId)?.dispose();
-    send(() => api.setVolume(speakerId, v),
-            rollback: () => _rollbackVolume(speakerId))
-        .whenComplete(() => _volAnchor.remove(speakerId)); // gesture done.
-  }
-
-  void _rollbackVolume(String speakerId) {
-    final prev = _volAnchor[speakerId];
-    if (prev != null) _h.setOptimisticVolume(speakerId, prev);
-  }
+  /// Drag release: send the final value exactly once.
+  void setVolumeEnd(String speakerId, int v) => _volume.end(speakerId, v);
 }
 
 /// Group form/break + group volume/mute commands. Form/break do NOT mutate
 /// membership optimistically — the topology event path (GroupMembership NOTIFY
 /// → debounced topology re-pull) drives that update.
 class GroupingController with _Reconciling {
-  GroupingController(this.ref, this.api);
+  GroupingController(this.ref, this.api) {
+    _groupVolume = _ThrottledScalar(
+      readCurrent: (id) => ref.read(householdProvider).groups[id]?.groupVolume,
+      applyOptimistic: (id, v) => _h.setOptimisticGroupVolume(id, v),
+      command: (id, v) => api.setGroupVolume(id, v),
+      reconcile: send,
+    );
+  }
   @override
   final Ref ref;
   final CommandApi api;
-  final _gVolThrottle = <String, Throttle>{};
-  final _gVolAnchor = <String, int?>{};
+  late final _ThrottledScalar _groupVolume;
 
   HouseholdNotifier get _h => ref.read(householdProvider.notifier);
 
@@ -159,33 +217,9 @@ class GroupingController with _Reconciling {
   Future<void> leaveGroup(String speakerId) =>
       send(() => api.leaveGroup(speakerId));
 
-  void setGroupVolume(String groupId, int v) {
-    _gVolAnchor.putIfAbsent(
-      groupId,
-      () => ref.read(householdProvider).groups[groupId]?.groupVolume,
-    );
-    _h.setOptimisticGroupVolume(groupId, v);
-    _gVolThrottle
-        .putIfAbsent(groupId, () => Throttle(const Duration(milliseconds: 150)))
-        .run(() => send(
-              () => api.setGroupVolume(groupId, v),
-              rollback: () => _rollbackGroupVolume(groupId),
-            ));
-  }
+  void setGroupVolume(String groupId, int v) => _groupVolume.drag(groupId, v);
 
-  void setGroupVolumeEnd(String groupId, int v) {
-    // Capture the anchor if a mid-drag setGroupVolume never ran (see
-    // PlaybackController.setVolumeEnd) so the rollback target is pre-gesture.
-    _gVolAnchor.putIfAbsent(
-      groupId,
-      () => ref.read(householdProvider).groups[groupId]?.groupVolume,
-    );
-    _h.setOptimisticGroupVolume(groupId, v);
-    _gVolThrottle.remove(groupId)?.dispose();
-    send(() => api.setGroupVolume(groupId, v),
-            rollback: () => _rollbackGroupVolume(groupId))
-        .whenComplete(() => _gVolAnchor.remove(groupId));
-  }
+  void setGroupVolumeEnd(String groupId, int v) => _groupVolume.end(groupId, v);
 
   Future<void> setGroupMute(String groupId, bool muted) {
     final prev = ref.read(householdProvider).groups[groupId]?.groupMuted;
@@ -196,11 +230,6 @@ class GroupingController with _Reconciling {
         if (prev != null) _h.setOptimisticGroupMuted(groupId, prev);
       },
     );
-  }
-
-  void _rollbackGroupVolume(String groupId) {
-    final prev = _gVolAnchor[groupId];
-    if (prev != null) _h.setOptimisticGroupVolume(groupId, prev);
   }
 }
 
