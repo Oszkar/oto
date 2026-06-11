@@ -12,9 +12,10 @@ publish = false
 workspace = true
 
 [features]
-# Compile-gated hardware tests under `tests/live_*.rs`. CI does not
-# enable this — the live tests need a real Sonos LAN and would either
-# hang or fail spuriously. Hardware run:
+# Compile-gated hardware tests under `tests/live_*.rs`. CI compile-checks
+# them with this feature on (a clippy `--tests` pass in ci.yml) but never
+# RUNS them - the live tests need a real Sonos LAN and would hang or fail
+# spuriously. Hardware run:
 #   cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only
 # (The `#[ignore]` markers stay as belt-and-braces: even with the
 # feature on, plain `cargo test` won't run them without `--ignored`.)

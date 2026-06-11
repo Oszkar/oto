@@ -391,22 +391,24 @@ impl StateManager {
     /// now-stale state is gone before the NEW wire's seed events
     /// repopulate it.
     ///
-    /// The bump uses `Release` and the clear writes happen *after* it,
-    /// so a reader who first observes the new generation via
-    /// `Acquire` will then observe the cleared maps (which is the
-    /// correct invariant: an event that lands at the new generation
-    /// should be the only thing in the cache).
+    /// Synchronisation note: the bump is a `Release` store and the clears
+    /// are separate `RwLock` writes that follow it. The generation's
+    /// `Release`/`Acquire` does NOT by itself order the clears - they happen
+    /// *after* the Release store, so it cannot prove "saw the new generation
+    /// ⇒ sees the cleared maps." The actual safety rests on the per-cache
+    /// locks plus the slot lifecycle, not on the atomic alone:
+    ///   - OLD consumers re-check the generation *under* the same per-cache
+    ///     write lock inside `apply_event_at_generation` and no-op on a
+    ///     mismatch, so they never read or write a cache concurrently with,
+    ///     or after, its clear; and
+    ///   - NEW consumers can only enter via `take_event_stream`, which needs
+    ///     the wire-slot replacement that `discover_with` performs *after*
+    ///     this call returns - so a NEW consumer cannot observe a
+    ///     partially-cleared cache.
     ///
-    /// Not atomic across `bump → speakers.clear → groups.clear →
-    /// topology.clear`. Safe by construction: no consumer can observe an
-    /// intermediate state.
-    /// OLD consumers fail the gen check (the bump precedes both clears,
-    /// so an OLD consumer always sees the new gen as soon as it sees
-    /// any side effect) and skip without reading or writing. NEW
-    /// consumers can only enter via `take_event_stream`, which requires
-    /// the wire slot to be replaced — and `discover_with` runs the slot
-    /// replacement *after* this call returns, so NEW consumers cannot
-    /// observe a partially-cleared cache.
+    /// The generation atomic still earns its `Release`/`Acquire`: it gives
+    /// that under-lock gen check a well-defined value to compare against; it
+    /// just isn't what orders the clears.
     #[cfg(test)]
     pub fn bump_and_clear(&self) {
         // Order: bump first (Release), then clear. The Acquire-load

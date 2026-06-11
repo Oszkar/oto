@@ -245,8 +245,8 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
 
 // ── v0.4 DEV-ONLY: MockWire injection for integration tests ───────────────────
 //
-// TODO(v0.6): consider removing once the integration test pattern no longer
-// needs it. Until then, this is the only FRB-side seam to drive the LAN-free
+// TODO(v0.7): remove once UI integration tests cover this path (the v0.7
+// cleanup bucket per ROADMAP). Until then, this is the only FRB-side seam to drive the LAN-free
 // end-to-end tests in `app/integration_test/v0_4_events_test.dart` (incl. the
 // v0.5 TopologyChanged delivery test).
 //
@@ -518,12 +518,17 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     }
 }
 
-/// The current wire generation — bumped by `discover_with` on every
+/// The current wire generation - bumped by `discover_with` on every
 /// **successful** wire install. The Dart event-stream provider keys its
 /// re-subscription on this so a FAILED re-discover (which does not bump it)
 /// doesn't tear down the live stream into a one-shot, un-retakeable receiver
-/// (review #67-followup #2). `#[frb(sync)]` — a cheap atomic read, called
+/// (review #67-followup #2). `#[frb(sync)]` - a cheap atomic read, called
 /// inline from a Riverpod `select`, so it must not be a `Future`.
+///
+/// Note: the value returned is the `StateManager` generation. There is no
+/// separate wire-side counter - the installed wire is paired with this
+/// generation in the slot, so they advance in lockstep; the name reads
+/// "wire generation" because that pairing is what callers care about.
 #[flutter_rust_bridge::frb(sync)]
 pub fn current_wire_generation() -> u64 {
     oto_app::current_generation()

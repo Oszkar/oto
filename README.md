@@ -128,8 +128,8 @@ These generated source files are committed. That keeps a fresh clone usable in I
 
 Two workflows under `.github/workflows/`:
 
-- `ci.yml` - verifies generated source freshness, then runs lint + tests for Flutter and Rust on every PR. Jobs are split so they run in parallel and can be re-run independently.
-- `build.yml` - debug-builds the Android APK on pushes to `main` to catch toolchain rot. No Windows job - fluctuating runner minutes aren't worth it for a hobby project; dev machines catch Windows issues.
+- `ci.yml` - verifies generated source freshness, then runs lint + tests for Flutter and Rust on every PR (Ubuntu runners). Jobs are split so they run in parallel and can be re-run independently. CI does not exercise the assembled Flutter UI or load the FRB cdylib end-to-end; the Windows desktop build and the `integration_test/` UI flow are verified by hand on a dev machine each release.
+- `build.yml` - debug-builds the Android APK on pushes to `main` to catch toolchain rot. No Windows job - fluctuating runner minutes aren't worth it for a hobby project; dev machines catch Windows issues. (Worth revisiting as the v0.6.3 desktop layout makes Windows a first-class target.)
 
 ## Architecture
 
