@@ -144,12 +144,17 @@ Future<void> devPushTopologyChangeOnMock() =>
 Stream<ChangeEventDto> subscribeChangeEvents() =>
     RustLib.instance.api.crateApiSubscribeChangeEvents();
 
-/// The current wire generation — bumped by `discover_with` on every
+/// The current wire generation - bumped by `discover_with` on every
 /// **successful** wire install. The Dart event-stream provider keys its
 /// re-subscription on this so a FAILED re-discover (which does not bump it)
 /// doesn't tear down the live stream into a one-shot, un-retakeable receiver
-/// (review #67-followup #2). `#[frb(sync)]` — a cheap atomic read, called
+/// (review #67-followup #2). `#[frb(sync)]` - a cheap atomic read, called
 /// inline from a Riverpod `select`, so it must not be a `Future`.
+///
+/// Note: the value returned is the `StateManager` generation. There is no
+/// separate wire-side counter - the installed wire is paired with this
+/// generation in the slot, so they advance in lockstep; the name reads
+/// "wire generation" because that pairing is what callers care about.
 BigInt currentWireGeneration() =>
     RustLib.instance.api.crateApiCurrentWireGeneration();
 
