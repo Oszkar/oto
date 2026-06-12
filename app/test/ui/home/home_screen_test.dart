@@ -25,6 +25,7 @@ import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
+import 'package:oto/src/state/now_playing.dart';
 import 'package:oto/src/state/prefs.dart';
 import 'package:oto/src/theme/accent.dart';
 import 'package:oto/src/theme/oto_theme.dart';
@@ -129,6 +130,9 @@ Future<void> _pump(
         prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
         playbackControllerProvider.overrideWith((ref) => SpyPlayback(ref)),
         groupingControllerProvider.overrideWith((ref) => SpyGrouping(ref)),
+        // Prevent the async SOAP read from hitting the Rust FFI when
+        // NowPlayingScreen is pushed via the strip tap.
+        positionApiProvider.overrideWithValue(const StubPositionApi()),
       ],
       child: MaterialApp(
         theme: otoTheme(Brightness.light, Accent.teal),

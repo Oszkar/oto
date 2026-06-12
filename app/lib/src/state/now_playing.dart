@@ -173,6 +173,9 @@ class NowPlayingPosition extends _$NowPlayingPosition {
     // Fire a SOAP read on the authoritative transitions: first open, a track
     // change, or a resume. Event-triggered, never a loop. The result re-anchors
     // (fixing a mid-track open/join showing 0) and sets _max (duration).
+    // NOTE: on resumedToPlaying the read may apply a small position correction
+    // if the device's reported position differs from the locally-frozen value -
+    // this is by design, the device is authoritative.
     final opening = !_opened;
     _opened = true;
     if (opening || trackChanged || resumedToPlaying) {
@@ -232,6 +235,9 @@ class NowPlayingPosition extends _$NowPlayingPosition {
       _max = dur == null ? _max : Duration(seconds: dur.toInt());
       if (pos != null) {
         _anchorPosition = Duration(seconds: pos.toInt());
+        // NOTE: anchorTime is the read-RESPONSE time, not the request-issue
+        // time - so there is a sub-tick (~half RTT, 10-50ms) systematic offset;
+        // negligible at the 500ms tick resolution.
         _anchorTime = clock();
       }
       state = NowPlayingProgress(
