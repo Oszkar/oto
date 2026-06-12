@@ -1,34 +1,27 @@
 /// Locally-derived, read-only playback position for the Now Playing screen.
 ///
-/// DORMANT in v0.6.0: NowPlayingScreen renders no progress bar yet. The live
-/// `Track` event carries no duration (the SDK's reactive CurrentTrack lacks it)
-/// and there is no position anchor, so a bar showed `--:--` and reset to 0 on
-/// every open. v0.6.1 wires it up by polling `speakerState` (GetPositionInfo)
-/// for the real duration + position anchor on open/track-change/resume, then
-/// ticking locally. This tested logic (`positionAt` + the re-anchor state
-/// machine) is kept in place for that. See ROADMAP v0.6.1.
-///
 /// The backend deliberately does NOT event playback position (backend-true
 /// core: see ARCHITECTURE / sonos-notes). So we derive the position bar from
 /// the last transport anchor plus the wall clock: the pure [positionAt] is the
 /// tested core, and [NowPlayingPosition] orchestrates the anchor bookkeeping +
 /// a ~500 ms tick around it.
 ///
-/// There is no seek/scrub and no backend position event - never claim one
-/// exists. Anchors come only from observable transport transitions:
-///   - a `Track` change re-anchors at [Duration.zero];
-///   - a non-playing -> playing transition re-anchors from the FROZEN position
-///     (NOT 0), so resume continues from where it paused.
+/// Anchors come from two sources:
+///   1. Local transport transitions (track change re-anchors at Duration.zero;
+///      pause snapshots the elapsed position; resume re-anchors from frozen).
+///   2. A live SOAP read ([PositionApi.trackPosition]) fired on screen-open,
+///      track-change, or resume-to-playing - this provides the real mid-track
+///      position and the track duration (which is not carried by GENA events).
 ///
-/// Documented limitation: a mid-track JOIN (we start observing a group that is
-/// already mid-track) shows the position from 0, because there is no backend
-/// anchor for the elapsed time. It self-corrects on the next `Track` change.
+/// There is no seek/scrub and no backend position event - never claim one
+/// exists.
 library;
 
 import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../rust/api.dart' as rust_api;
 import 'household.dart';
 import 'model/group_state.dart';
 import 'model/track.dart';
@@ -54,20 +47,51 @@ Duration positionAt(
   return clamped;
 }
 
+/// What the Now Playing bar needs: the locally-ticking [position] and the
+/// track [duration] (the bar's max), or null when unknown.
+class NowPlayingProgress {
+  final Duration position;
+  final Duration? duration;
+  const NowPlayingProgress(this.position, this.duration);
+
+  @override
+  bool operator ==(Object other) =>
+      other is NowPlayingProgress &&
+      position == other.position &&
+      duration == other.duration;
+
+  @override
+  int get hashCode => Object.hash(position, duration);
+}
+
+/// Injectable indirection over the FRB `track_position` read, so tests can
+/// override it without touching Rust (mirrors [CommandApi]).
+class PositionApi {
+  const PositionApi();
+  Future<rust_api.TrackPositionDto> trackPosition(String groupId) =>
+      rust_api.trackPosition(groupId: groupId);
+}
+
+@riverpod
+PositionApi positionApi(Ref ref) => const PositionApi();
+
 /// Wall-clock source, injectable for deterministic tests. Defaults to the real
 /// clock; only tests override it (production behavior is unchanged).
 @riverpod
 DateTime Function() clock(Ref ref) => DateTime.now;
 
 /// A ticking, locally-derived playback position for one group, keyed by
-/// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-/// timer while playing and freezes otherwise.
+/// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+/// track duration (null when unknown); recomputes via a ~500 ms timer while
+/// playing and freezes otherwise.
 ///
 /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
 /// (which re-runs whenever the watched group's `track`/`transport` changes):
-///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+///     read reconciles to the real position and sets the duration;
 ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-///     position just computed (never 0), `anchorTime = now`.
+///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+///   - first open -> SOAP read to supply the real mid-track position + duration.
 @riverpod
 class NowPlayingPosition extends _$NowPlayingPosition {
   /// ~500 ms tick: fine enough for a smooth bar, LAN-irrelevant (local only).
@@ -81,6 +105,10 @@ class NowPlayingPosition extends _$NowPlayingPosition {
   bool _seenTrack = false;
   PlaybackState? _lastTransport;
   Timer? _timer;
+  // Track duration from the last SOAP read; null until first read completes.
+  Duration? _max;
+  // Whether the first build has already fired the open-read.
+  bool _opened = false;
 
   /// A stable identity for a track across rebuilds: prefer `id`, then `uri`,
   /// then `title`. `uri` is included because a URI-only track (e.g. a radio
@@ -92,13 +120,12 @@ class NowPlayingPosition extends _$NowPlayingPosition {
       t == null ? null : (t.id ?? t.uri ?? t.title);
 
   @override
-  Duration build(String groupId) {
+  NowPlayingProgress build(String groupId) {
     // Watch the whole household and pick our group. `build` re-runs on any
     // household change; the anchor math below only reacts to this group's
     // track/transport, so an unrelated room's volume tick is a cheap no-op.
     final group = ref.watch(householdProvider).groups[groupId];
     final transport = group?.transport ?? PlaybackState.stopped;
-    final duration = group?.track?.duration;
     final trackKey = _trackKey(group?.track);
 
     // Single wall-clock source, injectable for deterministic tests.
@@ -116,8 +143,7 @@ class NowPlayingPosition extends _$NowPlayingPosition {
         transport == PlaybackState.playing;
 
     if (trackChanged) {
-      // New track: restart from 0.
-      _anchorPosition = Duration.zero;
+      _anchorPosition = Duration.zero; // optimistic; read reconciles below
       _anchorTime = now;
     } else if (leftPlaying) {
       // Pause/stop: snapshot the elapsed position so the frozen bar holds the
@@ -127,7 +153,7 @@ class NowPlayingPosition extends _$NowPlayingPosition {
         anchorTime: _anchorTime,
         anchorPosition: _anchorPosition,
         state: PlaybackState.playing,
-        max: duration,
+        max: _max,
       );
       _anchorTime = now;
     } else if (resumedToPlaying) {
@@ -139,9 +165,18 @@ class NowPlayingPosition extends _$NowPlayingPosition {
         anchorPosition: _anchorPosition,
         // The pre-resume state is non-playing, so this returns the frozen value.
         state: _lastTransport!,
-        max: duration,
+        max: _max,
       );
       _anchorTime = now;
+    }
+
+    // Fire a SOAP read on the authoritative transitions: first open, a track
+    // change, or a resume. Event-triggered, never a loop. The result re-anchors
+    // (fixing a mid-track open/join showing 0) and sets _max (duration).
+    final opening = !_opened;
+    _opened = true;
+    if (opening || trackChanged || resumedToPlaying) {
+      _readAnchor(groupId);
     }
 
     _seenTrack = trackKey != null || _seenTrack;
@@ -153,12 +188,15 @@ class NowPlayingPosition extends _$NowPlayingPosition {
     _timer = null;
     if (transport == PlaybackState.playing) {
       _timer = Timer.periodic(_tick, (_) {
-        state = positionAt(
-          clock(),
-          anchorTime: _anchorTime,
-          anchorPosition: _anchorPosition,
-          state: PlaybackState.playing,
-          max: duration,
+        state = NowPlayingProgress(
+          positionAt(
+            clock(),
+            anchorTime: _anchorTime,
+            anchorPosition: _anchorPosition,
+            state: PlaybackState.playing,
+            max: _max,
+          ),
+          _max,
         );
       });
     }
@@ -167,12 +205,45 @@ class NowPlayingPosition extends _$NowPlayingPosition {
       _timer = null;
     });
 
-    return positionAt(
-      now,
-      anchorTime: _anchorTime,
-      anchorPosition: _anchorPosition,
-      state: transport,
-      max: duration,
+    return NowPlayingProgress(
+      positionAt(
+        now,
+        anchorTime: _anchorTime,
+        anchorPosition: _anchorPosition,
+        state: transport,
+        max: _max,
+      ),
+      _max,
     );
+  }
+
+  /// Fire the SOAP read; on completion re-anchor from the device's reported
+  /// position and set the track duration. Failures are swallowed (the bar keeps
+  /// ticking off the last good anchor) - LAN reads are best-effort.
+  void _readAnchor(String groupId) {
+    final clock = ref.read(clockProvider);
+    ref.read(positionApiProvider).trackPosition(groupId).then((p) {
+      // Guard: the provider may have been disposed before this async callback
+      // fires (e.g. test teardown, navigation away). Setting state after
+      // dispose throws in Riverpod. ref.mounted is false once disposed.
+      if (!ref.mounted) return;
+      final pos = p.positionSecs;
+      final dur = p.durationSecs;
+      _max = dur == null ? _max : Duration(seconds: dur.toInt());
+      if (pos != null) {
+        _anchorPosition = Duration(seconds: pos.toInt());
+        _anchorTime = clock();
+      }
+      state = NowPlayingProgress(
+        positionAt(
+          clock(),
+          anchorTime: _anchorTime,
+          anchorPosition: _anchorPosition,
+          state: _lastTransport ?? PlaybackState.stopped,
+          max: _max,
+        ),
+        _max,
+      );
+    }).catchError((_) {});
   }
 }
