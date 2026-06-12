@@ -109,6 +109,10 @@ class NowPlayingPosition extends _$NowPlayingPosition {
   Duration? _max;
   // Whether the first build has already fired the open-read.
   bool _opened = false;
+  // Monotonic token: a newer _readAnchor invalidates older in-flight reads, so
+  // a slow SOAP response for a previous track/transition can't clobber the
+  // current anchor when it lands late.
+  int _readGeneration = 0;
 
   /// A stable identity for a track across rebuilds: prefer `id`, then `uri`,
   /// then `title`. `uri` is included because a URI-only track (e.g. a radio
@@ -145,6 +149,7 @@ class NowPlayingPosition extends _$NowPlayingPosition {
     if (trackChanged) {
       _anchorPosition = Duration.zero; // optimistic; read reconciles below
       _anchorTime = now;
+      _max = null; // new track: forget the old total until the read lands
     } else if (leftPlaying) {
       // Pause/stop: snapshot the elapsed position so the frozen bar holds the
       // true current position (NOT the stale anchor it advanced from).
@@ -224,15 +229,17 @@ class NowPlayingPosition extends _$NowPlayingPosition {
   /// position and set the track duration. Failures are swallowed (the bar keeps
   /// ticking off the last good anchor) - LAN reads are best-effort.
   void _readAnchor(String groupId) {
+    final generation = ++_readGeneration;
     final clock = ref.read(clockProvider);
     ref.read(positionApiProvider).trackPosition(groupId).then((p) {
       // Guard: the provider may have been disposed before this async callback
       // fires (e.g. test teardown, navigation away). Setting state after
       // dispose throws in Riverpod. ref.mounted is false once disposed.
       if (!ref.mounted) return;
+      if (generation != _readGeneration) return; // a newer read superseded this one
       final pos = p.positionSecs;
       final dur = p.durationSecs;
-      _max = dur == null ? _max : Duration(seconds: dur.toInt());
+      _max = dur == null ? null : Duration(seconds: dur.toInt());
       if (pos != null) {
         _anchorPosition = Duration(seconds: pos.toInt());
         // NOTE: anchorTime is the read-RESPONSE time, not the request-issue
