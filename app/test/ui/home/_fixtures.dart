@@ -6,14 +6,27 @@
 // dragging the slider routes through the controller, without touching Rust.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:oto/src/rust/api.dart' as rust_api;
 import 'package:oto/src/state/commands.dart';
 import 'package:oto/src/state/household.dart';
 import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
+import 'package:oto/src/state/now_playing.dart';
 import 'package:oto/src/theme/accent.dart';
 import 'package:oto/src/theme/oto_theme.dart';
+
+/// A [PositionApi] stub that returns an empty [rust_api.TrackPositionDto] (no
+/// position, no duration) without touching Rust. Used in widget tests so that
+/// [NowPlayingPosition]'s async SOAP read completes silently rather than
+/// throwing an FFI error.
+class StubPositionApi extends PositionApi {
+  const StubPositionApi();
+  @override
+  Future<rust_api.TrackPositionDto> trackPosition(String groupId) async =>
+      const rust_api.TrackPositionDto();
+}
 
 /// A [HouseholdNotifier] whose `build()` returns a fixed fixture, bypassing
 /// discovery/event wiring entirely.
@@ -270,6 +283,8 @@ WrapHandle wrap(Widget child, {required Household household}) {
       groupingControllerProvider.overrideWith(
         (ref) => grouping = SpyGrouping(ref),
       ),
+      // Prevent the async SOAP read from hitting the Rust FFI in widget tests.
+      positionApiProvider.overrideWithValue(const StubPositionApi()),
     ],
     child: MaterialApp(
       theme: otoTheme(Brightness.light, Accent.teal),

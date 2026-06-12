@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/commands.dart';
 import '../../state/household.dart';
 import '../../state/model/group_state.dart';
+import '../../state/now_playing.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
@@ -16,13 +17,10 @@ import '../widgets/oto_slider.dart';
 /// the Spotify-origin pill (v0.6.0 spec §7) - oto is backend-true and the
 /// backend exposes none of those.
 ///
-/// The progress/seek bar is intentionally ABSENT in v0.6.0. The SDK's reactive
-/// `CurrentTrack` carries no duration and the backend does not event playback
-/// position, so a bar would have no length and nothing to anchor to (it showed
-/// `--:--` and reset to 0 on every open). v0.6.1 restores it by polling
-/// `speakerState` (GetPositionInfo) for the real duration + position anchor,
-/// then ticking locally. The tested `positionAt`/`NowPlayingPosition` logic in
-/// `now_playing.dart` is kept dormant for that work. See ROADMAP v0.6.1.
+/// A read-only progress bar sits between the track info and the transport
+/// controls. It is fed by [nowPlayingPositionProvider], which reads
+/// `track_position` (GetPositionInfo SOAP) for the real mid-track position and
+/// duration, then ticks locally at ~500 ms. No seek - there is no seek backend.
 class NowPlayingScreen extends ConsumerWidget {
   const NowPlayingScreen({super.key, required this.groupId});
 
@@ -54,6 +52,8 @@ class NowPlayingScreen extends ConsumerWidget {
                   _art(context, group),
                   const SizedBox(height: Space.screen18),
                   _trackInfo(context, group),
+                  const SizedBox(height: Space.screen18),
+                  _progress(context, ref),
                   const SizedBox(height: Space.screen18),
                   _transport(context, ref, group),
                   const SizedBox(height: Space.screen18),
@@ -102,6 +102,46 @@ class NowPlayingScreen extends ConsumerWidget {
         ],
       ],
     );
+  }
+
+  Widget _progress(BuildContext context, WidgetRef ref) {
+    final oto = context.oto;
+    final p = ref.watch(nowPlayingPositionProvider(groupId));
+    final dur = p.duration;
+    final value = (dur == null || dur.inMilliseconds == 0)
+        ? 0.0
+        : (p.position.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OtoSlider(
+          key: Key('np-progress-$groupId'),
+          value: value,
+          onChanged: null, // read-only: no seek (no backend)
+        ),
+        const SizedBox(height: Space.sm6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(_fmt(p.position),
+                style: TextStyles.caption.copyWith(
+                    fontFamily: Fonts.mono, color: oto.inkMute)),
+            Text(dur == null ? '--:--' : _fmt(dur),
+                style: TextStyles.caption.copyWith(
+                    fontFamily: Fonts.mono, color: oto.inkMute)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// `m:ss` (or `h:mm:ss` past an hour). Mono, tabular.
+  static String _fmt(Duration d) {
+    final s = d.inSeconds;
+    final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;
+    final mm = h > 0 ? m.toString().padLeft(2, '0') : m.toString();
+    final two = sec.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$two' : '$mm:$two';
   }
 
   /// prev / play-pause / next. No shuffle or repeat (backend-true: §7).

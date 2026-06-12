@@ -8,6 +8,48 @@ part of 'now_playing.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+
+@ProviderFor(positionApi)
+final positionApiProvider = PositionApiProvider._();
+
+final class PositionApiProvider
+    extends $FunctionalProvider<PositionApi, PositionApi, PositionApi>
+    with $Provider<PositionApi> {
+  PositionApiProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'positionApiProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$positionApiHash();
+
+  @$internal
+  @override
+  $ProviderElement<PositionApi> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  PositionApi create(Ref ref) {
+    return positionApi(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(PositionApi value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<PositionApi>(value),
+    );
+  }
+}
+
+String _$positionApiHash() => r'63e25e3f56491aacc0a6fb78d4ac31269be59dab';
+
 /// Wall-clock source, injectable for deterministic tests. Defaults to the real
 /// clock; only tests override it (production behavior is unchanged).
 
@@ -64,38 +106,47 @@ final class ClockProvider
 String _$clockHash() => r'3b571c5a0c08b7391c0eed04391003191bab6ccf';
 
 /// A ticking, locally-derived playback position for one group, keyed by
-/// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-/// timer while playing and freezes otherwise.
+/// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+/// track duration (null when unknown); recomputes via a ~500 ms timer while
+/// playing and freezes otherwise.
 ///
 /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
 /// (which re-runs whenever the watched group's `track`/`transport` changes):
-///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+///     read reconciles to the real position and sets the duration;
 ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-///     position just computed (never 0), `anchorTime = now`.
+///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+///   - first open -> SOAP read to supply the real mid-track position + duration.
 
 @ProviderFor(NowPlayingPosition)
 final nowPlayingPositionProvider = NowPlayingPositionFamily._();
 
 /// A ticking, locally-derived playback position for one group, keyed by
-/// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-/// timer while playing and freezes otherwise.
+/// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+/// track duration (null when unknown); recomputes via a ~500 ms timer while
+/// playing and freezes otherwise.
 ///
 /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
 /// (which re-runs whenever the watched group's `track`/`transport` changes):
-///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+///     read reconciles to the real position and sets the duration;
 ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-///     position just computed (never 0), `anchorTime = now`.
+///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+///   - first open -> SOAP read to supply the real mid-track position + duration.
 final class NowPlayingPositionProvider
-    extends $NotifierProvider<NowPlayingPosition, Duration> {
+    extends $NotifierProvider<NowPlayingPosition, NowPlayingProgress> {
   /// A ticking, locally-derived playback position for one group, keyed by
-  /// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-  /// timer while playing and freezes otherwise.
+  /// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+  /// track duration (null when unknown); recomputes via a ~500 ms timer while
+  /// playing and freezes otherwise.
   ///
   /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
   /// (which re-runs whenever the watched group's `track`/`transport` changes):
-  ///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+  ///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+  ///     read reconciles to the real position and sets the duration;
   ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-  ///     position just computed (never 0), `anchorTime = now`.
+  ///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+  ///   - first open -> SOAP read to supply the real mid-track position + duration.
   NowPlayingPositionProvider._({
     required NowPlayingPositionFamily super.from,
     required String super.argument,
@@ -122,10 +173,10 @@ final class NowPlayingPositionProvider
   NowPlayingPosition create() => NowPlayingPosition();
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(Duration value) {
+  Override overrideWithValue(NowPlayingProgress value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<Duration>(value),
+      providerOverride: $SyncValueProvider<NowPlayingProgress>(value),
     );
   }
 
@@ -141,25 +192,28 @@ final class NowPlayingPositionProvider
 }
 
 String _$nowPlayingPositionHash() =>
-    r'e9df99d4da0a6df31e90847097a5090949975a3b';
+    r'7393aa0b86a19f80e2bc6776b29c0be81ef108e6';
 
 /// A ticking, locally-derived playback position for one group, keyed by
-/// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-/// timer while playing and freezes otherwise.
+/// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+/// track duration (null when unknown); recomputes via a ~500 ms timer while
+/// playing and freezes otherwise.
 ///
 /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
 /// (which re-runs whenever the watched group's `track`/`transport` changes):
-///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+///     read reconciles to the real position and sets the duration;
 ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-///     position just computed (never 0), `anchorTime = now`.
+///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+///   - first open -> SOAP read to supply the real mid-track position + duration.
 
 final class NowPlayingPositionFamily extends $Family
     with
         $ClassFamilyOverride<
           NowPlayingPosition,
-          Duration,
-          Duration,
-          Duration,
+          NowPlayingProgress,
+          NowPlayingProgress,
+          NowPlayingProgress,
           String
         > {
   NowPlayingPositionFamily._()
@@ -172,14 +226,17 @@ final class NowPlayingPositionFamily extends $Family
       );
 
   /// A ticking, locally-derived playback position for one group, keyed by
-  /// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-  /// timer while playing and freezes otherwise.
+  /// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+  /// track duration (null when unknown); recomputes via a ~500 ms timer while
+  /// playing and freezes otherwise.
   ///
   /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
   /// (which re-runs whenever the watched group's `track`/`transport` changes):
-  ///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+  ///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+  ///     read reconciles to the real position and sets the duration;
   ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-  ///     position just computed (never 0), `anchorTime = now`.
+  ///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+  ///   - first open -> SOAP read to supply the real mid-track position + duration.
 
   NowPlayingPositionProvider call(String groupId) =>
       NowPlayingPositionProvider._(argument: groupId, from: this);
@@ -189,29 +246,32 @@ final class NowPlayingPositionFamily extends $Family
 }
 
 /// A ticking, locally-derived playback position for one group, keyed by
-/// `groupId`. Emits the current [Duration] position; recomputes via a ~500 ms
-/// timer while playing and freezes otherwise.
+/// `groupId`. Emits a [NowPlayingProgress] with the current position and the
+/// track duration (null when unknown); recomputes via a ~500 ms timer while
+/// playing and freezes otherwise.
 ///
 /// Anchor bookkeeping lives on instance fields and is reconciled in [build]
 /// (which re-runs whenever the watched group's `track`/`transport` changes):
-///   - `Track` change -> anchor at [Duration.zero], `anchorTime = now`;
+///   - `Track` change -> anchor at [Duration.zero] (optimistic), then a SOAP
+///     read reconciles to the real position and sets the duration;
 ///   - non-playing -> playing (no track change) -> anchor at the FROZEN
-///     position just computed (never 0), `anchorTime = now`.
+///     position just computed (never 0), `anchorTime = now`, then SOAP read;
+///   - first open -> SOAP read to supply the real mid-track position + duration.
 
-abstract class _$NowPlayingPosition extends $Notifier<Duration> {
+abstract class _$NowPlayingPosition extends $Notifier<NowPlayingProgress> {
   late final _$args = ref.$arg as String;
   String get groupId => _$args;
 
-  Duration build(String groupId);
+  NowPlayingProgress build(String groupId);
   @$mustCallSuper
   @override
   void runBuild() {
-    final ref = this.ref as $Ref<Duration, Duration>;
+    final ref = this.ref as $Ref<NowPlayingProgress, NowPlayingProgress>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<Duration, Duration>,
-              Duration,
+              AnyNotifier<NowPlayingProgress, NowPlayingProgress>,
+              NowPlayingProgress,
               Object?,
               Object?
             >;
