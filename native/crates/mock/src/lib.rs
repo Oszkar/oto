@@ -19,7 +19,7 @@ use std::{
 
 use oto_core::{
     ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, PlaybackState, SpeakerId,
-    SpeakerIdentity, SpeakerState, TransportState, Volume, Wire, WireError,
+    SpeakerIdentity, SpeakerState, TrackPosition, TransportState, Volume, Wire, WireError,
 };
 
 // ── Internal model ───────────────────────────────────────────────────────────
@@ -549,6 +549,23 @@ impl Wire for MockWire {
             volume: own.volume,
             muted: own.muted,
             transport,
+        })
+    }
+
+    fn track_position(&self, group: &GroupId) -> Result<TrackPosition, WireError> {
+        let guard = lock!(self);
+        let coord = guard
+            .coords
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        let transport = guard.speakers.get(&coord).and_then(|s| s.transport.clone());
+        Ok(TrackPosition {
+            position: transport.as_ref().and_then(|t| t.position),
+            duration: transport
+                .as_ref()
+                .and_then(|t| t.current_track.as_ref())
+                .and_then(|tr| tr.duration),
         })
     }
 
@@ -1475,6 +1492,59 @@ mod tests {
             w.speaker_state(&kitchen).unwrap().transport.unwrap().state,
             PlaybackState::Playing,
             "the moved coordinator now follows its new group (Office)"
+        );
+    }
+
+    // ── v0.6.1 track_position ─────────────────────────────────────────────
+
+    #[test]
+    fn track_position_unknown_group_is_not_found() {
+        let wire = MockWire::default();
+        let r = wire.track_position(&GroupId::new("nope"));
+        assert!(matches!(r, Err(WireError::NotFound(_))));
+    }
+
+    #[test]
+    fn track_position_reads_coordinator_position_and_duration() {
+        use std::time::Duration;
+
+        use oto_core::Track;
+
+        let wire = MockWire::default();
+        // Seed the Kitchen coordinator's transport with a known position and a
+        // current_track carrying a known duration - directly via the private
+        // model (test-internal access, same module).
+        {
+            let mut guard = lock!(wire);
+            let kitchen = SpeakerId::new("RINCON_KITCHEN");
+            let entry = guard.speakers.get_mut(&kitchen).unwrap();
+            entry.transport = Some(TransportState {
+                state: PlaybackState::Playing,
+                current_track: Some(Track {
+                    id: None,
+                    title: None,
+                    artist: None,
+                    album: None,
+                    track_number: None,
+                    duration: Some(Duration::from_secs(200)),
+                    art_uri: None,
+                    uri: None,
+                }),
+                position: Some(Duration::from_secs(42)),
+            });
+        }
+        let pos = wire
+            .track_position(&GroupId::new("RINCON_KITCHEN:1"))
+            .unwrap();
+        assert_eq!(
+            pos.position,
+            Some(Duration::from_secs(42)),
+            "position must come from coordinator's transport.position"
+        );
+        assert_eq!(
+            pos.duration,
+            Some(Duration::from_secs(200)),
+            "duration must come from coordinator's transport.current_track.duration"
         );
     }
 }

@@ -10,7 +10,7 @@ part 'api.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `dev_mock_handle`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `MockWireArc`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_group_mute`, `set_group_volume`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `discover`, `join_group`, `leave_group`, `next`, `pause`, `play`, `previous`, `refresh_topology`, `set_group_mute`, `set_group_volume`, `set_mute`, `set_volume`, `speaker_state`, `subscribe_speakers`, `subscribe_topology`, `take_event_stream`, `track_position`
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
@@ -106,6 +106,15 @@ Future<void> leaveGroup({required String speakerId}) =>
 /// Surfaced as a Dart `Future` like the other commands.
 Future<SpeakerStateDto> speakerState({required String speakerId}) =>
     RustLib.instance.api.crateApiSpeakerState(speakerId: speakerId);
+
+/// v0.6.1: live SOAP read of `group_id`'s current track position + duration
+/// (for the Now Playing progress bar). Blocking SOAP round-trip; Dart `Future`.
+/// Reads the coordinator via `Wire::track_position` through the held slot
+/// (lock across the SOAP call). Unknown group -> `CommandError::NotFound`.
+/// NOT a cache read (unlike `speaker_state`) - position/duration are not
+/// evented (neither GENA nor the v0.4 cache carry them).
+Future<TrackPositionDto> trackPosition({required String groupId}) =>
+    RustLib.instance.api.crateApiTrackPosition(groupId: groupId);
 
 /// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
 /// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
@@ -361,6 +370,29 @@ class TrackDto {
           durationSecs == other.durationSecs &&
           artUri == other.artUri &&
           uri == other.uri;
+}
+
+/// v0.6.1: point-in-time SOAP read of a group's current track position +
+/// duration. Both fields are independently optional: a stream source may
+/// report a position with no duration, and a stopped group may report
+/// neither. `Duration` narrowed to whole `u64` seconds (lossless — Sonos
+/// SOAP time fields carry no sub-second component).
+class TrackPositionDto {
+  final BigInt? positionSecs;
+  final BigInt? durationSecs;
+
+  const TrackPositionDto({this.positionSecs, this.durationSecs});
+
+  @override
+  int get hashCode => positionSecs.hashCode ^ durationSecs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TrackPositionDto &&
+          runtimeType == other.runtimeType &&
+          positionSecs == other.positionSecs &&
+          durationSecs == other.durationSecs;
 }
 
 class TransportDto {

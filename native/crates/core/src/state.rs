@@ -3,7 +3,20 @@
 //! reads, any subset may fail (matches SDK `get() -> Option` and the
 //! v0.4 cold cache). Revisit at v0.4 (state moves to the event cache).
 
+use std::time::Duration;
+
 use crate::{transport::TransportState, volume::Volume};
+
+/// A point-in-time playback position read for a group's current track.
+/// Both fields are independently optional: a source may report a position
+/// with no duration (some streams) or neither (stopped / sentinel).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrackPosition {
+    /// Elapsed time within the current track, if known.
+    pub position: Option<Duration>,
+    /// Total track length, if known.
+    pub duration: Option<Duration>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpeakerState {

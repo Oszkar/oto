@@ -40,6 +40,16 @@ pub struct SpeakerStateDto {
     pub transport: Option<TransportDto>,
 }
 
+/// v0.6.1: point-in-time SOAP read of a group's current track position +
+/// duration. Both fields are independently optional: a stream source may
+/// report a position with no duration, and a stopped group may report
+/// neither. `Duration` narrowed to whole `u64` seconds (lossless — Sonos
+/// SOAP time fields carry no sub-second component).
+pub struct TrackPositionDto {
+    pub position_secs: Option<u64>,
+    pub duration_secs: Option<u64>,
+}
+
 pub struct TransportDto {
     pub state: PlaybackStateDto,
     pub position_secs: Option<u64>,
@@ -243,6 +253,18 @@ pub fn speaker_state(speaker_id: String) -> Result<SpeakerStateDto, CommandError
     Ok(crate::map::to_speaker_state_dto(state))
 }
 
+/// v0.6.1: live SOAP read of `group_id`'s current track position + duration
+/// (for the Now Playing progress bar). Blocking SOAP round-trip; Dart `Future`.
+/// Reads the coordinator via `Wire::track_position` through the held slot
+/// (lock across the SOAP call). Unknown group -> `CommandError::NotFound`.
+/// NOT a cache read (unlike `speaker_state`) - position/duration are not
+/// evented (neither GENA nor the v0.4 cache carry them).
+pub fn track_position(group_id: String) -> Result<TrackPositionDto, CommandError> {
+    let id = oto_core::GroupId::new(group_id);
+    let pos = oto_app::track_position(&id).map_err(crate::map::to_command_error)?;
+    Ok(crate::map::to_track_position_dto(pos))
+}
+
 // ── v0.4 DEV-ONLY: MockWire injection for integration tests ───────────────────
 //
 // TODO(v0.7): remove once UI integration tests cover this path (the v0.7
@@ -426,6 +448,12 @@ impl oto_core::Wire for MockWireArc {
         speaker: &oto_core::SpeakerId,
     ) -> Result<oto_core::SpeakerState, oto_core::WireError> {
         self.0.speaker_state(speaker)
+    }
+    fn track_position(
+        &self,
+        group: &oto_core::GroupId,
+    ) -> Result<oto_core::TrackPosition, oto_core::WireError> {
+        self.0.track_position(group)
     }
     fn subscribe_speakers(&self) -> Result<(), oto_core::WireError> {
         self.0.subscribe_speakers()

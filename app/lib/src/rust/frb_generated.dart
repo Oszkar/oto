@@ -66,7 +66,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 129240992;
+  int get rustContentHash => -550460681;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -133,6 +133,8 @@ abstract class RustLibApi extends BaseApi {
   Future<SpeakerStateDto> crateApiSpeakerState({required String speakerId});
 
   Stream<ChangeEventDto> crateApiSubscribeChangeEvents();
+
+  Future<TrackPositionDto> crateApiTrackPosition({required String groupId});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -711,6 +713,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["sink"],
       );
 
+  @override
+  Future<TrackPositionDto> crateApiTrackPosition({required String groupId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(groupId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 20,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_track_position_dto,
+          decodeErrorData: sse_decode_command_error,
+        ),
+        constMeta: kCrateApiTrackPositionConstMeta,
+        argValues: [groupId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiTrackPositionConstMeta =>
+      const TaskConstMeta(debugName: "track_position", argNames: ["groupId"]);
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -986,6 +1016,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       durationSecs: dco_decode_opt_box_autoadd_u_64(arr[5]),
       artUri: dco_decode_opt_String(arr[6]),
       uri: dco_decode_opt_String(arr[7]),
+    );
+  }
+
+  @protected
+  TrackPositionDto dco_decode_track_position_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return TrackPositionDto(
+      positionSecs: dco_decode_opt_box_autoadd_u_64(arr[0]),
+      durationSecs: dco_decode_opt_box_autoadd_u_64(arr[1]),
     );
   }
 
@@ -1381,6 +1423,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TrackPositionDto sse_decode_track_position_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_positionSecs = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_durationSecs = sse_decode_opt_box_autoadd_u_64(deserializer);
+    return TrackPositionDto(
+      positionSecs: var_positionSecs,
+      durationSecs: var_durationSecs,
+    );
+  }
+
+  @protected
   TransportDto sse_decode_transport_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_state = sse_decode_playback_state_dto(deserializer);
@@ -1752,6 +1805,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_64(self.durationSecs, serializer);
     sse_encode_opt_String(self.artUri, serializer);
     sse_encode_opt_String(self.uri, serializer);
+  }
+
+  @protected
+  void sse_encode_track_position_dto(
+    TrackPositionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_box_autoadd_u_64(self.positionSecs, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.durationSecs, serializer);
   }
 
   @protected

@@ -30,7 +30,7 @@ pub use group::Group;
 pub use identifiers::{GroupId, SpeakerId, TrackId};
 pub use identity::{DiscoverySnapshot, GroupIdentity, SpeakerIdentity};
 pub use speaker::Speaker;
-pub use state::SpeakerState;
+pub use state::{SpeakerState, TrackPosition};
 pub use track::Track;
 pub use transport::{PlaybackState, TransportState};
 pub use volume::Volume;

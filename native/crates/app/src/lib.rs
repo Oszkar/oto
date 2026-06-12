@@ -67,7 +67,8 @@ mod state_manager;
 use std::sync::{Mutex, OnceLock};
 
 use oto_core::{
-    ChangeEvent, DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, Volume, Wire, WireError,
+    ChangeEvent, DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, TrackPosition, Volume, Wire,
+    WireError,
 };
 use oto_wire::SonosWire;
 
@@ -410,6 +411,24 @@ pub fn speaker_state(speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
     Ok(state_manager().speaker_state(speaker))
 }
 
+/// Live read of a group's current track position + duration, by SOAP to its
+/// coordinator. Unlike `speaker_state` (a cache read), this dispatches
+/// `Wire::track_position` through the held slot (lock across the SOAP call,
+/// the standard command serialization). Used only by the Now Playing bar,
+/// event-triggered (open / track-change / resume), never in a poll loop.
+/// Position and duration are NOT evented (neither GENA nor the v0.4 cache
+/// carry them), so there is no cache to read here.
+///
+/// Best-effort read - does NOT participate in subscription-health (v0.5 health
+/// is command-dispatch driven). Routing it through `observe_group_health` would
+/// let a swallowed GetPositionInfo failure (`soap_track_position` returns
+/// `Ok(None, None)` when the coordinator is unreachable) emit a false
+/// `SubscriptionRecovered` for an already-Errored speaker. This is a bare slot
+/// read - no health wrap.
+pub fn track_position(group: &GroupId) -> Result<TrackPosition, WireError> {
+    with_wire(|w| w.track_position(group))
+}
+
 /// Hand the v0.4 event-stream receiver to the FRB consumer loop.
 /// Called by `api.rs::subscribe_change_events`. Returns `None` if no
 /// wire is installed yet, or if the receiver has already been taken
@@ -707,6 +726,9 @@ mod tests {
         }
         fn speaker_state(&self, s: &SpeakerId) -> Result<SpeakerState, WireError> {
             self.0.speaker_state(s)
+        }
+        fn track_position(&self, g: &GroupId) -> Result<TrackPosition, WireError> {
+            self.0.track_position(g)
         }
         fn subscribe_speakers(&self) -> Result<(), WireError> {
             self.0.subscribe_speakers()
@@ -1188,6 +1210,51 @@ mod tests {
         );
     }
 
+    /// v0.6.1 regression: `track_position` must NOT participate in subscription
+    /// health. Concretely: if a coordinator is already `Errored` (a prior command
+    /// failed with `WireError::Network`), a subsequent `track_position` call that
+    /// returns `Ok` must NOT emit `SubscriptionRecovered` - because
+    /// `soap_track_position` intentionally swallows GetPositionInfo failures into
+    /// `Ok(None, None)` (honest-partial), so an `Ok` from it does not mean the
+    /// speaker is reachable.
+    #[test]
+    fn track_position_ok_does_not_emit_subscription_recovered() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        // Kitchen group's coordinator is RINCON_KITCHEN (fixture).
+        let coord = SpeakerId::new("RINCON_KITCHEN");
+        let group = GroupId::new("RINCON_KITCHEN:1");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+
+        // Drive the coordinator to Errored via a real command.
+        mock.set_command_error(&coord, WireError::Network("unreachable".into()));
+        let res = play(&group);
+        assert!(matches!(res, Err(WireError::Network(_))));
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "precondition: SubscriptionError emitted");
+        assert!(matches!(
+            &events[0],
+            ChangeEvent::SubscriptionError { speaker, .. } if *speaker == coord
+        ));
+
+        // Now clear the per-command error so track_position returns Ok (mirrors
+        // soap_track_position's honest-partial swallow: the wire returns Ok even
+        // when the coordinator was unreachable).
+        mock.clear_command_error(&coord);
+        let pos = track_position(&group);
+        assert!(pos.is_ok(), "track_position must succeed (mock Ok)");
+
+        // The critical assertion: no SubscriptionRecovered - track_position does
+        // not observe health, so the Errored state must be unchanged.
+        assert!(
+            drain_app_events().is_empty(),
+            "track_position Ok must NOT emit SubscriptionRecovered \
+             (it is a best-effort read, not a health signal)"
+        );
+    }
+
     #[test]
     fn discover_with_clears_stale_app_events() {
         let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
@@ -1325,6 +1392,46 @@ mod tests {
             paired_1, paired_2,
             "the two wires' receivers carry distinct generations — an OLD-wire \
              event applied at paired_1 no-ops once paired_2 is current"
+        );
+    }
+
+    /// v0.6.1: `track_position` routes through the slot like `play` — lock
+    /// held across the SOAP call, NOT a cache read. Verify:
+    ///   1. Pre-discover -> NotFound (no wire in slot).
+    ///   2. Unknown group after discover -> NotFound.
+    ///   3. Known group returns Ok (validates slot dispatch; mock default
+    ///      seeds position/duration as None — both fields are tested in
+    ///      `oto-mock`'s own unit tests; routing correctness is proven here).
+    #[test]
+    fn track_position_routes_through_slot() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        clear_slot();
+
+        // 1. Pre-discover: no wire -> NotFound.
+        let unknown_group = GroupId::new("RINCON_KITCHEN:1");
+        assert!(
+            matches!(track_position(&unknown_group), Err(WireError::NotFound(_))),
+            "pre-discover track_position must return NotFound"
+        );
+
+        // 2. After discover: unknown group -> NotFound.
+        discover_with(|| Box::new(MockWire::default())).expect("discover ok");
+        let nope = GroupId::new("RINCON_NOPE:0");
+        assert!(
+            matches!(track_position(&nope), Err(WireError::NotFound(_))),
+            "unknown group must return NotFound after discover"
+        );
+
+        // 3. Known group -> Ok. Mock default seeds position/duration as None
+        // (no track playing); the routing is what this test validates.
+        let kitchen_group = GroupId::new("RINCON_KITCHEN:1");
+        let pos = track_position(&kitchen_group).expect("known group must succeed");
+        // Default transport has no current track, so duration is None.
+        assert!(
+            pos.duration.is_none(),
+            "default mock has no current track — duration must be None"
         );
     }
 }

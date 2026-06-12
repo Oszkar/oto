@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 129240992;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -550460681;
 
 // Section: executor
 
@@ -680,6 +680,39 @@ fn wire__crate__api__subscribe_change_events_impl(
         },
     )
 }
+fn wire__crate__api__track_position_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "track_position",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_group_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::CommandError>((move || {
+                    let output_ok = crate::api::track_position(api_group_id)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -1055,6 +1088,18 @@ impl SseDecode for crate::api::TrackDto {
     }
 }
 
+impl SseDecode for crate::api::TrackPositionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_positionSecs = <Option<u64>>::sse_decode(deserializer);
+        let mut var_durationSecs = <Option<u64>>::sse_decode(deserializer);
+        return crate::api::TrackPositionDto {
+            position_secs: var_positionSecs,
+            duration_secs: var_durationSecs,
+        };
+    }
+}
+
 impl SseDecode for crate::api::TransportDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1132,6 +1177,7 @@ fn pde_ffi_dispatcher_primary_impl(
         17 => wire__crate__api__set_volume_impl(port, ptr, rust_vec_len, data_len),
         18 => wire__crate__api__speaker_state_impl(port, ptr, rust_vec_len, data_len),
         19 => wire__crate__api__subscribe_change_events_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__track_position_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1377,6 +1423,24 @@ impl flutter_rust_bridge::IntoDart for crate::api::TrackDto {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::TrackDto {}
 impl flutter_rust_bridge::IntoIntoDart<crate::api::TrackDto> for crate::api::TrackDto {
     fn into_into_dart(self) -> crate::api::TrackDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::TrackPositionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.position_secs.into_into_dart().into_dart(),
+            self.duration_secs.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::TrackPositionDto {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::TrackPositionDto>
+    for crate::api::TrackPositionDto
+{
+    fn into_into_dart(self) -> crate::api::TrackPositionDto {
         self
     }
 }
@@ -1701,6 +1765,14 @@ impl SseEncode for crate::api::TrackDto {
         <Option<u64>>::sse_encode(self.duration_secs, serializer);
         <Option<String>>::sse_encode(self.art_uri, serializer);
         <Option<String>>::sse_encode(self.uri, serializer);
+    }
+}
+
+impl SseEncode for crate::api::TrackPositionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<u64>>::sse_encode(self.position_secs, serializer);
+        <Option<u64>>::sse_encode(self.duration_secs, serializer);
     }
 }
 

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use oto_core::{
     ChangeEvent, DiscoverySnapshot, GroupId, GroupIdentity, SpeakerId, SpeakerIdentity,
-    SpeakerState, Volume, Wire, WireError,
+    SpeakerState, TrackPosition, Volume, Wire, WireError,
 };
 use sonos_api::SonosClient;
 use sonos_api::services::zone_group_topology::ZoneGroupInfo;
@@ -450,6 +450,14 @@ impl Wire for SonosWire {
         let speaker_addr = self.resolve_speaker(speaker)?;
         let transport_addr = self.resolve_transport_addr(speaker)?;
         control::soap_speaker_state(&self.client, speaker_addr, transport_addr)
+    }
+
+    fn track_position(&self, group: &GroupId) -> Result<TrackPosition, WireError> {
+        // Group-addressed: resolve to the coordinator (same path play/pause
+        // use); GetPositionInfo is a coordinator query. Unknown group ->
+        // NotFound from resolve_group.
+        let addr = self.resolve_group(group)?;
+        control::soap_track_position(&self.client, addr)
     }
 
     fn subscribe_topology(&self) -> Result<(), WireError> {

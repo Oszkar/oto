@@ -110,6 +110,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TrackDto dco_decode_track_dto(dynamic raw);
 
   @protected
+  TrackPositionDto dco_decode_track_position_dto(dynamic raw);
+
+  @protected
   TransportDto dco_decode_transport_dto(dynamic raw);
 
   @protected
@@ -220,6 +223,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TrackDto sse_decode_track_dto(SseDeserializer deserializer);
+
+  @protected
+  TrackPositionDto sse_decode_track_position_dto(SseDeserializer deserializer);
 
   @protected
   TransportDto sse_decode_transport_dto(SseDeserializer deserializer);
@@ -367,6 +373,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_track_dto(TrackDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_track_position_dto(
+    TrackPositionDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_transport_dto(TransportDto self, SseSerializer serializer);
