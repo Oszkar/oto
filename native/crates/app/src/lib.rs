@@ -418,10 +418,15 @@ pub fn speaker_state(speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
 /// event-triggered (open / track-change / resume), never in a poll loop.
 /// Position and duration are NOT evented (neither GENA nor the v0.4 cache
 /// carry them), so there is no cache to read here.
+///
+/// Best-effort read - does NOT participate in subscription-health (v0.5 health
+/// is command-dispatch driven). Routing it through `observe_group_health` would
+/// let a swallowed GetPositionInfo failure (`soap_track_position` returns
+/// `Ok(None, None)` when the coordinator is unreachable) emit a false
+/// `SubscriptionRecovered` for an already-Errored speaker. This is a bare slot
+/// read - no health wrap.
 pub fn track_position(group: &GroupId) -> Result<TrackPosition, WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.track_position(group));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire(|w| w.track_position(group))
 }
 
 /// Hand the v0.4 event-stream receiver to the FRB consumer loop.
@@ -1202,6 +1207,51 @@ mod tests {
         assert!(
             drain_app_events().is_empty(),
             "cache-read speaker_state must not observe health"
+        );
+    }
+
+    /// v0.6.1 regression: `track_position` must NOT participate in subscription
+    /// health. Concretely: if a coordinator is already `Errored` (a prior command
+    /// failed with `WireError::Network`), a subsequent `track_position` call that
+    /// returns `Ok` must NOT emit `SubscriptionRecovered` - because
+    /// `soap_track_position` intentionally swallows GetPositionInfo failures into
+    /// `Ok(None, None)` (honest-partial), so an `Ok` from it does not mean the
+    /// speaker is reachable.
+    #[test]
+    fn track_position_ok_does_not_emit_subscription_recovered() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        // Kitchen group's coordinator is RINCON_KITCHEN (fixture).
+        let coord = SpeakerId::new("RINCON_KITCHEN");
+        let group = GroupId::new("RINCON_KITCHEN:1");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+
+        // Drive the coordinator to Errored via a real command.
+        mock.set_command_error(&coord, WireError::Network("unreachable".into()));
+        let res = play(&group);
+        assert!(matches!(res, Err(WireError::Network(_))));
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "precondition: SubscriptionError emitted");
+        assert!(matches!(
+            &events[0],
+            ChangeEvent::SubscriptionError { speaker, .. } if *speaker == coord
+        ));
+
+        // Now clear the per-command error so track_position returns Ok (mirrors
+        // soap_track_position's honest-partial swallow: the wire returns Ok even
+        // when the coordinator was unreachable).
+        mock.clear_command_error(&coord);
+        let pos = track_position(&group);
+        assert!(pos.is_ok(), "track_position must succeed (mock Ok)");
+
+        // The critical assertion: no SubscriptionRecovered - track_position does
+        // not observe health, so the Errored state must be unchanged.
+        assert!(
+            drain_app_events().is_empty(),
+            "track_position Ok must NOT emit SubscriptionRecovered \
+             (it is a best-effort read, not a health signal)"
         );
     }
 
