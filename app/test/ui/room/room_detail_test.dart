@@ -196,5 +196,8 @@ void main() {
     await t.pumpWidget(h.widget);
     // Should not throw; renders without crashing.
     expect(find.byType(RoomDetailScreen), findsOneWidget);
+    // No kebab in the missing-room fallback: its actions would fire with an
+    // invalid speakerId.
+    expect(find.byKey(const Key('room-kebab-MISSING')), findsNothing);
   });
 }

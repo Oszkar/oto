@@ -29,8 +29,17 @@ class RoomDetailScreen extends ConsumerWidget {
     );
 
     if (room == null) {
+      // Unknown room (stale nav, or it left via a topology change): show the
+      // header chrome only - no kebab, so its actions can't fire with an
+      // invalid speakerId.
       return OtoScaffold(
-        body: _buildHeader(context, name: null, model: null, memberCount: 1),
+        body: _buildHeader(
+          context,
+          name: null,
+          model: null,
+          memberCount: 1,
+          showMenu: false,
+        ),
       );
     }
 
@@ -49,6 +58,7 @@ class RoomDetailScreen extends ConsumerWidget {
             name: room.name,
             model: room.model,
             memberCount: memberCount,
+            showMenu: true,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -80,6 +90,7 @@ class RoomDetailScreen extends ConsumerWidget {
     required String? name,
     required String? model,
     required int memberCount,
+    required bool showMenu,
   }) {
     final oto = context.oto;
 
@@ -127,10 +138,11 @@ class RoomDetailScreen extends ConsumerWidget {
               ],
             ),
           ),
-          _KebabButton(
-            speakerId: speakerId,
-            memberCount: memberCount,
-          ),
+          if (showMenu)
+            _KebabButton(
+              speakerId: speakerId,
+              memberCount: memberCount,
+            ),
         ],
       ),
     );
