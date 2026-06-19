@@ -30,7 +30,7 @@ class RoomDetailScreen extends ConsumerWidget {
 
     if (room == null) {
       return OtoScaffold(
-        body: _buildHeader(context, ref, null, null),
+        body: _buildHeader(context, name: null, model: null, memberCount: 1),
       );
     }
 
@@ -38,12 +38,18 @@ class RoomDetailScreen extends ConsumerWidget {
     final group = ref.watch(
       householdProvider.select((h) => gid == null ? null : h.groups[gid]),
     );
+    final memberCount = group?.memberIds.length ?? 1;
 
     return OtoScaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildHeader(context, ref, room.name, room.model),
+          _buildHeader(
+            context,
+            name: room.name,
+            model: room.model,
+            memberCount: memberCount,
+          ),
           Expanded(
             child: SingleChildScrollView(
               child: Padding(
@@ -56,7 +62,7 @@ class RoomDetailScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _NowPlayingCard(speakerId: speakerId, group: group),
+                    _NowPlayingCard(speakerId: speakerId, gid: gid, group: group),
                     const SizedBox(height: Space.screen18),
                     _VolumeRow(speakerId: speakerId, volume: room.volume),
                   ],
@@ -70,19 +76,12 @@ class RoomDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildHeader(
-    BuildContext context,
-    WidgetRef ref,
-    String? name,
-    String? model,
-  ) {
+    BuildContext context, {
+    required String? name,
+    required String? model,
+    required int memberCount,
+  }) {
     final oto = context.oto;
-    final memberCount = ref.watch(
-      householdProvider.select((h) {
-        final room = h.rooms[speakerId];
-        final gid = room?.groupId;
-        return gid == null ? 1 : (h.groups[gid]?.memberIds.length ?? 1);
-      }),
-    );
 
     return Padding(
       // JSX header: `8px 18px 14px`, items centered, gap 12.
@@ -107,6 +106,8 @@ class RoomDetailScreen extends ConsumerWidget {
                   name ?? 'Room',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  // Inline 19px per the V3RoomDetail header: no TextStyles token
+                  // covers this size (titleCard 14.5 / titleSection 22).
                   style: const TextStyle(
                     fontFamily: Fonts.sans,
                     fontSize: 19,
@@ -141,21 +142,29 @@ class RoomDetailScreen extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _NowPlayingCard extends ConsumerWidget {
-  const _NowPlayingCard({required this.speakerId, required this.group});
+  const _NowPlayingCard({
+    required this.speakerId,
+    required this.gid,
+    required this.group,
+  });
 
   final String speakerId;
+
+  /// The room's group id (command target). Null only when the room has no known
+  /// group (unknown/offline), which disables the transport controls. Passed from
+  /// the parent rather than re-derived so transport still targets the right group
+  /// even if the group object is transiently absent from the household map.
+  final String? gid;
+
   final GroupState? group;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final oto = context.oto;
+    final gid = this.gid; // local copy enables null-promotion in the handlers
     final track = group?.track;
     final playing = group?.transport == PlaybackState.playing;
     final ctrl = ref.read(playbackControllerProvider);
-    // For a solo room the groupId is the room's own group; resolve it from the
-    // group passed in (group?.id) or fall back to the room's groupId.
-    final gid = group?.id ??
-        ref.read(householdProvider.select((h) => h.rooms[speakerId]?.groupId));
 
     return Container(
       padding: const EdgeInsets.all(Space.lg10),

@@ -32,6 +32,18 @@ void main() {
     expect(h.calls, contains('previous(G_OF)'));
   });
 
+  testWidgets('idle room: play still routes to the group (starts it)', (t) async {
+    // BR is in a stopped solo group G_BR; tapping play must target the group
+    // with the current (stopped) transport so togglePlay starts it.
+    final h = wrap(
+      const RoomDetailScreen(speakerId: 'BR'),
+      household: idleHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+    await t.tap(find.byKey(const Key('room-detail-play-BR')));
+    expect(h.calls, contains('togglePlay(G_BR,stopped)'));
+  });
+
   testWidgets('renders no EQ/TV/System sections', (t) async {
     final h = wrap(
       const RoomDetailScreen(speakerId: 'OF'),
