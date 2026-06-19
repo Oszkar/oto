@@ -90,6 +90,20 @@ pub(crate) fn parse_hms(s: &str) -> Option<Duration> {
     Some(Duration::from_secs(h * 3600 + m * 60 + s_val))
 }
 
+/// Current playback position from a `GetPositionInfo` response.
+///
+/// The position is the top-level `rel_time` ("H:MM:SS") alone; `parse_hms` maps
+/// `"NOT_IMPLEMENTED"`/empty to `None`. `rel_count` is accepted but DELIBERATELY
+/// IGNORED: it is a byte/frame counter Sonos never implements and pins to
+/// `i32::MAX`, so gating the time on it discards a valid position on EVERY track
+/// (the v0.4 bug, re-introduced in v0.6.1's position read). It is passed in only
+/// to make the deliberate ignore explicit at the call sites. (sonos-notes:
+/// `GetPositionInfoResponse` sentinels - the COUNT fields are the sentinels to
+/// discard, NOT a signal that `rel_time` is absent.)
+pub(crate) fn parse_rel_position(rel_time: &str, _rel_count: i32) -> Option<Duration> {
+    parse_hms(rel_time)
+}
+
 /// Fill `Track.duration` from the response's top-level `track_duration`
 /// when the DIDL `<res duration>` was absent. `GetPositionInfo` carries
 /// both; some sources (radio, line-in) omit the DIDL duration but still
@@ -371,14 +385,10 @@ pub(crate) fn soap_speaker_state(
                 let (current_track, position) = match pi {
                     None => (None, None),
                     Some(pi_resp) => {
-                        // Sentinel: rel_count == i32::MAX → position is absent (discard
-                        // rel_time); otherwise parse "H:MM:SS" (also handles
-                        // "NOT_IMPLEMENTED" via parse_hms).
-                        let pos = if pi_resp.rel_count == i32::MAX {
-                            None
-                        } else {
-                            parse_hms(&pi_resp.rel_time)
-                        };
+                        // Position is the top-level rel_time; rel_count is NOT a
+                        // gate (it is permanently i32::MAX on Sonos). See
+                        // parse_rel_position.
+                        let pos = parse_rel_position(&pi_resp.rel_time, pi_resp.rel_count);
 
                         let track = if pi_resp.track_meta_data.trim().is_empty() {
                             None
@@ -430,13 +440,9 @@ pub(crate) fn soap_track_position(
             duration: None,
         }),
         Some(r) => {
-            // rel_count == i32::MAX is the "position absent" sentinel
-            // (sonos-notes GetPositionInfoResponse sentinels).
-            let position = if r.rel_count == i32::MAX {
-                None
-            } else {
-                parse_hms(&r.rel_time)
-            };
+            // Position is the top-level rel_time; rel_count is NOT a gate (it is
+            // permanently i32::MAX on Sonos). See parse_rel_position.
+            let position = parse_rel_position(&r.rel_time, r.rel_count);
             // Duration comes from GetPositionInfo's top-level track_duration field -
             // no DIDL <res duration> re-parse needed here (unlike soap_speaker_state's
             // merge_track_duration), because that field is the track length and is
@@ -589,6 +595,40 @@ mod tests {
     fn zero_duration_is_treated_as_unknown() {
         assert_eq!(parse_hms("0:00:00").filter(|d| !d.is_zero()), None);
         assert_eq!(parse_hms("0:03:17"), Some(Duration::from_secs(197)));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_rel_position
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn position_ignores_rel_count_max_sentinel() {
+        // Regression (v0.6.1 QA): Sonos pins rel_count to i32::MAX (the byte
+        // counter is unimplemented). The old gate `rel_count == i32::MAX -> None`
+        // dropped a valid rel_time on EVERY track, so the Now Playing bar always
+        // started at 0. Position must come from rel_time regardless of the count.
+        assert_eq!(
+            parse_rel_position("0:01:23", i32::MAX),
+            Some(Duration::from_secs(83)),
+        );
+    }
+
+    #[test]
+    fn position_rel_time_sentinels_are_none() {
+        // The real "absent" signals live in rel_time itself (via parse_hms), not
+        // in the count - a normal count must not turn them into a value either.
+        assert_eq!(parse_rel_position("NOT_IMPLEMENTED", 0), None);
+        assert_eq!(parse_rel_position("", i32::MAX), None);
+    }
+
+    #[test]
+    fn position_zero_is_a_real_value() {
+        // Unlike duration (where 0:00:00 means "unknown"), a 0 position is the
+        // legitimate start-of-track / stopped value and is kept.
+        assert_eq!(
+            parse_rel_position("0:00:00", 0),
+            Some(Duration::from_secs(0))
+        );
     }
 
     // -----------------------------------------------------------------------

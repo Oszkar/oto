@@ -204,6 +204,8 @@ Top-level response fields carry sentinels that must map to `None`, not values:
 - `rel_count: 2147483647` / `abs_count: 2147483647` → these are `i32::MAX`; discard.
 - `track_duration: "H:MM:SS"` and `rel_time: "H:MM:SS"` — parse **directly from these top-level fields**, not from DIDL. They populate `TransportState.position`.
 
+> **Gotcha (cost a v0.6.1 QA cycle):** the COUNT fields (`rel_count`/`abs_count`) sitting at `i32::MAX` is the *permanent, normal* Sonos state - those byte counters are never implemented. Discard them only as values; **never** let them gate `rel_time`. The position is `parse_hms(rel_time)` *alone*. Gating it on `rel_count == i32::MAX` discards a valid position on every track (the Now Playing bar always reads 0). See `oto-wire`'s `parse_rel_position`.
+
 ## Volume / mute
 
 - Volume is `u8`, range `0..=100`.
