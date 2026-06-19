@@ -90,6 +90,16 @@ class SpyGrouping extends GroupingController {
   Future<void> setGroupMute(String groupId, bool muted) async {
     calls.add('setGroupMute($groupId,$muted)');
   }
+
+  @override
+  Future<void> joinGroup(String speakerId, String coordinatorId) async {
+    calls.add('joinGroup($speakerId,$coordinatorId)');
+  }
+
+  @override
+  Future<void> leaveGroup(String speakerId) async {
+    calls.add('leaveGroup($speakerId)');
+  }
 }
 
 /// A playing solo room `OF` (Office) — its group `G_OF` has a track + playing
@@ -247,6 +257,109 @@ Household mixedHousehold() {
         coordinatorId: 'PT',
         memberIds: ['PT'],
         transport: PlaybackState.stopped,
+      ),
+    },
+  );
+}
+
+/// Group-editor household: host `LR` (a soundbar) coordinating group `G_LR`
+/// with members `['LR', 'KT']` (KT a speaker). `BR` is a solo idle room in its
+/// own stopped group `G_BR`.
+Household groupEditHousehold() {
+  return const Household(
+    rooms: {
+      'LR': RoomState(
+        id: 'LR',
+        name: 'Living Room',
+        model: 'Beam',
+        kind: RoomKind.soundbar,
+        volume: 40,
+        online: true,
+        groupId: 'G_LR',
+      ),
+      'KT': RoomState(
+        id: 'KT',
+        name: 'Kitchen',
+        model: 'Era 100',
+        kind: RoomKind.speaker,
+        volume: 30,
+        online: true,
+        groupId: 'G_LR',
+      ),
+      'BR': RoomState(
+        id: 'BR',
+        name: 'Bedroom',
+        model: 'Era 100',
+        kind: RoomKind.speaker,
+        volume: 20,
+        online: true,
+        groupId: 'G_BR',
+      ),
+    },
+    groups: {
+      'G_LR': GroupState(
+        id: 'G_LR',
+        coordinatorId: 'LR',
+        memberIds: ['LR', 'KT'],
+        transport: PlaybackState.stopped,
+      ),
+      'G_BR': GroupState(
+        id: 'G_BR',
+        coordinatorId: 'BR',
+        memberIds: ['BR'],
+        transport: PlaybackState.stopped,
+      ),
+    },
+  );
+}
+
+/// Group-editor household where BR has its own playing group (so selecting BR
+/// will show a conflict warning). Identical to [groupEditHousehold] except
+/// `G_BR` has an active stream.
+Household groupEditWithConflictHousehold() {
+  return const Household(
+    rooms: {
+      'LR': RoomState(
+        id: 'LR',
+        name: 'Living Room',
+        model: 'Beam',
+        kind: RoomKind.soundbar,
+        volume: 40,
+        online: true,
+        groupId: 'G_LR',
+      ),
+      'KT': RoomState(
+        id: 'KT',
+        name: 'Kitchen',
+        model: 'Era 100',
+        kind: RoomKind.speaker,
+        volume: 30,
+        online: true,
+        groupId: 'G_LR',
+      ),
+      'BR': RoomState(
+        id: 'BR',
+        name: 'Bedroom',
+        model: 'Era 100',
+        kind: RoomKind.speaker,
+        volume: 20,
+        online: true,
+        groupId: 'G_BR',
+      ),
+    },
+    groups: {
+      'G_LR': GroupState(
+        id: 'G_LR',
+        coordinatorId: 'LR',
+        memberIds: ['LR', 'KT'],
+        transport: PlaybackState.stopped,
+      ),
+      'G_BR': GroupState(
+        id: 'G_BR',
+        coordinatorId: 'BR',
+        memberIds: ['BR'],
+        transport: PlaybackState.playing,
+        track: Track(title: 'Strobe', artist: 'Deadmau5'),
       ),
     },
   );
