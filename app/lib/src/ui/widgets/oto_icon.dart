@@ -49,6 +49,7 @@ class OtoIcon extends StatelessWidget {
     'volumeMute': LucideIcons.volumeX,
     'settings': LucideIcons.settings,
     'chevronDown': LucideIcons.chevronDown,
+    'chevronLeft': LucideIcons.chevronLeft,
     'chevronRight': LucideIcons.chevronRight,
     'link': LucideIcons.link,
     'check': LucideIcons.check,
