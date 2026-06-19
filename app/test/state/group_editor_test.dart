@@ -1,9 +1,24 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oto/src/state/group_editor.dart';
+import 'package:oto/src/state/household.dart';
 import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
+
+/// A household notifier whose value can be mutated at runtime, to simulate an
+/// external topology change while the group editor is open.
+class _MutableHousehold extends HouseholdNotifier {
+  _MutableHousehold(this._fixture);
+  Household _fixture;
+  @override
+  Household build() => _fixture;
+  void set(Household h) {
+    _fixture = h;
+    state = h;
+  }
+}
 
 void main() {
   test('diff joins newly-selected and leaves deselected, never the host', () {
@@ -72,5 +87,44 @@ void main() {
     );
     final c = roomsWithConflict(h, host: 'LR', selected: {'LR', 'NG'});
     expect(c, isEmpty);
+  });
+
+  test('selection rebases when group membership changes externally', () async {
+    // Regression (codex review): if another client groups/ungroups a room while
+    // the editor is open, the selection must track the external add/remove so a
+    // no-op Save cannot silently undo it.
+    Household hh(List<String> members) => Household(
+      rooms: {
+        for (final m in members)
+          m: RoomState(id: m, name: m, kind: RoomKind.speaker, groupId: 'G'),
+      },
+      groups: {
+        'G': GroupState(id: 'G', coordinatorId: 'LR', memberIds: members),
+      },
+    );
+    final notifier = _MutableHousehold(hh(['LR']));
+    final container = ProviderContainer(
+      overrides: [householdProvider.overrideWith(() => notifier)],
+    );
+    addTearDown(container.dispose);
+    // Keep the provider alive so its internal ref.listen is active.
+    final sub = container.listen(
+      groupEditorSelectionProvider('LR'),
+      (_, _) {},
+      fireImmediately: true,
+    );
+    addTearDown(sub.close);
+
+    expect(container.read(groupEditorSelectionProvider('LR')), {'LR'});
+
+    // KT joins the group externally -> selection must include it.
+    notifier.set(hh(['LR', 'KT']));
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(groupEditorSelectionProvider('LR')), {'LR', 'KT'});
+
+    // KT leaves externally -> selection must drop it.
+    notifier.set(hh(['LR']));
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(groupEditorSelectionProvider('LR')), {'LR'});
   });
 }
