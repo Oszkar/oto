@@ -223,6 +223,27 @@ void main() {
   );
 
   testWidgets(
+    'header menu opens the editor for a small (no-overflow) group',
+    (t) async {
+      // 2-member group: no overflow button, so the always-present header menu is
+      // the only path to the editor (and thus Ungroup all). Regression for the
+      // QA gap where a small group could not be ungrouped.
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(2),
+      );
+      await t.pumpWidget(h.widget);
+
+      expect(find.byKey(const Key('group-more-G')), findsNothing);
+
+      await t.tap(find.byKey(const Key('group-open-G')));
+      await t.pumpAndSettle();
+
+      expect(find.byType(GroupEditorScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'tapping group play button does NOT navigate to GroupEditorScreen',
     (t) async {
       final h = wrap(

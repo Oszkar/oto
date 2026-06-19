@@ -17,9 +17,10 @@ import '../widgets/oto_slider.dart';
 /// now-playing, and ONE resume/pause transport. Volume is the per-room
 /// exception, so the body nests a group-master slider plus each member's level.
 ///
-/// The per-room levels cap at [_maxLevels] visible rows; past that, an overflow
-/// button opens the group editor (host = coordinator) while the group-master
-/// stays reachable.
+/// A header menu (always present) opens the group editor (host = coordinator) -
+/// the entry point for join/leave and Ungroup all. The per-room levels cap at
+/// [_maxLevels] visible rows; past that, an overflow button opens the same
+/// editor while the group-master stays reachable.
 class GroupCard extends ConsumerWidget {
   const GroupCard({super.key, required this.groupId});
 
@@ -132,6 +133,19 @@ class GroupCard extends ConsumerWidget {
                 ),
               ),
             ),
+          // Always-present group menu: opens the editor (join/leave + Ungroup
+          // all). The overflow button only appears past _maxLevels members, so
+          // without this a small group (the common case) had no path to the
+          // editor and could never be ungrouped.
+          IconButton(
+            key: Key('group-open-$groupId'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => GroupEditorScreen(hostId: group.coordinatorId),
+              ),
+            ),
+            icon: OtoIcon('more', size: 18, color: oto.ink2),
+          ),
         ],
       ),
     );
@@ -312,8 +326,8 @@ class GroupCard extends ConsumerWidget {
     );
   }
 
-  /// "+N more · Room detail" overflow entry - pushes [GroupEditorScreen] seeded
-  /// with the group's coordinator so the user can see and edit all members.
+  /// "+N more · Edit" overflow entry - pushes [GroupEditorScreen] seeded with
+  /// the group's coordinator so the user can see and edit all members.
   Widget _overflowButton(
     BuildContext context,
     int overflow,
@@ -342,7 +356,7 @@ class GroupCard extends ConsumerWidget {
                 ),
               ),
               Text(
-                ' · Room detail',
+                ' · Edit',
                 style: TextStyles.caption.copyWith(color: oto.inkFaint),
               ),
             ],
