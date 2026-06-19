@@ -4,6 +4,7 @@ import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
+import 'package:oto/src/ui/group/group_editor_screen.dart';
 import 'package:oto/src/ui/home/group_card.dart';
 import 'package:oto/src/ui/widgets/oto_slider.dart';
 
@@ -200,4 +201,41 @@ void main() {
     expect(find.byType(OtoSlider), findsNothing);
     expect(find.byKey(const Key('group-play-NOPE')), findsNothing);
   });
+
+  testWidgets(
+    'tapping group-more affordance pushes GroupEditorScreen with coordinator',
+    (t) async {
+      // 6-member group: coordinator is R0. The overflow button appears because
+      // 6 > _maxLevels (4).
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(6),
+      );
+      await t.pumpWidget(h.widget);
+
+      expect(find.byKey(const Key('group-more-G')), findsOneWidget);
+
+      await t.tap(find.byKey(const Key('group-more-G')));
+      await t.pumpAndSettle();
+
+      expect(find.byType(GroupEditorScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'tapping group play button does NOT navigate to GroupEditorScreen',
+    (t) async {
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(6),
+      );
+      await t.pumpWidget(h.widget);
+
+      await t.tap(find.byKey(const Key('group-play-G')));
+      await t.pump();
+
+      expect(find.byType(GroupEditorScreen), findsNothing);
+      expect(h.calls, contains('togglePlay(G,playing)'));
+    },
+  );
 }

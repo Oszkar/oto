@@ -6,6 +6,7 @@ import '../../state/household.dart';
 import '../../state/model/group_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
+import '../group/group_editor_screen.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
@@ -201,7 +202,7 @@ class GroupCard extends ConsumerWidget {
           ],
           if (overflow > 0) ...[
             const SizedBox(height: 9),
-            _overflowButton(context, overflow),
+            _overflowButton(context, overflow, group.coordinatorId),
           ],
         ],
       ),
@@ -311,16 +312,23 @@ class GroupCard extends ConsumerWidget {
     );
   }
 
-  /// "+N more · Room detail" overflow entry. Room detail is v0.6.1, so this is
-  /// a deliberate no-op stub for now.
-  Widget _overflowButton(BuildContext context, int overflow) {
+  /// "+N more · Room detail" overflow entry - pushes [GroupEditorScreen] seeded
+  /// with the group's coordinator so the user can see and edit all members.
+  Widget _overflowButton(
+    BuildContext context,
+    int overflow,
+    String coordinatorId,
+  ) {
     final oto = context.oto;
     return Align(
       alignment: Alignment.centerLeft,
       child: InkWell(
         key: Key('group-more-$groupId'),
-        // TODO(v0.6.1): push the Room detail screen for this group.
-        onTap: () {},
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => GroupEditorScreen(hostId: coordinatorId),
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.xs4),
           child: Row(
