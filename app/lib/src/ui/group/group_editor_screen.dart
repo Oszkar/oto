@@ -11,9 +11,10 @@ import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
 import '../widgets/oto_icon.dart';
 
-/// Full-screen group editor. Opened from the Home group bar; lets the user
-/// pick which rooms join the host group. Ported from the design-system
-/// `V3Group`. No Stereo-pair button (backend-true: oto has no stereo-pair API).
+/// Full-screen group editor. Will be opened from the Home group bar (the
+/// navigation entry point is wired in a later change); lets the user pick which
+/// rooms join the host group. Ported from the design-system `V3Group`. No
+/// Stereo-pair button (backend-true: oto has no stereo-pair API).
 ///
 /// Selection state lives in [groupEditorSelectionProvider]. Save computes a
 /// [MembershipDiff] and fires [GroupingController.joinGroup] /
@@ -41,7 +42,14 @@ class GroupEditorScreen extends ConsumerWidget {
       selected: selection,
     );
 
-    final roomList = household.rooms.values.toList();
+    // Sort for a stable list: rooms.values follows map insertion order, which
+    // can reshuffle across state updates. Sort by name, id as tie-breaker
+    // (mirrors the Home screen's deterministic ordering).
+    final roomList = household.rooms.values.toList()
+      ..sort((a, b) {
+        final byName = a.name.compareTo(b.name);
+        return byName != 0 ? byName : a.id.compareTo(b.id);
+      });
 
     return OtoScaffold(
       body: Column(
@@ -50,7 +58,6 @@ class GroupEditorScreen extends ConsumerWidget {
           _Header(
             hostId: hostId,
             selectedCount: selection.length,
-            currentMembers: currentMembers,
             onSave: () => _onSave(context, ref, currentMembers),
           ),
           Expanded(
@@ -127,13 +134,11 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.hostId,
     required this.selectedCount,
-    required this.currentMembers,
     required this.onSave,
   });
 
   final String hostId;
   final int selectedCount;
-  final Set<String> currentMembers;
   final VoidCallback onSave;
 
   @override
