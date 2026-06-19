@@ -8,6 +8,7 @@ import '../../state/model/household.dart';
 import '../../state/model/room_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
+import '../room/room_detail_screen.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
@@ -85,27 +86,39 @@ class RoomRow extends ConsumerWidget {
         ),
         const SizedBox(width: Space.gutter12),
         Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                room.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyles.titleCard,
-              ),
-              const SizedBox(height: 1),
-              Text(
-                _subtitle(room, group, offline),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyles.caption.copyWith(
-                  fontSize: 11,
-                  color: oto.inkMute,
+          child: GestureDetector(
+            key: Key('room-open-$speakerId'),
+            behavior: HitTestBehavior.opaque,
+            onTap: offline
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            RoomDetailScreen(speakerId: speakerId),
+                      ),
+                    ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyles.titleCard,
                 ),
-              ),
-            ],
+                const SizedBox(height: 1),
+                Text(
+                  _subtitle(room, group, offline),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyles.caption.copyWith(
+                    fontSize: 11,
+                    color: oto.inkMute,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         // Resume-only transport: present ONLY when the group has an active stream.

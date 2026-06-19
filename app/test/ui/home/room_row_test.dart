@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oto/src/ui/home/room_row.dart';
+import 'package:oto/src/ui/room/room_detail_screen.dart';
 import 'package:oto/src/ui/widgets/oto_slider.dart';
 
 import '_fixtures.dart';
@@ -80,4 +81,45 @@ void main() {
       expect(find.byType(Opacity), findsWidgets);
     },
   );
+
+  testWidgets('tapping the identity region pushes RoomDetailScreen', (t) async {
+    final h = wrap(
+      const RoomRow(speakerId: 'OF'),
+      household: playingHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('room-open-OF')));
+    await t.pumpAndSettle();
+
+    expect(find.byType(RoomDetailScreen), findsOneWidget);
+  });
+
+  testWidgets('tapping play button does NOT navigate to RoomDetailScreen', (
+    t,
+  ) async {
+    final h = wrap(
+      const RoomRow(speakerId: 'OF'),
+      household: playingHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('room-play-OF')));
+    await t.pump();
+
+    expect(find.byType(RoomDetailScreen), findsNothing);
+    expect(h.calls, contains('togglePlay(G_OF,playing)'));
+  });
+
+  testWidgets('offline room identity tap does not navigate', (t) async {
+    // Offline rooms are non-interactive (no chevron, no controls); the identity
+    // tap is disabled to match, so it must not open room detail.
+    final h = wrap(const RoomRow(speakerId: 'PT'), household: offlineHousehold());
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('room-open-PT')));
+    await t.pumpAndSettle();
+
+    expect(find.byType(RoomDetailScreen), findsNothing);
+  });
 }

@@ -4,6 +4,7 @@ import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
+import 'package:oto/src/ui/group/group_editor_screen.dart';
 import 'package:oto/src/ui/home/group_card.dart';
 import 'package:oto/src/ui/widgets/oto_slider.dart';
 
@@ -200,4 +201,62 @@ void main() {
     expect(find.byType(OtoSlider), findsNothing);
     expect(find.byKey(const Key('group-play-NOPE')), findsNothing);
   });
+
+  testWidgets(
+    'tapping group-more affordance pushes GroupEditorScreen with coordinator',
+    (t) async {
+      // 6-member group: coordinator is R0. The overflow button appears because
+      // 6 > _maxLevels (4).
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(6),
+      );
+      await t.pumpWidget(h.widget);
+
+      expect(find.byKey(const Key('group-more-G')), findsOneWidget);
+
+      await t.tap(find.byKey(const Key('group-more-G')));
+      await t.pumpAndSettle();
+
+      expect(find.byType(GroupEditorScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'header menu opens the editor for a small (no-overflow) group',
+    (t) async {
+      // 2-member group: no overflow button, so the always-present header menu is
+      // the only path to the editor (and thus Ungroup all). Regression for the
+      // QA gap where a small group could not be ungrouped.
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(2),
+      );
+      await t.pumpWidget(h.widget);
+
+      expect(find.byKey(const Key('group-more-G')), findsNothing);
+
+      await t.tap(find.byKey(const Key('group-open-G')));
+      await t.pumpAndSettle();
+
+      expect(find.byType(GroupEditorScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'tapping group play button does NOT navigate to GroupEditorScreen',
+    (t) async {
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(6),
+      );
+      await t.pumpWidget(h.widget);
+
+      await t.tap(find.byKey(const Key('group-play-G')));
+      await t.pump();
+
+      expect(find.byType(GroupEditorScreen), findsNothing);
+      expect(h.calls, contains('togglePlay(G,playing)'));
+    },
+  );
 }

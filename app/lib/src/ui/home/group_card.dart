@@ -6,6 +6,7 @@ import '../../state/household.dart';
 import '../../state/model/group_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
+import '../group/group_editor_screen.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
@@ -16,9 +17,10 @@ import '../widgets/oto_slider.dart';
 /// now-playing, and ONE resume/pause transport. Volume is the per-room
 /// exception, so the body nests a group-master slider plus each member's level.
 ///
-/// The per-room levels cap at [_maxLevels] visible rows; past that, a
-/// "+N more · Room detail" button stubs the (v0.6.1) Room-detail entry while
-/// the group-master stays reachable.
+/// A header menu (always present) opens the group editor (host = coordinator) -
+/// the entry point for join/leave and Ungroup all. The per-room levels cap at
+/// [_maxLevels] visible rows; past that, an overflow button opens the same
+/// editor while the group-master stays reachable.
 class GroupCard extends ConsumerWidget {
   const GroupCard({super.key, required this.groupId});
 
@@ -131,6 +133,19 @@ class GroupCard extends ConsumerWidget {
                 ),
               ),
             ),
+          // Always-present group menu: opens the editor (join/leave + Ungroup
+          // all). The overflow button only appears past _maxLevels members, so
+          // without this a small group (the common case) had no path to the
+          // editor and could never be ungrouped.
+          IconButton(
+            key: Key('group-open-$groupId'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => GroupEditorScreen(hostId: group.coordinatorId),
+              ),
+            ),
+            icon: OtoIcon('more', size: 18, color: oto.ink2),
+          ),
         ],
       ),
     );
@@ -201,7 +216,7 @@ class GroupCard extends ConsumerWidget {
           ],
           if (overflow > 0) ...[
             const SizedBox(height: 9),
-            _overflowButton(context, overflow),
+            _overflowButton(context, overflow, group.coordinatorId),
           ],
         ],
       ),
@@ -311,16 +326,23 @@ class GroupCard extends ConsumerWidget {
     );
   }
 
-  /// "+N more · Room detail" overflow entry. Room detail is v0.6.1, so this is
-  /// a deliberate no-op stub for now.
-  Widget _overflowButton(BuildContext context, int overflow) {
+  /// "+N more · Edit" overflow entry - pushes [GroupEditorScreen] seeded with
+  /// the group's coordinator so the user can see and edit all members.
+  Widget _overflowButton(
+    BuildContext context,
+    int overflow,
+    String coordinatorId,
+  ) {
     final oto = context.oto;
     return Align(
       alignment: Alignment.centerLeft,
       child: InkWell(
         key: Key('group-more-$groupId'),
-        // TODO(v0.6.1): push the Room detail screen for this group.
-        onTap: () {},
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => GroupEditorScreen(hostId: coordinatorId),
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.xs4),
           child: Row(
@@ -334,7 +356,7 @@ class GroupCard extends ConsumerWidget {
                 ),
               ),
               Text(
-                ' · Room detail',
+                ' · Edit',
                 style: TextStyles.caption.copyWith(color: oto.inkFaint),
               ),
             ],
