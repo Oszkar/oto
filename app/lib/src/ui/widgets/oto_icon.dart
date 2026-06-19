@@ -59,6 +59,7 @@ class OtoIcon extends StatelessWidget {
     'layoutGrid': LucideIcons.layoutGrid,
     'list': LucideIcons.list,
     'music': LucideIcons.music,
+    'x': LucideIcons.x,
   };
 
   @override
