@@ -126,4 +126,19 @@ void main() {
     expect(find.byType(RoomDetailScreen), findsNothing);
     expect(h.calls, contains('togglePlay(G_OF,playing)'));
   });
+
+  testWidgets('offline room identity tap does not navigate', (t) async {
+    // Offline rooms are non-interactive (dimmed, no controls); the identity tap
+    // is disabled to match, so it must not open room detail.
+    final h = wrap(
+      const RoomCard(speakerId: 'PT'),
+      household: offlineHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('room-open-PT')));
+    await t.pumpAndSettle();
+
+    expect(find.byType(RoomDetailScreen), findsNothing);
+  });
 }

@@ -17,9 +17,9 @@ import '../widgets/oto_slider.dart';
 /// now-playing, and ONE resume/pause transport. Volume is the per-room
 /// exception, so the body nests a group-master slider plus each member's level.
 ///
-/// The per-room levels cap at [_maxLevels] visible rows; past that, a
-/// "+N more · Room detail" button stubs the (v0.6.1) Room-detail entry while
-/// the group-master stays reachable.
+/// The per-room levels cap at [_maxLevels] visible rows; past that, an overflow
+/// button opens the group editor (host = coordinator) while the group-master
+/// stays reachable.
 class GroupCard extends ConsumerWidget {
   const GroupCard({super.key, required this.groupId});
 
