@@ -18,14 +18,14 @@ import '../home/_fixtures.dart';
 // maybePop() silently does nothing (nothing to pop to).
 // ---------------------------------------------------------------------------
 
-class _EditorHandle {
-  _EditorHandle(this.widget, this._resolveGrouping);
+class EditorHandle {
+  EditorHandle(this.widget, this._resolveGrouping);
   final Widget widget;
   final SpyGrouping Function() _resolveGrouping;
   List<String> get groupingCalls => _resolveGrouping().calls;
 }
 
-_EditorHandle wrapEditor(String hostId, {required Household household}) {
+EditorHandle wrapEditor(String hostId, {required Household household}) {
   SpyGrouping? grouping;
   final widget = ProviderScope(
     overrides: [
@@ -56,7 +56,7 @@ _EditorHandle wrapEditor(String hostId, {required Household household}) {
       ),
     ),
   );
-  return _EditorHandle(widget, () => grouping!);
+  return EditorHandle(widget, () => grouping!);
 }
 
 void main() {
