@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/commands.dart';
 import '../../state/group_editor.dart';
 import '../../state/household.dart';
+import '../../state/model/group_state.dart';
 import '../../state/model/room_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
@@ -78,39 +79,43 @@ class GroupEditorScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _onSave(
+  void _onSave(
     BuildContext context,
     WidgetRef ref,
     Set<String> currentMembers,
-  ) async {
+  ) {
     final selection = ref.read(groupEditorSelectionProvider(hostId));
     final diff = diffMembership(
       host: hostId,
       currentMembers: currentMembers,
       selected: selection,
     );
-    // Read eagerly so the spy is always initialized in tests, even on no-op.
+    // Fire-and-forget, matching the app's command pattern: GroupingController
+    // owns the async lifecycle (retry + topology reconcile), so the editor
+    // dispatches every join/leave and pops immediately rather than blocking on
+    // each SOAP round-trip. Reading the controller also initializes the test
+    // spy even on a no-op save.
     final grouping = ref.read(groupingControllerProvider);
     for (final room in diff.toJoin) {
-      await grouping.joinGroup(room, hostId);
+      grouping.joinGroup(room, hostId);
     }
     for (final room in diff.toLeave) {
-      await grouping.leaveGroup(room);
+      grouping.leaveGroup(room);
     }
-    if (context.mounted) Navigator.of(context).maybePop();
+    Navigator.of(context).maybePop();
   }
 
-  Future<void> _onUngroupAll(
+  void _onUngroupAll(
     BuildContext context,
     WidgetRef ref,
     Set<String> currentMembers,
-  ) async {
+  ) {
     final grouping = ref.read(groupingControllerProvider);
     for (final member in currentMembers) {
       if (member == hostId) continue;
-      await grouping.leaveGroup(member);
+      grouping.leaveGroup(member);
     }
-    if (context.mounted) Navigator.of(context).maybePop();
+    Navigator.of(context).maybePop();
   }
 }
 
@@ -215,7 +220,7 @@ class _RoomRow extends StatelessWidget {
   final String hostId;
 
   /// The host's current group (null when the host has no group yet).
-  final dynamic hostGroup; // GroupState | null
+  final GroupState? hostGroup;
 
   final bool selected;
   final bool hasConflict;
@@ -235,7 +240,7 @@ class _RoomRow extends StatelessWidget {
     } else {
       // Room is currently a member of the host group when the group exists and
       // contains this room.
-      final members = (hostGroup?.memberIds as List<String>?) ?? <String>[];
+      final members = hostGroup?.memberIds ?? <String>[];
       final isCurrentMember = members.contains(room.id);
       if (isCurrentMember && !isHost) {
         subText = 'Currently grouped';
@@ -243,8 +248,10 @@ class _RoomRow extends StatelessWidget {
       } else if (isHost) {
         subText = 'Hosting';
         subColor = oto.inkMute;
+      } else if (!room.online) {
+        subText = 'Powered off';
+        subColor = oto.inkMute;
       } else {
-        // Check if the room's own group has an active stream.
         subText = 'Idle';
         subColor = oto.inkMute;
       }
