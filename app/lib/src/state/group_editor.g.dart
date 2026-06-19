@@ -65,7 +65,7 @@ final class GroupEditorSelectionProvider
 }
 
 String _$groupEditorSelectionHash() =>
-    r'576deec030015ebb769900028a014050f452ef9c';
+    r'11d2dbc9926cc7096741eefb4f8ae74ac172eb51';
 
 /// Editor selection, keyed by host room id. Seeds from the host group's current
 /// members; `toggle` adds/removes a room (the host stays selected).

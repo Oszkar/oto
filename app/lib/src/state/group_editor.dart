@@ -50,10 +50,13 @@ Set<String> roomsWithConflict(
 class GroupEditorSelection extends _$GroupEditorSelection {
   @override
   Set<String> build(String host) {
-    final gid = ref.read(householdProvider).rooms[host]?.groupId;
+    final household = ref.read(householdProvider);
+    final gid = household.rooms[host]?.groupId;
     final members = gid == null
         ? <String>{host}
-        : (ref.read(householdProvider).groups[gid]?.memberIds.toSet() ?? {host});
+        : (household.groups[gid]?.memberIds.toSet() ?? {host});
+    // Always include the host: it anchors the selection even if it is somehow
+    // absent from its own group's memberIds (e.g. mid topology refresh).
     return {...members, host};
   }
 

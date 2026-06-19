@@ -23,6 +23,15 @@ void main() {
     expect(d.toLeave, isEmpty);
   });
 
+  test('host is never in toJoin even if absent from currentMembers', () {
+    // Exercises the `..remove(host)` guard on toJoin: the host can be selected
+    // without yet being listed as a member (e.g. mid topology refresh).
+    final d = diffMembership(
+      host: 'LR', currentMembers: {'KT'}, selected: {'LR', 'KT'});
+    expect(d.toJoin, isEmpty);
+    expect(d.toLeave, isEmpty);
+  });
+
   test('a selected room that is its own active source is a conflict', () {
     final h = Household(
       rooms: const {
@@ -41,5 +50,27 @@ void main() {
     );
     final c = roomsWithConflict(h, host: 'LR', selected: {'LR', 'OF', 'BR'});
     expect(c, {'OF'}); // OF plays its own stream; BR is idle; LR is the host
+  });
+
+  test('a selected room with no group is not a conflict', () {
+    // Ungrouped rooms can appear transiently during topology churn; they must
+    // not be flagged (the `gid == null` skip in roomsWithConflict).
+    final h = Household(
+      rooms: const {
+        'LR': RoomState(
+            id: 'LR', name: 'Living', kind: RoomKind.soundbar, groupId: 'G_LR'),
+        'NG': RoomState(id: 'NG', name: 'NoGroup', kind: RoomKind.speaker),
+      },
+      groups: const {
+        'G_LR': GroupState(
+            id: 'G_LR',
+            coordinatorId: 'LR',
+            memberIds: ['LR'],
+            transport: PlaybackState.playing,
+            track: Track(title: 'x')),
+      },
+    );
+    final c = roomsWithConflict(h, host: 'LR', selected: {'LR', 'NG'});
+    expect(c, isEmpty);
   });
 }
