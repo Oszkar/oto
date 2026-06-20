@@ -4,6 +4,7 @@ import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
+import 'package:oto/src/ui/group/group_editor_screen.dart';
 import 'package:oto/src/ui/room/room_detail_screen.dart';
 import 'package:oto/src/ui/widgets/oto_slider.dart';
 
@@ -199,5 +200,74 @@ void main() {
     // No kebab in the missing-room fallback: its actions would fire with an
     // invalid speakerId.
     expect(find.byKey(const Key('room-kebab-MISSING')), findsNothing);
+  });
+
+  testWidgets(
+    'kebab opens the editor hosted by the coordinator, not this room',
+    (t) async {
+      // KT is a NON-coordinator member of G_LR (coordinator LR). Opening the
+      // editor from KT's detail must host it on LR, else save/ungroup would
+      // target the wrong speaker.
+      const household = Household(
+        rooms: {
+          'LR': RoomState(
+            id: 'LR',
+            name: 'Living Room',
+            kind: RoomKind.soundbar,
+            volume: 30,
+            groupId: 'G_LR',
+          ),
+          'KT': RoomState(
+            id: 'KT',
+            name: 'Kitchen',
+            kind: RoomKind.speaker,
+            volume: 25,
+            groupId: 'G_LR',
+          ),
+        },
+        groups: {
+          'G_LR': GroupState(
+            id: 'G_LR',
+            coordinatorId: 'LR',
+            memberIds: ['LR', 'KT'],
+            transport: PlaybackState.playing,
+            track: Track(title: 'Strobe', artist: 'Deadmau5'),
+          ),
+        },
+      );
+      final h = wrap(
+        const RoomDetailScreen(speakerId: 'KT'),
+        household: household,
+      );
+      await t.pumpWidget(h.widget);
+      await t.tap(find.byKey(const Key('room-kebab-KT')));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Group rooms'));
+      await t.pumpAndSettle();
+
+      final editor = t.widget<GroupEditorScreen>(
+        find.byType(GroupEditorScreen),
+      );
+      expect(editor.hostId, 'LR');
+    },
+  );
+
+  testWidgets('offline room disables transport and volume', (t) async {
+    // PT is offline; its controls must not be actionable even though it carries
+    // a last-known group/volume (mirrors RoomRow/RoomCard).
+    final h = wrap(
+      const RoomDetailScreen(speakerId: 'PT'),
+      household: offlineHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    expect(
+      t.widget<IconButton>(find.byKey(const Key('room-detail-play-PT'))).onPressed,
+      isNull,
+    );
+    expect(
+      t.widget<OtoSlider>(find.byKey(const Key('room-volume-PT'))).onChanged,
+      isNull,
+    );
   });
 }

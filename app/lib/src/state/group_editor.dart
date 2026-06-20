@@ -48,16 +48,30 @@ Set<String> roomsWithConflict(
 /// members; `toggle` adds/removes a room (the host stays selected).
 @riverpod
 class GroupEditorSelection extends _$GroupEditorSelection {
-  @override
-  Set<String> build(String host) {
-    final household = ref.read(householdProvider);
-    final gid = household.rooms[host]?.groupId;
+  /// The host group's current members, always including the host (it anchors
+  /// the selection even if absent from its own memberIds mid topology refresh).
+  Set<String> _liveMembers(Household h) {
+    final gid = h.rooms[host]?.groupId;
     final members = gid == null
         ? <String>{host}
-        : (household.groups[gid]?.memberIds.toSet() ?? {host});
-    // Always include the host: it anchors the selection even if it is somehow
-    // absent from its own group's memberIds (e.g. mid topology refresh).
+        : (h.groups[gid]?.memberIds.toSet() ?? {host});
     return {...members, host};
+  }
+
+  @override
+  Set<String> build(String host) {
+    // Rebase the selection when the group's membership changes underneath us
+    // (e.g. another client groups/ungroups a room while the editor is open):
+    // reflect external adds/removes so a no-op Save can't silently undo them.
+    // The user's pending toggles for other rooms are preserved.
+    ref.listen(householdProvider, (prev, next) {
+      if (prev == null) return;
+      final added = _liveMembers(next).difference(_liveMembers(prev));
+      final removed = _liveMembers(prev).difference(_liveMembers(next));
+      if (added.isEmpty && removed.isEmpty) return;
+      state = ({...state, ...added}..removeAll(removed))..add(host);
+    });
+    return _liveMembers(ref.read(householdProvider));
   }
 
   void toggle(String roomId) {

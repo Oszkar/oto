@@ -39,6 +39,7 @@ class RoomDetailScreen extends ConsumerWidget {
           model: null,
           memberCount: 1,
           showMenu: false,
+          hostId: speakerId, // unused: no kebab when showMenu is false
         ),
       );
     }
@@ -48,6 +49,11 @@ class RoomDetailScreen extends ConsumerWidget {
       householdProvider.select((h) => gid == null ? null : h.groups[gid]),
     );
     final memberCount = group?.memberIds.length ?? 1;
+    // The group editor is always hosted by the group's COORDINATOR, never the
+    // room you happened to open detail for. Passing speakerId would mis-host the
+    // editor for a grouped non-coordinator member (wrong join/ungroup targets).
+    // A solo room is its own coordinator, so this is identical there.
+    final editorHost = group?.coordinatorId ?? speakerId;
 
     return OtoScaffold(
       body: Column(
@@ -59,6 +65,7 @@ class RoomDetailScreen extends ConsumerWidget {
             model: room.model,
             memberCount: memberCount,
             showMenu: true,
+            hostId: editorHost,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -72,9 +79,18 @@ class RoomDetailScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _NowPlayingCard(speakerId: speakerId, gid: gid, group: group),
+                    _NowPlayingCard(
+                      speakerId: speakerId,
+                      gid: gid,
+                      group: group,
+                      online: room.online,
+                    ),
                     const SizedBox(height: Space.screen18),
-                    _VolumeRow(speakerId: speakerId, volume: room.volume),
+                    _VolumeRow(
+                      speakerId: speakerId,
+                      volume: room.volume,
+                      online: room.online,
+                    ),
                   ],
                 ),
               ),
@@ -91,6 +107,7 @@ class RoomDetailScreen extends ConsumerWidget {
     required String? model,
     required int memberCount,
     required bool showMenu,
+    required String hostId,
   }) {
     final oto = context.oto;
 
@@ -141,6 +158,7 @@ class RoomDetailScreen extends ConsumerWidget {
           if (showMenu)
             _KebabButton(
               speakerId: speakerId,
+              hostId: hostId,
               memberCount: memberCount,
             ),
         ],
@@ -158,6 +176,7 @@ class _NowPlayingCard extends ConsumerWidget {
     required this.speakerId,
     required this.gid,
     required this.group,
+    required this.online,
   });
 
   final String speakerId;
@@ -169,6 +188,10 @@ class _NowPlayingCard extends ConsumerWidget {
   final String? gid;
 
   final GroupState? group;
+
+  /// Whether the room is reachable. Offline -> transport is disabled (the
+  /// speaker can't be commanded), mirroring RoomRow/RoomCard.
+  final bool online;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -218,14 +241,14 @@ class _NowPlayingCard extends ConsumerWidget {
           ),
           IconButton(
             key: Key('room-detail-prev-$speakerId'),
-            onPressed: gid == null ? null : () => ctrl.previous(gid),
+            onPressed: (gid == null || !online) ? null : () => ctrl.previous(gid),
             icon: OtoIcon('prev', size: 18, color: oto.ink),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
           IconButton(
             key: Key('room-detail-play-$speakerId'),
-            onPressed: gid == null
+            onPressed: (gid == null || !online)
                 ? null
                 : () => ctrl.togglePlay(
                       gid,
@@ -241,7 +264,7 @@ class _NowPlayingCard extends ConsumerWidget {
           ),
           IconButton(
             key: Key('room-detail-next-$speakerId'),
-            onPressed: gid == null ? null : () => ctrl.next(gid),
+            onPressed: (gid == null || !online) ? null : () => ctrl.next(gid),
             icon: OtoIcon('next', size: 18, color: oto.ink),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -257,15 +280,24 @@ class _NowPlayingCard extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _VolumeRow extends ConsumerWidget {
-  const _VolumeRow({required this.speakerId, required this.volume});
+  const _VolumeRow({
+    required this.speakerId,
+    required this.volume,
+    required this.online,
+  });
 
   final String speakerId;
   final int? volume;
+
+  /// Offline -> disable the slider (the speaker is unreachable), mirroring
+  /// RoomRow/RoomCard. A stale last-known volume can still render.
+  final bool online;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final oto = context.oto;
     final hasVolume = volume != null;
+    final enabled = hasVolume && online;
     final value = (volume ?? 0) / 100;
     final ctrl = ref.read(playbackControllerProvider);
 
@@ -277,10 +309,10 @@ class _VolumeRow extends ConsumerWidget {
           child: OtoSlider(
             key: Key('room-volume-$speakerId'),
             value: value,
-            onChanged: hasVolume
+            onChanged: enabled
                 ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
                 : null,
-            onChangeEnd: hasVolume
+            onChangeEnd: enabled
                 ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
                 : null,
           ),
@@ -308,9 +340,18 @@ class _VolumeRow extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _KebabButton extends ConsumerWidget {
-  const _KebabButton({required this.speakerId, required this.memberCount});
+  const _KebabButton({
+    required this.speakerId,
+    required this.hostId,
+    required this.memberCount,
+  });
 
   final String speakerId;
+
+  /// The group's coordinator - the editor host. For a solo room this equals
+  /// speakerId; for a grouped member it is the real coordinator (not this room).
+  final String hostId;
+
   final int memberCount;
 
   @override
@@ -332,10 +373,12 @@ class _KebabButton extends ConsumerWidget {
           Navigator.of(ctx).pop();
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => GroupEditorScreen(hostId: speakerId),
+              builder: (_) => GroupEditorScreen(hostId: hostId),
             ),
           );
         },
+        // Ungroup removes THIS room from its group, so it targets speakerId
+        // (not the coordinator).
         onUngroup: memberCount > 1
             ? () {
                 Navigator.of(ctx).pop();
