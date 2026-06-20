@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-20
+
+v0.6.1 - Room management. The Now Playing progress bar (deferred from v0.6.0) arrives, and you can now group and ungroup rooms and open a focused per-room screen. The second slice of the phased v0.6 UI; settings and responsive layouts follow in v0.6.2-.3.
+
+### Added
+
+- **Now Playing progress bar.** A live position-and-duration bar that shows where you are in the track and ticks as it plays. Read-only - there is no seek (the backend exposes none).
+- **Group rooms.** A group editor to pick which rooms play together: join rooms in, leave them out, or ungroup the whole set. Rooms already playing their own source are flagged before you interrupt them. Open it from any group card or from a room's detail screen.
+- **Room detail.** Tap a room to open a focused view - what its group is playing with transport controls, its own volume, and a menu to group or ungroup it.
+
+### Known issues
+
+- Controls the backend can't drive yet (shuffle/repeat/seek, queue, EQ/sound) remain intentionally hidden rather than faked.
+- Settings screen and responsive tablet/desktop layouts are still to come (v0.6.2-.3).
+
 ## [0.6.0] - 2026-06-11
 
 v0.6.0 - The first real interface. Until now oto was a proven backend behind a test scaffold; this release ships the designed Flutter UI - Home and Now Playing - on the existing capability layers. Phased: room management, settings, and responsive layouts follow in v0.6.1-.3.
@@ -146,7 +161,8 @@ v0.1 - Foundation + LAN discovery. Identity-only discovery proven end-to-end thr
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone - fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Oszkar/oto/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Oszkar/oto/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Oszkar/oto/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Oszkar/oto/compare/v0.4.0...v0.5.0
