@@ -161,7 +161,8 @@ v0.1 - Foundation + LAN discovery. Identity-only discovery proven end-to-end thr
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone - fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Oszkar/oto/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Oszkar/oto/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Oszkar/oto/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Oszkar/oto/compare/v0.4.0...v0.5.0
