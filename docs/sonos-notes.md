@@ -2,7 +2,7 @@
 
 Durable reference for how oto talks to Sonos: UPnP/SOAP behaviors, the `sonos-api` crate at the pinned `=0.5.2`, and the load-bearing facts learned from hardware spikes on a 4-speaker LAN. Preserved here so we don't re-discover them.
 
-Audience: anyone touching `oto-wire`. If you're touching the GENA event path for v0.4, the [Event model](#event-model-v04-load-bearing) section is the one to read first.
+Audience: anyone touching `oto-wire`. If you're touching the GENA event path, the [Event model](#event-model-v04-load-bearing) section is the one to read first.
 
 > **Scope.** This is technical reference. Project status, milestones, and forward plan live in [ROADMAP.md](ROADMAP.md). System structure lives in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -11,7 +11,7 @@ Audience: anyone touching `oto-wire`. If you're touching the GENA event path for
 - `sonos-api = "=0.5.2"` (exact). Don't bump without re-checking the SOAP surface here and the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76).
 - `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl`. Already in the locked graph via `sonos-api` — unify, don't bump.
 - The `sonos-sdk` umbrella and its `test-support` tree are **not** in oto-wire's dependency graph (dropped at v0.3). v0.4 live events add the upstream reactive state/event crates from the same SDK family; `sonos-api` remains the only Sonos crate used for direct SOAP commands and discovery.
-- Raw `callback-server` + own change-detection was prototyped for v0.4 and remains the v0.5 reconsideration path, not the chosen v0.4 implementation path — see [Event model](#event-model-v04-load-bearing).
+- Raw `callback-server` + own change-detection was prototyped but not chosen; oto uses the upstream reactive stack — see [Event model](#event-model-v04-load-bearing).
 
 ## SSDP discovery
 
@@ -217,7 +217,7 @@ Top-level response fields carry sentinels that must map to `None`, not values:
 
 This section is what v0.4 needs. Authoritative findings live here; the experiment they came from is archived under [`docs/evidence/v0.4-spike/findings.md`](evidence/v0.4-spike/findings.md) (findings + raw logs).
 
-**Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`). The raw `sonos-sdk-callback-server` + own change-detection alternative stays a v0.5 reconsideration point.
+**Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`) - confirmed stable through v0.5.1. The raw `sonos-sdk-callback-server` + own change-detection alternative is a documented off-ramp, not used; see [§ Off-ramp](#off-ramp-raw-callback-server-not-used) below.
 
 ### Opt-in via `.watch()` — one multiplexed pump thread
 
@@ -346,24 +346,6 @@ Verified in the SDK source around `state.rs:855` at the time of v0.4 implementat
 
 `manager.get_property::<P>(&speaker_id) -> Option<P>` reads the in-memory cache only. Returns `None` until a NOTIFY populates the property. There is **no public `.fetch()` method** for one-shot SOAP-driven cache priming on `sonos-sdk-state` — the only ways to populate the cache are `.watch()` (subscribe and wait for the first NOTIFY) or a direct `sonos-api` SOAP call (`oto-wire`'s existing v0.3 path for one-shot reads).
 
-### Status of the v0.3-era "weak spot" concern
-
-The v0.3-era sonos-notes flagged `sonos-state` / `sonos-stream` / `sonos-event-manager` as the only known live correctness concern, citing **intermittent `position` updates** and the absence of hardware CI upstream.
-
-The v0.4 spike (35 min combined idle + active on a 4-speaker LAN) did **not reproduce** the intermittent-position behavior — position events arrived at consistent ~2 s cadence throughout. Downgrade the concern from "load-bearing risk" to "watch for it; not observed in v0.4 spike." Caveat: single session, single LAN, single playing speaker — not a "solved" claim.
-
-The lower layers under the reactive stack (`soap-client`, `sonos-api`, `callback-server`) remain solid; v0.2/v0.3 confirm `sonos-api` SOAP is reliable on real hardware, and the v0.4 spike confirms `callback-server` HTTP NOTIFY reception works correctly.
-
-### Reconsideration point — v0.5
-
-The raw `sonos-sdk-callback-server` + own SUBSCRIBE + own XML parsing + own change-detection alternative was prototyped in the v0.4 spike, ran correctly with zero warnings, and remains a viable alternative. Switch trigger: if v0.5 topology events (which exercise the reactive layer differently — less upstream hardware coverage, lower event frequency) surface reliability issues.
-
-Migration cost is bounded (the seam — `Wire` trait, `ChangeEvent`, FRB stream surface, `oto-app::StateManager` — is designed for this swap). The spike-callback-server.rs commits in git history are a working starting point.
-
-### Forward-reference: an alternative raw-callback-server Rust crate
-
-**Out of scope for oto** (a side project bounded at v1.0). Recorded here so the work isn't lost: anyone who wants to build a raw-GENA Rust library (own change-detection, transparent debugging, smaller dep tree) can start from the v0.4 spike binary at the merged spike-findings commit. Add renewal logic, write the doubly-escaped `LastChange` XML parser, add a public API. The case for such a crate gets stronger if upstream `sonos-sdk-*` stops being maintained or if the documented weak spots actually bite users in production.
-
 ### Topology change events — how regrouping surfaces (v0.5)
 
 Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe --features live-tests`, 2-speaker LAN, form-then-break in the Sonos app).
@@ -388,26 +370,35 @@ Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe -
 
 **Fallback if this ever goes quiet:** the v0.4 stale-`GroupId` → `WireError::NotFound` contract still holds; the UI re-discovers on `NotFound`. Degraded UX, not broken.
 
-### Reactive-vs-NOTIFY traces — v0.5 validation
+### Reactive event stack: reliability (settled through v0.5.1)
 
-Production data collected 2026-06-01 via `cargo run -p oto_native --example event-tail --features oto-wire/live-tests` on the 2-speaker LAN. Two sessions:
+The v0.3-era notes flagged `sonos-state` / `sonos-stream` / `sonos-event-manager` as the only known live-correctness concern (intermittent `position` updates, no upstream hardware CI). It did not pan out:
+
+- **v0.4 spike** (35 min combined idle + active, 4-speaker LAN): no intermittent-position behaviour — `position` arrived at a consistent ~2 s cadence throughout. One session / LAN / playing speaker, so not conclusive alone.
+- **v0.5 validation** (2026-06-01, `cargo run -p oto_native --example event-tail --features oto-wire/live-tests`, 2-speaker LAN):
 
 | Session | Duration | Renewals | Errors | Spurious events |
 |---|---|---|---|---|
 | Idle | ~50 min | 4/4 clean (~1475 s, ~82% of 1800 s TTL) | 0 | 0 |
 | Active | ~28 min | 4/4 clean (~1481 s, same timing) | 0 | 0 |
 
-**Decision: `sonos-sdk-state` reactive layer confirmed stable. No switch to raw callback-server.**
+The active session exercised play/pause on both speakers independently, 25 rapid-fire volume events, 10+ track skips, and `Transitioning` transitions — every action produced the expected event within ~1 s, correct speaker/group IDs, no cross-speaker bleed, no drops.
 
-Active session exercised: play/pause on both speakers independently, 25 volume slider events (rapid-fire), 10+ track skips, Playback state transitions including `Transitioning`. Every action produced the expected event within ~1 s, correct speaker/group IDs, no cross-speaker bleed, no drops.
+**Decision (settled): oto stays on the `sonos-sdk-state` reactive layer.** The lower layers (`soap-client`, `sonos-api`, `callback-server`) are likewise solid — v0.2/v0.3 confirm `sonos-api` SOAP, the v0.4 spike confirms `callback-server` HTTP NOTIFY reception.
 
-**Findings:**
+Behavioural quirks the map/UI layer must handle (still true):
 
-- **Double Track events.** Every track change emits 2 (sometimes more on rapid skipping) consecutive `(group_id, Track, same_title)` events within 0–2 s. The device fires an intermediate-metadata NOTIFY then the resolved-metadata NOTIFY; the SDK delivers both. The UI layer or `map_upstream_event` should apply last-wins dedup with a ~200 ms window on consecutive identical `(group_id, Track)` pairs. Expect the same pattern on `group_membership` (see the topology change events section above).
-- **`Transitioning` Playback state.** Appears briefly on track skip and play-start. Map it to a `Loading` variant or suppress; should not reach the UI as "unknown."
-- **Renewal timing.** Both sessions renewed at ~82% of 1800 s TTL (~1475–1481 s). Consistent and predictable.
+- **Double `Track` events.** Every track change emits 2+ consecutive `(group_id, Track, same_title)` events within 0–2 s (an intermediate-metadata NOTIFY then the resolved-metadata NOTIFY; the SDK delivers both). Apply last-wins dedup with a ~200 ms window on consecutive identical `(group_id, Track)` pairs. Same pattern on `group_membership` (§ Topology change events, above) and `group_volume` (§ Group operations).
+- **`Transitioning` playback state.** Appears briefly on skip / play-start; map to a `Loading` variant or suppress — don't surface as "unknown."
+- **Renewal timing.** Both sessions renewed at ~82% of the 1800 s TTL (~1475–1481 s) — consistent and predictable.
 
-**Raw callback-server reconsideration (updated).** The trigger was "topology events surface new reliability evidence." These traces show no reliability issues on the existing property event stream; the trigger condition is not met. The raw callback-server alternative remains an off-ramp if v0.5 topology events surface new problems.
+### Off-ramp: raw callback-server (not used)
+
+A raw `sonos-sdk-callback-server` + own `SUBSCRIBE` + own XML parsing + own change-detection was prototyped in the v0.4 spike, ran correctly with zero warnings, and stays a viable alternative — but the reliability data above means oto has no reason to switch. **Out of scope for oto** (a side project bounded at v1.0); recorded so the work isn't lost.
+
+- **When to revisit:** if upstream `sonos-sdk-*` stops being maintained, or the documented SDK footguns start biting in production. (The earlier "if v0.5 topology events surface reliability issues" trigger was not met — see above.)
+- **Migration cost is bounded.** The seam — `Wire` trait, `ChangeEvent`, the FRB stream surface, `oto-app::StateManager` — is designed for the swap; the `spike-callback-server.rs` commits in git history are a working starting point.
+- **What an implementer owns:** GENA renewal (§ Subscription renewal), decomposing one NOTIFY into N typed property events (§ One NOTIFY = many property events), and the doubly-escaped `LastChange` parser (§ Doubly-escaped `LastChange` XML). The same spike binary is the starting point for anyone building a standalone raw-GENA Rust library (own change-detection, transparent debugging, smaller dep tree).
 
 ## Concurrency
 
