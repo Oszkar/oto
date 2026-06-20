@@ -16,9 +16,9 @@
   </a>
 </p>
 
-A fast, local-first Sonos controller for Windows and Android, without the bloat of the official app. Flutter UI on top of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. Discovery and SOAP control stay in Rust via the [`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP; v0.4 live events build on the same SDK family's reactive state layer. The UI talks to Rust only through generated FRB bindings.
+A fast, local-first multi-platform Sonos controller, without the bloat of the official app. Flutter UI on top of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. Discovery and SOAP control stay in Rust via the [`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP. The UI talks to Rust only through generated FRB bindings.
 
-> note: `oto` is a working name for now. It means `sound` in Japanese and it is a palindrome, just like Sonos
+> note: `oto` means `sound` in Japanese and it is a palindrome, just like Sonos
 
 ## Features & Capabilities
 
@@ -102,7 +102,7 @@ Since `oto` is local-first and communicates directly with Sonos devices on your 
 
 - **SSDP Port (1900):** Sonos discovery uses SSDP multicast on port `1900` over UDP. Ensure your firewall (e.g. Windows Defender Firewall) allows inbound and outbound UDP traffic on port `1900` for `oto`.
 - **Multicast & Wi-Fi:** Ensure your Wi-Fi router does not block IP multicast or IGMP traffic (some guest network settings or "AP Isolation" settings block local device communication).
-- **Android Permissions:** Android requires the `CHANGE_WIFI_MULTICAST_STATE` permission to acquire a `MulticastLock` and listen to SSDP discovery messages. `oto` acquires this lock automatically via [MulticastLockHandler](file:///e:/Programming/oto/app/android/app/src/main/kotlin/me/oszkar/oto/MulticastLockHandler.kt) during discovery.
+- **Android Permissions:** Android requires the `CHANGE_WIFI_MULTICAST_STATE` permission to acquire a `MulticastLock` and listen to SSDP discovery messages. `oto` acquires this lock automatically via MulticastLockHandler during discovery.
 
 ## Common commands
 
