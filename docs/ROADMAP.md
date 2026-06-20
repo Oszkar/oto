@@ -13,7 +13,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.5.0 | released | **Hardening before UI** — topology events, SubscriptionError surfacing, Android `MulticastLock`, model repopulate (group form/break → v0.5.1) |
 | v0.5.1 | released | **Group operations** — form/break, group volume/mute (commands + read/event), fast topology refresh after a regroup (no SSDP re-discovery) |
 | v0.6.0 | released | **UI: foundation + Home + Now Playing** — theming, source-model state architecture, adaptive shell, persistence |
-| v0.6.1 | planned | **UI: room management** — group editor + room detail |
+| v0.6.1 | released | **UI: room management** — group editor + room detail |
 | v0.6.2 | planned | **UI: settings + states** — settings + empty/error/loading/offline states |
 | v0.6.3 | planned | **UI: responsive** — tablet master-detail, desktop three-pane |
 | v0.7.0 | planned | **Hardening + polish** — SSDP hardening, cleanup TODOs, dogfooding finds |
