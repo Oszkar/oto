@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,18 +14,8 @@ class HomeLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final oto = context.oto;
-    return _CenteredHomeState(
-      icon: Container(
-        width: 88,
-        height: 88,
-        decoration: BoxDecoration(
-          color: oto.fillStrong,
-          borderRadius: BorderRadius.circular(Radius_.card16),
-        ),
-        alignment: Alignment.center,
-        child: const OtoMark(42),
-      ),
+    return const _CenteredHomeState(
+      icon: _StateIcon(child: OtoMark(42)),
       title: 'Scanning your network',
       body: 'Looking for Sonos speakers on this local network.',
     );
@@ -41,7 +33,8 @@ class HomeEmptyState extends ConsumerWidget {
       body:
           'Make sure your Sonos system is on the same Wi-Fi network, then scan again.',
       action: FilledButton.icon(
-        onPressed: () => ref.invalidate(discoveryProvider),
+        onPressed: () =>
+            unawaited(ref.read(discoveryProvider.notifier).rediscover()),
         icon: const OtoIcon('search', size: 16),
         label: const Text('Scan network'),
       ),
@@ -62,7 +55,8 @@ class HomeErrorState extends ConsumerWidget {
       body:
           'Check that your phone or computer is on the same local network as your Sonos system, and that multicast discovery is allowed.',
       action: FilledButton.icon(
-        onPressed: () => ref.invalidate(discoveryProvider),
+        onPressed: () =>
+            unawaited(ref.read(discoveryProvider.notifier).rediscover()),
         icon: const OtoIcon('search', size: 16),
         label: const Text('Scan network'),
       ),
@@ -113,7 +107,9 @@ class HomeStatusBanner extends ConsumerWidget {
             if (showRetry) ...[
               const SizedBox(width: Space.md8),
               TextButton.icon(
-                onPressed: () => ref.invalidate(discoveryProvider),
+                onPressed: () => unawaited(
+                  ref.read(discoveryProvider.notifier).rediscover(),
+                ),
                 icon: const OtoIcon('search', size: 14),
                 label: const Text('Retry'),
               ),
@@ -175,9 +171,11 @@ class _CenteredHomeState extends StatelessWidget {
 }
 
 class _StateIcon extends StatelessWidget {
-  const _StateIcon({required this.name});
+  const _StateIcon({this.name, this.child})
+    : assert(name != null || child != null);
 
-  final String name;
+  final String? name;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +188,7 @@ class _StateIcon extends StatelessWidget {
         borderRadius: BorderRadius.circular(Radius_.card16),
       ),
       alignment: Alignment.center,
-      child: OtoIcon(name, size: 42, color: oto.ink2),
+      child: child ?? OtoIcon(name!, size: 42, color: oto.ink2),
     );
   }
 }

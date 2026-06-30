@@ -47,9 +47,9 @@ class SettingsScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   AppearanceSettings(),
-                  SizedBox(height: 20),
+                  SizedBox(height: Space.section22),
                   DeviceList(),
-                  SizedBox(height: 20),
+                  SizedBox(height: Space.section22),
                   AboutSection(),
                 ],
               ),

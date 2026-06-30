@@ -84,6 +84,15 @@ class _ErrorDiscovery extends Discovery {
       throw rust_api.DiscoveryError.noDevicesFound();
 }
 
+class _SequenceDiscovery extends Discovery {
+  _SequenceDiscovery(this._next);
+
+  final Future<rust_api.Topology> Function() _next;
+
+  @override
+  Future<rust_api.Topology> build() => _next();
+}
+
 class _FixtureHousehold extends HouseholdNotifier {
   _FixtureHousehold(this._household);
 
@@ -141,17 +150,19 @@ void main() {
       expect(container.read(homeViewStateProvider), isA<HomeInitialLoading>());
     });
 
-    test('discovering with cache when discovery is loading and household exists',
-        () {
-      final container = _container(
-        discovery: _LoadingDiscovery.new,
-        household: _cachedHousehold,
-      );
+    test(
+      'discovering with cache when discovery is loading and household exists',
+      () {
+        final container = _container(
+          discovery: _LoadingDiscovery.new,
+          household: _cachedHousehold,
+        );
 
-      final state = container.read(homeViewStateProvider);
-      expect(state, isA<HomeDiscoveringWithCache>());
-      expect((state as HomeDiscoveringWithCache).household, _cachedHousehold);
-    });
+        final state = container.read(homeViewStateProvider);
+        expect(state, isA<HomeDiscoveringWithCache>());
+        expect((state as HomeDiscoveringWithCache).household, _cachedHousehold);
+      },
+    );
 
     test('empty when discovery succeeds with no speakers', () async {
       final container = _container(
@@ -173,59 +184,119 @@ void main() {
       expect((state as HomeReady).household, _cachedHousehold);
     });
 
-    test('ready from real household never carries an empty household', () async {
-      final discovery = _CompletingDiscovery();
-      final container = _containerWithRealHousehold(discovery: () => discovery);
-      final states = <HomeViewState>[];
-      container.listen(
-        homeViewStateProvider,
-        (_, next) => states.add(next),
-        fireImmediately: true,
+    test(
+      'ready from real household never carries an empty household',
+      () async {
+        final discovery = _CompletingDiscovery();
+        final container = _containerWithRealHousehold(
+          discovery: () => discovery,
+        );
+        final states = <HomeViewState>[];
+        container.listen(
+          homeViewStateProvider,
+          (_, next) => states.add(next),
+          fireImmediately: true,
+        );
+
+        discovery.complete(_oneRoomTopology);
+        await pumpEventQueue();
+
+        final readyStates = states.whereType<HomeReady>().toList();
+        expect(readyStates, isNotEmpty);
+        expect(
+          readyStates,
+          everyElement(
+            isA<HomeReady>().having(
+              (state) => state.household.rooms,
+              'rooms',
+              isNotEmpty,
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'error without cache when discovery fails before any household exists',
+      () async {
+        final container = _container(discovery: _ErrorDiscovery.new);
+
+        final state = await _settledState(container);
+        expect(state, isA<HomeDiscoveryFailedNoCache>());
+        expect(
+          (state as HomeDiscoveryFailedNoCache).error,
+          isA<rust_api.DiscoveryError>(),
+        );
+      },
+    );
+
+    test(
+      'error with cache when discovery fails after household exists',
+      () async {
+        final container = _container(
+          discovery: _ErrorDiscovery.new,
+          household: _cachedHousehold,
+        );
+
+        final state = await _settledState(container);
+        expect(state, isA<HomeDiscoveryFailedWithCache>());
+        expect(
+          (state as HomeDiscoveryFailedWithCache).error,
+          isA<rust_api.DiscoveryError>(),
+        );
+        expect(state.household, _cachedHousehold);
+      },
+    );
+
+    test('retry after no-cache failure returns to initial loading', () async {
+      final retry = Completer<rust_api.Topology>();
+      var buildCount = 0;
+      final container = _container(
+        discovery: () => _SequenceDiscovery(() {
+          buildCount++;
+          if (buildCount == 1) {
+            throw rust_api.DiscoveryError.noDevicesFound();
+          }
+          return retry.future;
+        }),
       );
 
-      discovery.complete(_oneRoomTopology);
+      expect(await _settledState(container), isA<HomeDiscoveryFailedNoCache>());
+
+      unawaited(container.read(discoveryProvider.notifier).rediscover());
       await pumpEventQueue();
 
-      final readyStates = states.whereType<HomeReady>().toList();
-      expect(readyStates, isNotEmpty);
-      expect(
-        readyStates,
-        everyElement(
-          isA<HomeReady>().having(
-            (state) => state.household.rooms,
-            'rooms',
-            isNotEmpty,
-          ),
-        ),
-      );
+      expect(container.read(homeViewStateProvider), isA<HomeInitialLoading>());
     });
 
-    test('error without cache when discovery fails before any household exists',
-        () async {
-      final container = _container(discovery: _ErrorDiscovery.new);
+    test(
+      'retry after cached failure returns to discovering with cache',
+      () async {
+        final retry = Completer<rust_api.Topology>();
+        var buildCount = 0;
+        final container = _container(
+          discovery: () => _SequenceDiscovery(() {
+            buildCount++;
+            if (buildCount == 1) {
+              throw rust_api.DiscoveryError.noDevicesFound();
+            }
+            return retry.future;
+          }),
+          household: _cachedHousehold,
+        );
 
-      final state = await _settledState(container);
-      expect(state, isA<HomeDiscoveryFailedNoCache>());
-      expect(
-        (state as HomeDiscoveryFailedNoCache).error,
-        isA<rust_api.DiscoveryError>(),
-      );
-    });
+        expect(
+          await _settledState(container),
+          isA<HomeDiscoveryFailedWithCache>(),
+        );
 
-    test('error with cache when discovery fails after household exists',
-        () async {
-      final container = _container(
-        discovery: _ErrorDiscovery.new,
-        household: _cachedHousehold,
-      );
+        unawaited(container.read(discoveryProvider.notifier).rediscover());
+        await pumpEventQueue();
 
-      final state = await _settledState(container);
-      expect(state, isA<HomeDiscoveryFailedWithCache>());
-      expect(
-        (state as HomeDiscoveryFailedWithCache).error,
-        isA<rust_api.DiscoveryError>(),
-      );
-      expect(state.household, _cachedHousehold);
-    });
+        final state = container.read(homeViewStateProvider);
+        expect(state, isA<HomeDiscoveringWithCache>());
+        expect((state as HomeDiscoveringWithCache).household, _cachedHousehold);
+      },
+    );
   });
 }

@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:oto/src/app_info.dart';
 import 'package:oto/src/state/household.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/prefs.dart';
@@ -40,6 +43,13 @@ Future<SharedPreferences> _pumpSettings(
   );
   await t.pumpAndSettle();
   return prefs;
+}
+
+String _pubspecBaseVersion() {
+  final versionLine = File(
+    'pubspec.yaml',
+  ).readAsLinesSync().firstWhere((line) => line.startsWith('version:'));
+  return versionLine.split(':').last.trim().split('+').first;
 }
 
 void main() {
@@ -91,8 +101,13 @@ void main() {
     await _pumpSettings(t);
 
     expect(find.text('oto'), findsOneWidget);
-    expect(find.text('Version 0.6.1'), findsOneWidget);
+    expect(find.text(AppInfo.version), findsOneWidget);
+    expect(find.text('Version ${AppInfo.version}'), findsNothing);
     expect(find.textContaining('local network'), findsOneWidget);
     expect(find.textContaining('Not affiliated with Sonos'), findsOneWidget);
+  });
+
+  test('AppInfo version stays aligned with pubspec base version', () {
+    expect(AppInfo.version, _pubspecBaseVersion());
   });
 }

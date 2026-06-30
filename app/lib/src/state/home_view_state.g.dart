@@ -48,4 +48,4 @@ final class HomeViewStateProvider
   }
 }
 
-String _$homeViewStateHash() => r'871ddc2f5f3650b9f7d9f138ce8dd40ffb71f34f';
+String _$homeViewStateHash() => r'128d921e587a2a5abc9010e157170b618f3f1568';

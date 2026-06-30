@@ -46,8 +46,15 @@ class HomeReady extends HomeViewState {
 @riverpod
 HomeViewState homeViewState(Ref ref) {
   final discovery = ref.watch(discoveryProvider);
+  final isRetryingDiscovery = ref.watch(discoveryRetryingProvider);
   final household = ref.watch(householdProvider);
   final hasCache = household.rooms.isNotEmpty || household.groups.isNotEmpty;
+
+  if (isRetryingDiscovery && discovery.isLoading) {
+    return hasCache
+        ? HomeDiscoveringWithCache(household)
+        : const HomeInitialLoading();
+  }
 
   if (discovery.hasError) {
     final error = discovery.error ?? StateError('Discovery failed');

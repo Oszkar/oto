@@ -17,11 +17,7 @@ class AboutSection extends StatelessWidget {
             label: AppInfo.name,
             subtitle: AppInfo.description,
           ),
-          SettingsRow(
-            icon: 'tag',
-            label: 'Version',
-            subtitle: 'Version ${AppInfo.version}',
-          ),
+          SettingsRow(icon: 'tag', label: 'Version', subtitle: AppInfo.version),
           SettingsRow(
             icon: 'wifi',
             label: 'Local network only',
