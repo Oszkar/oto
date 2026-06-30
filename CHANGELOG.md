@@ -10,8 +10,8 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 - **Settings.** Replaced the placeholder with appearance controls, a read-only
   devices list, and local-first about information.
-- **Home states.** Added explicit loading, empty, discovery-error, cached-error,
-  and partial-offline presentation states.
+- **Home states.** Added explicit loading, empty, discovery-error, and
+  cached-error states, with offline room and device presentation kept inline.
 
 ## [0.6.1] - 2026-06-20
 

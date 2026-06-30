@@ -90,7 +90,8 @@ Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0
 - **v0.6.1 — Room management.** Group editor (join / leave / ungroup) + Room detail (now-playing + per-room volume; the Sound / TV / System sections need backend that doesn't exist yet, so they're deferred). Also the **Now Playing progress bar**, deferred from v0.6.0: the live `Track` event carries no duration (the SDK's reactive `CurrentTrack` lacks it) and the backend doesn't event position, so the bar must poll `speakerState` (GetPositionInfo) for the track duration + a position anchor and tick locally. The `now_playing.dart` `positionAt` / `NowPlayingPosition` logic is already written + tested for this.
 - **v0.6.2 - Settings + states.** Settings (theme, default layout, about,
   read-only devices list) plus a Home presentation state model for loading,
-  empty, discovery-error, cached-error, and offline states.
+  empty, discovery-error, and cached-error states, with offline room/device
+  presentation.
 - **v0.6.3 — Responsive.** Tablet master-detail + desktop three-pane (Windows is first-class); the bottom strip dissolves into a persistent pane.
 
 The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.
