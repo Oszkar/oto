@@ -18,6 +18,8 @@
 
 A fast, local-first multi-platform Sonos controller, without the bloat of the official app. Flutter UI on top of a Rust core, bridged with [`flutter_rust_bridge`][frb] v2. Discovery and SOAP control stay in Rust via the [`sonos-api`](https://crates.io/crates/sonos-api) crate (part of the [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk) family) and oto's own multi-NIC SSDP. The UI talks to Rust only through generated FRB bindings.
 
+`oto` is primarily built with agentic engineering methods. See [AGENTS.md](AGENTS.md) for agentic contract and guidelines.
+
 > note: `oto` means `sound` in Japanese and it is a palindrome, just like Sonos
 
 ## Features & Capabilities
@@ -94,7 +96,7 @@ winget install evilmartians.lefthook  # Windows
 just install-hooks
 ```
 
-`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that mirrors CI locally once installed: pre-commit runs `scripts/verify_generated.dart` (catches stale generated source) and `cargo fmt --check`; pre-push runs clippy and cargo-nextest; commit-msg enforces a Conventional Commits subject line (CI applies the same gate to PR titles, which are what land on `main` under squash-merge). CI runs the same checks server-side - Lefthook just shortens the local feedback loop.
+`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that mirrors CI locally once installed: pre-commit runs `scripts/verify_generated.dart` (catches stale generated source) and `cargo fmt --check`; pre-push runs clippy and cargo-nextest; commit-msg enforces a Conventional Commits subject line. 
 
 ## Local Network & Firewall Setup
 
