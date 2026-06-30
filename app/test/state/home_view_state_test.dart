@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oto/src/rust/api.dart' as rust_api;
 import 'package:oto/src/state/discovery.dart';
+import 'package:oto/src/state/events.dart';
 import 'package:oto/src/state/home_view_state.dart';
 import 'package:oto/src/state/household.dart';
 import 'package:oto/src/state/model/group_state.dart';
@@ -59,6 +60,15 @@ class _LoadingDiscovery extends Discovery {
   Future<rust_api.Topology> build() => _completer.future;
 }
 
+class _CompletingDiscovery extends Discovery {
+  final _completer = Completer<rust_api.Topology>();
+
+  void complete(rust_api.Topology topology) => _completer.complete(topology);
+
+  @override
+  Future<rust_api.Topology> build() => _completer.future;
+}
+
 class _DataDiscovery extends Discovery {
   _DataDiscovery(this._topology);
 
@@ -108,6 +118,21 @@ Future<HomeViewState> _settledState(ProviderContainer container) async {
   return last!;
 }
 
+ProviderContainer _containerWithRealHousehold({
+  required Discovery Function() discovery,
+}) {
+  final container = ProviderContainer(
+    overrides: [
+      discoveryProvider.overrideWith(discovery),
+      changeEventsProvider.overrideWith(
+        (ref) => const Stream<rust_api.ChangeEventDto>.empty(),
+      ),
+    ],
+  );
+  addTearDown(container.dispose);
+  return container;
+}
+
 void main() {
   group('homeViewStateProvider', () {
     test('initial loading when discovery is loading and no cache exists', () {
@@ -146,6 +171,33 @@ void main() {
       final state = await _settledState(container);
       expect(state, isA<HomeReady>());
       expect((state as HomeReady).household, _cachedHousehold);
+    });
+
+    test('ready from real household never carries an empty household', () async {
+      final discovery = _CompletingDiscovery();
+      final container = _containerWithRealHousehold(discovery: () => discovery);
+      final states = <HomeViewState>[];
+      container.listen(
+        homeViewStateProvider,
+        (_, next) => states.add(next),
+        fireImmediately: true,
+      );
+
+      discovery.complete(_oneRoomTopology);
+      await pumpEventQueue();
+
+      final readyStates = states.whereType<HomeReady>().toList();
+      expect(readyStates, isNotEmpty);
+      expect(
+        readyStates,
+        everyElement(
+          isA<HomeReady>().having(
+            (state) => state.household.rooms,
+            'rooms',
+            isNotEmpty,
+          ),
+        ),
+      );
     });
 
     test('error without cache when discovery fails before any household exists',
