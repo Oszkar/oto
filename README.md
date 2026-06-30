@@ -96,7 +96,7 @@ winget install evilmartians.lefthook  # Windows
 just install-hooks
 ```
 
-`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that mirrors CI locally once installed: pre-commit runs `scripts/verify_generated.dart` (catches stale generated source) and `cargo fmt --check`; pre-push runs clippy and cargo-nextest; commit-msg enforces a Conventional Commits subject line. 
+`just` runs dev recipes on demand (`gen`, `check`, `test`, `build-*`, `install-hooks`). `lefthook` is the optional git-hook runner that mirrors CI locally once installed: pre-commit runs `scripts/verify_generated.dart` (catches stale generated source) and `cargo fmt --check`; pre-push runs clippy and cargo-nextest; commit-msg enforces a Conventional Commits subject line.
 
 ## Local Network & Firewall Setup
 
