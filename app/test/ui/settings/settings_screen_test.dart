@@ -15,12 +15,15 @@ import '../home/_fixtures.dart';
 Future<SharedPreferences> _pumpSettings(WidgetTester t) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
+  final household = mixedHousehold();
+  final rooms = Map.of(household.rooms)
+    ..['OF'] = household.rooms['OF']!.copyWith(model: 'Move 2');
   await t.pumpWidget(
     ProviderScope(
       overrides: [
         prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
         householdProvider.overrideWith(
-          () => FixtureHousehold(mixedHousehold()),
+          () => FixtureHousehold(household.copyWith(rooms: rooms)),
         ),
       ],
       child: MaterialApp(
@@ -53,5 +56,29 @@ void main() {
     expect(repo.themeMode, ThemeMode.dark);
     expect(repo.accent, Accent.amber);
     expect(repo.homeLayout, HomeLayout.stack);
+  });
+
+  testWidgets('devices list shows rooms, models, grouping, and offline state', (
+    t,
+  ) async {
+    await _pumpSettings(t);
+
+    expect(find.text('Office'), findsOneWidget);
+    expect(find.text('Move 2'), findsOneWidget);
+    expect(find.text('Bedroom'), findsOneWidget);
+    expect(find.text('Patio'), findsOneWidget);
+    expect(find.text('Offline'), findsOneWidget);
+    expect(find.text('Standalone'), findsNWidgets(3));
+  });
+
+  testWidgets('about section shows local-first identity and version', (
+    t,
+  ) async {
+    await _pumpSettings(t);
+
+    expect(find.text('oto'), findsOneWidget);
+    expect(find.text('Version 0.6.1'), findsOneWidget);
+    expect(find.textContaining('local network'), findsOneWidget);
+    expect(find.textContaining('Not affiliated with Sonos'), findsOneWidget);
   });
 }
