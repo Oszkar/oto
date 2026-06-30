@@ -6,7 +6,7 @@ import '../../state/model/household.dart';
 import '../../state/prefs.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../settings/settings_stub.dart';
+import '../settings/settings_screen.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_mark.dart';
 
@@ -86,7 +86,9 @@ class HomeHeader extends ConsumerWidget {
               const SizedBox(width: Space.lg10),
               _GearButton(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const SettingsStub()),
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SettingsScreen(),
+                  ),
                 ),
               ),
             ],
