@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oto/src/state/household.dart';
+import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/prefs.dart';
 import 'package:oto/src/theme/accent.dart';
 import 'package:oto/src/theme/oto_theme.dart';
@@ -12,18 +13,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../home/_fixtures.dart';
 
-Future<SharedPreferences> _pumpSettings(WidgetTester t) async {
+Future<SharedPreferences> _pumpSettings(
+  WidgetTester t, {
+  Household? household,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final prefs = await SharedPreferences.getInstance();
-  final household = mixedHousehold();
-  final rooms = Map.of(household.rooms)
-    ..['OF'] = household.rooms['OF']!.copyWith(model: 'Move 2');
+  final fixture = household ?? mixedHousehold();
+  final rooms = Map.of(fixture.rooms);
+  if (rooms.containsKey('OF')) {
+    rooms['OF'] = rooms['OF']!.copyWith(model: 'Move 2');
+  }
   await t.pumpWidget(
     ProviderScope(
       overrides: [
         prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
         householdProvider.overrideWith(
-          () => FixtureHousehold(household.copyWith(rooms: rooms)),
+          () => FixtureHousehold(fixture.copyWith(rooms: rooms)),
         ),
       ],
       child: MaterialApp(
@@ -68,7 +74,15 @@ void main() {
     expect(find.text('Bedroom'), findsOneWidget);
     expect(find.text('Patio'), findsOneWidget);
     expect(find.text('Offline'), findsOneWidget);
-    expect(find.text('Standalone'), findsNWidgets(3));
+    expect(find.text('Standalone'), findsNWidgets(2));
+  });
+
+  testWidgets('devices list shows grouped room count', (t) async {
+    await _pumpSettings(t, household: groupEditHousehold());
+
+    expect(find.text('Living Room'), findsOneWidget);
+    expect(find.text('Kitchen'), findsOneWidget);
+    expect(find.text('2 rooms'), findsNWidgets(2));
   });
 
   testWidgets('about section shows local-first identity and version', (

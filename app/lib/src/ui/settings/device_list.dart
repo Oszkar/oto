@@ -39,7 +39,6 @@ class DeviceList extends ConsumerWidget {
               group: room.groupId == null
                   ? null
                   : household.groups[room.groupId],
-              roomsById: household.rooms,
               last: index == rooms.length - 1,
             ),
         ],
@@ -53,13 +52,11 @@ class DeviceRow extends StatelessWidget {
     super.key,
     required this.room,
     required this.group,
-    required this.roomsById,
     required this.last,
   });
 
   final RoomState room;
   final GroupState? group;
-  final Map<String, RoomState> roomsById;
   final bool last;
 
   @override
@@ -68,29 +65,18 @@ class DeviceRow extends StatelessWidget {
       icon: room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
       label: room.name,
       subtitle: room.model ?? 'Speaker',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StatusPill(label: _groupStatus),
-          if (!room.online) ...[
-            const SizedBox(width: Space.xs4),
-            const _StatusPill(label: 'Offline', danger: true),
-          ],
-        ],
-      ),
+      trailing: _StatusPill(label: _statusLabel, danger: !room.online),
       last: last,
     );
   }
 
-  String get _groupStatus {
+  String get _statusLabel {
+    if (!room.online) return 'Offline';
+
     final group = this.group;
     if (group == null || group.memberIds.length <= 1) return 'Standalone';
 
-    final names = group.memberIds
-        .map((id) => roomsById[id]?.name)
-        .whereType<String>()
-        .toList();
-    return '${names.length} rooms';
+    return '${group.memberIds.length} rooms';
   }
 }
 
