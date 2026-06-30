@@ -14,7 +14,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.5.1 | released | **Group operations** — form/break, group volume/mute (commands + read/event), fast topology refresh after a regroup (no SSDP re-discovery) |
 | v0.6.0 | released | **UI: foundation + Home + Now Playing** — theming, source-model state architecture, adaptive shell, persistence |
 | v0.6.1 | released | **UI: room management** — group editor + room detail |
-| v0.6.2 | planned | **UI: settings + states** — settings + empty/error/loading/offline states |
+| v0.6.2 | planned | **UI: settings + states** - settings plus a Home presentation state model |
 | v0.6.3 | planned | **UI: responsive** — tablet master-detail, desktop three-pane |
 | v0.7.0 | planned | **Hardening + polish** — SSDP hardening, cleanup TODOs, dogfooding finds |
 | v1.0   | future | Stable — externally tested, packaged |
@@ -88,7 +88,10 @@ Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0
 
 - **v0.6.0 — Foundation + Home + Now Playing (released).** Theming (tokens → `ThemeData` + a `ThemeExtension` for the non-Material roles; bundled Geist; light/dark; user-selectable accent), the **source-model state architecture** (a keep-alive `householdProvider` that accumulates per-room / per-group state from discovery + the live event stream, a `sourcesFromRooms` derived selector, and optimistic command updates), the adaptive app shell, and local prefs persistence — then Home (Cards / Stack toggle) + Now Playing. This phase also de-risks the one genuinely novel piece: the event → view-model layer.
 - **v0.6.1 — Room management.** Group editor (join / leave / ungroup) + Room detail (now-playing + per-room volume; the Sound / TV / System sections need backend that doesn't exist yet, so they're deferred). Also the **Now Playing progress bar**, deferred from v0.6.0: the live `Track` event carries no duration (the SDK's reactive `CurrentTrack` lacks it) and the backend doesn't event position, so the bar must poll `speakerState` (GetPositionInfo) for the track duration + a position anchor and tick locally. The `now_playing.dart` `positionAt` / `NowPlayingPosition` logic is already written + tested for this.
-- **v0.6.2 — Settings + states.** Settings (theme, default layout, about, read-only devices list) + the empty / error / loading / offline states.
+- **v0.6.2 - Settings + states.** Settings (theme, default layout, about,
+  read-only devices list) plus a Home presentation state model for loading,
+  empty, discovery-error, and cached-error states, with offline room/device
+  presentation.
 - **v0.6.3 — Responsive.** Tablet master-detail + desktop three-pane (Windows is first-class); the bottom strip dissolves into a persistent pane.
 
 The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.

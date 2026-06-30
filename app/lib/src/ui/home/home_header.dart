@@ -6,7 +6,8 @@ import '../../state/model/household.dart';
 import '../../state/prefs.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../settings/settings_stub.dart';
+import '../settings/settings_section.dart';
+import '../settings/settings_screen.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_mark.dart';
 
@@ -86,7 +87,9 @@ class HomeHeader extends ConsumerWidget {
               const SizedBox(width: Space.lg10),
               _GearButton(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const SettingsStub()),
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SettingsScreen(),
+                  ),
                 ),
               ),
             ],
@@ -112,66 +115,23 @@ class _LayoutToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Space.xs4),
-      decoration: BoxDecoration(
-        color: context.oto.fillStrong,
-        borderRadius: BorderRadius.circular(Radius_.input9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Segment(
-            key: const Key('layout-toggle-cards'),
-            icon: 'layoutGrid',
-            active: value == HomeLayout.cards,
-            onTap: () => onChanged(HomeLayout.cards),
-          ),
-          const SizedBox(width: 2),
-          _Segment(
-            key: const Key('layout-toggle-stack'),
-            icon: 'list',
-            active: value == HomeLayout.stack,
-            onTap: () => onChanged(HomeLayout.stack),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Segment extends StatelessWidget {
-  const _Segment({
-    super.key,
-    required this.icon,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String icon;
-  final bool active;
-  final VoidCallback onTap;
-
-  static const double _w = 40;
-  static const double _h = 36;
-
-  @override
-  Widget build(BuildContext context) {
-    final oto = context.oto;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        width: _w,
-        height: _h,
-        decoration: BoxDecoration(
-          color: active ? oto.surface : Colors.transparent,
-          borderRadius: BorderRadius.circular(Radius_.control7),
-          boxShadow: active ? Elevation.card : null,
+    return SettingsSegmentedControl<HomeLayout>(
+      value: value,
+      onChanged: onChanged,
+      segmentWidth: 40,
+      segmentHeight: 36,
+      segments: const [
+        SettingsSegment(
+          key: Key('layout-toggle-cards'),
+          value: HomeLayout.cards,
+          icon: 'layoutGrid',
         ),
-        alignment: Alignment.center,
-        child: OtoIcon(icon, size: 14, color: active ? oto.ink : oto.inkMute),
-      ),
+        SettingsSegment(
+          key: Key('layout-toggle-stack'),
+          value: HomeLayout.stack,
+          icon: 'list',
+        ),
+      ],
     );
   }
 }

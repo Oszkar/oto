@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
 import '../widgets/oto_icon.dart';
+import 'about_section.dart';
+import 'appearance_settings.dart';
+import 'device_list.dart';
 
-/// Placeholder Settings screen. The real Settings UI lands in v0.6.2; for now
-/// the Home header's gear pushes this so the route exists and is testable.
-class SettingsStub extends StatelessWidget {
-  const SettingsStub({super.key});
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final oto = context.oto;
     return OtoScaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -27,22 +26,35 @@ class SettingsStub extends StatelessWidget {
             child: Row(
               children: [
                 IconButton(
+                  key: const Key('settings-back'),
                   onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const OtoIcon('chevronDown'),
+                  icon: const OtoIcon('chevronLeft'),
                 ),
                 const SizedBox(width: Space.xs4),
                 Text('Settings', style: Theme.of(context).textTheme.titleLarge),
               ],
             ),
           ),
-          const Spacer(),
-          Center(
-            child: Text(
-              'Coming in v0.6.2',
-              style: TextStyles.body.copyWith(color: oto.inkMute),
+          const Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                Space.screen18,
+                0,
+                Space.screen18,
+                Space.section22,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppearanceSettings(),
+                  SizedBox(height: Space.section22),
+                  DeviceList(),
+                  SizedBox(height: Space.section22),
+                  AboutSection(),
+                ],
+              ),
             ),
           ),
-          const Spacer(),
         ],
       ),
     );

@@ -20,7 +20,8 @@ part of 'discovery.dart';
 ///
 /// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// retry via `ref.invalidate` / `ref.refresh`.
+/// user-facing retries go through [Discovery.rediscover] so the UI can show a
+/// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
@@ -48,7 +49,8 @@ final discoveryProvider = DiscoveryProvider._();
 ///
 /// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// retry via `ref.invalidate` / `ref.refresh`.
+/// user-facing retries go through [Discovery.rediscover] so the UI can show a
+/// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
@@ -74,7 +76,8 @@ final class DiscoveryProvider
   ///
   /// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
   /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-  /// retry via `ref.invalidate` / `ref.refresh`.
+  /// user-facing retries go through [Discovery.rediscover] so the UI can show a
+  /// fresh scanning state immediately.
   ///
   /// On Android the SSDP window is wrapped in a held
   /// `WifiManager.MulticastLock` — without it Android drops the inbound
@@ -105,7 +108,7 @@ final class DiscoveryProvider
   Discovery create() => Discovery();
 }
 
-String _$discoveryHash() => r'3f8c5a8bd62eee7b8169184b8035ae753eb1ed8d';
+String _$discoveryHash() => r'2ee71c461c16e222f70a5050d0f26cb8e380aad3';
 
 /// LAN discovery + the v0.5.1 topology fast-path.
 ///
@@ -119,7 +122,8 @@ String _$discoveryHash() => r'3f8c5a8bd62eee7b8169184b8035ae753eb1ed8d';
 ///
 /// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// retry via `ref.invalidate` / `ref.refresh`.
+/// user-facing retries go through [Discovery.rediscover] so the UI can show a
+/// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
@@ -144,6 +148,58 @@ abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
             as $ClassProviderElement<
               AnyNotifier<AsyncValue<rust_api.Topology>, rust_api.Topology>,
               AsyncValue<rust_api.Topology>,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
+@ProviderFor(DiscoveryRetrying)
+final discoveryRetryingProvider = DiscoveryRetryingProvider._();
+
+final class DiscoveryRetryingProvider
+    extends $NotifierProvider<DiscoveryRetrying, bool> {
+  DiscoveryRetryingProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'discoveryRetryingProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$discoveryRetryingHash();
+
+  @$internal
+  @override
+  DiscoveryRetrying create() => DiscoveryRetrying();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$discoveryRetryingHash() => r'f379d808a43d4ec90d3cb90690e553c103419d0b';
+
+abstract class _$DiscoveryRetrying extends $Notifier<bool> {
+  bool build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<bool, bool>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<bool, bool>,
+              bool,
               Object?,
               Object?
             >;

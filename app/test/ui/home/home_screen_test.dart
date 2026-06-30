@@ -15,11 +15,15 @@
 // `settingsProvider`; that needs `prefsRepositoryProvider` overridden with a
 // loaded SharedPreferences, and a real Navigator (not a bare Scaffold) so the
 // strip tap can push the Now Playing route.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:oto/src/rust/api.dart' as rust_api;
 import 'package:oto/src/state/commands.dart';
+import 'package:oto/src/state/discovery.dart';
 import 'package:oto/src/state/household.dart';
 import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
@@ -33,6 +37,7 @@ import 'package:oto/src/ui/home/bottom_strip.dart';
 import 'package:oto/src/ui/home/group_card.dart';
 import 'package:oto/src/ui/home/home_header.dart';
 import 'package:oto/src/ui/home/home_screen.dart';
+import 'package:oto/src/ui/home/home_states.dart';
 import 'package:oto/src/ui/home/room_card.dart';
 import 'package:oto/src/ui/home/room_row.dart';
 import 'package:oto/src/ui/now_playing/now_playing_screen.dart';
@@ -106,6 +111,44 @@ Household _twoRoomGroupPlusTwoSolos() {
   );
 }
 
+const _emptyTopology = rust_api.Topology(speakers: [], groups: []);
+
+const _oneRoomTopology = rust_api.Topology(
+  speakers: [
+    rust_api.DiscoveredSpeaker(
+      id: 'OF',
+      roomName: 'Office',
+      ip: '10.0.0.10',
+      model: 'Move 2',
+    ),
+  ],
+  groups: [
+    rust_api.DiscoveredGroup(id: 'G_OF', coordinator: 'OF', members: ['OF']),
+  ],
+);
+
+class _LoadingDiscovery extends Discovery {
+  final _completer = Completer<rust_api.Topology>();
+
+  @override
+  Future<rust_api.Topology> build() => _completer.future;
+}
+
+class _DataDiscovery extends Discovery {
+  _DataDiscovery(this._topology);
+
+  final rust_api.Topology _topology;
+
+  @override
+  Future<rust_api.Topology> build() async => _topology;
+}
+
+class _ErrorDiscovery extends Discovery {
+  @override
+  Future<rust_api.Topology> build() async =>
+      throw rust_api.DiscoveryError.noDevicesFound();
+}
+
 /// Build [child] inside a ProviderScope seeded with [household] + a loaded
 /// SharedPreferences (so `settingsProvider` resolves for the header/layout),
 /// the oto theme, and spy playback/grouping controllers. Uses a real
@@ -116,8 +159,10 @@ Household _twoRoomGroupPlusTwoSolos() {
 Future<void> _pump(
   WidgetTester t,
   Widget child, {
-  required Household household,
+  Household household = const Household(),
   HomeLayout layout = HomeLayout.cards,
+  Discovery Function()? discovery,
+  bool settle = true,
 }) async {
   SharedPreferences.setMockInitialValues({
     if (layout == HomeLayout.stack) 'homeLayout': 'stack',
@@ -126,6 +171,9 @@ Future<void> _pump(
   await t.pumpWidget(
     ProviderScope(
       overrides: [
+        discoveryProvider.overrideWith(
+          discovery ?? () => _DataDiscovery(_oneRoomTopology),
+        ),
         householdProvider.overrideWith(() => FixtureHousehold(household)),
         prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
         playbackControllerProvider.overrideWith((ref) => SpyPlayback(ref)),
@@ -140,10 +188,72 @@ Future<void> _pump(
       ),
     ),
   );
-  await t.pumpAndSettle();
+  if (settle) {
+    await t.pumpAndSettle();
+  } else {
+    await t.pump();
+  }
 }
 
 void main() {
+  testWidgets(
+    'initial discovery loading before cache exists shows loading state only',
+    (t) async {
+      await _pump(
+        t,
+        const HomeScreen(),
+        discovery: _LoadingDiscovery.new,
+        settle: false,
+      );
+
+      expect(find.byType(HomeLoadingState), findsOneWidget);
+      expect(find.text('Scanning your network'), findsOneWidget);
+      expect(find.byType(BottomStrip), findsNothing);
+    },
+  );
+
+  testWidgets('empty discovery shows empty state', (t) async {
+    await _pump(
+      t,
+      const HomeScreen(),
+      discovery: () => _DataDiscovery(_emptyTopology),
+    );
+
+    expect(find.byType(HomeEmptyState), findsOneWidget);
+    expect(find.text('No speakers yet'), findsOneWidget);
+    expect(find.byType(BottomStrip), findsNothing);
+  });
+
+  testWidgets('discovery error with no cache shows error state', (t) async {
+    await _pump(t, const HomeScreen(), discovery: _ErrorDiscovery.new);
+
+    expect(find.byType(HomeErrorState), findsOneWidget);
+    expect(find.text('Could not find your system'), findsOneWidget);
+    expect(find.byType(BottomStrip), findsNothing);
+  });
+
+  testWidgets(
+    'discovery error with cache keeps Home content and shows status banner',
+    (t) async {
+      await _pump(
+        t,
+        const HomeScreen(),
+        household: _twoRoomGroupPlusTwoSolos(),
+        discovery: _ErrorDiscovery.new,
+      );
+
+      expect(find.byType(HomeStatusBanner), findsOneWidget);
+      expect(
+        find.text('Refresh failed. Showing cached state.'),
+        findsOneWidget,
+      );
+      expect(find.byType(HomeHeader), findsOneWidget);
+      expect(find.byType(GroupCard), findsOneWidget);
+      expect(find.byType(RoomCard), findsNWidgets(2));
+      expect(find.byType(BottomStrip), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'groups render as one group card, solo rooms as room cards (no dupes)',
     (t) async {
