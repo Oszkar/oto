@@ -85,7 +85,7 @@ class _HomeContent extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const HomeHeader(),
-            if (banner != null) banner!,
+            ?banner,
             Expanded(
               child: SingleChildScrollView(
                 // Bottom padding leaves room for the floating strip so the
