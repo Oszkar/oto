@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -72,6 +73,61 @@ void main() {
     expect(repo.themeMode, ThemeMode.dark);
     expect(repo.accent, Accent.amber);
     expect(repo.homeLayout, HomeLayout.stack);
+  });
+
+  testWidgets('accent swatches expose labels, selection, and keyboard action', (
+    t,
+  ) async {
+    final semantics = t.ensureSemantics();
+    try {
+      final prefs = await _pumpSettings(t);
+
+      final teal = t.getSemantics(
+        find.byKey(const Key('settings-accent-teal')),
+      );
+      expect(teal.label, 'Teal accent');
+      expect(teal.flagsCollection.isButton, isTrue);
+      expect(teal.flagsCollection.isSelected, Tristate.isTrue);
+      expect(teal.flagsCollection.isFocused, isNot(Tristate.none));
+
+      final amber = t.getSemantics(
+        find.byKey(const Key('settings-accent-amber')),
+      );
+      expect(amber.label, 'Amber accent');
+      expect(amber.flagsCollection.isButton, isTrue);
+      expect(amber.flagsCollection.isSelected, Tristate.isFalse);
+      expect(amber.flagsCollection.isFocused, isNot(Tristate.none));
+
+      await t.tap(find.byKey(const Key('settings-accent-amber')));
+      await t.pumpAndSettle();
+      final repo = PrefsRepository(prefs);
+      expect(repo.accent, Accent.amber);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('segmented controls expose selectable semantics', (t) async {
+    final semantics = t.ensureSemantics();
+    try {
+      await _pumpSettings(t);
+
+      final system = t.getSemantics(
+        find.byKey(const Key('settings-theme-system')),
+      );
+      expect(system.label, 'System');
+      expect(system.flagsCollection.isButton, isTrue);
+      expect(system.flagsCollection.isSelected, Tristate.isTrue);
+      expect(system.flagsCollection.isFocused, isNot(Tristate.none));
+
+      final dark = t.getSemantics(find.byKey(const Key('settings-theme-dark')));
+      expect(dark.label, 'Dark');
+      expect(dark.flagsCollection.isButton, isTrue);
+      expect(dark.flagsCollection.isSelected, Tristate.isFalse);
+      expect(dark.flagsCollection.isFocused, isNot(Tristate.none));
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('devices list shows rooms, models, grouping, and offline state', (

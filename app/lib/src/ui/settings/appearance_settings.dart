@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../state/prefs.dart';
 import '../../theme/accent.dart';
@@ -123,29 +124,66 @@ class _AccentSwatch extends StatelessWidget {
     final brightness = Theme.of(context).brightness;
     final color = brightness == Brightness.dark ? accent.dark : accent.light;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return Semantics(
+      label: '${_labelFor(accent)} accent',
+      button: true,
+      selected: active,
+      focusable: true,
       onTap: onTap,
+      excludeSemantics: true,
       child: Container(
         width: 32,
         height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: active ? oto.ink : oto.lineStrong,
-            width: active ? 2 : 1,
-          ),
-        ),
         alignment: Alignment.center,
-        child: Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: active
-              ? OtoIcon('check', size: 13, color: oto.onAccent)
-              : null,
+        child: FocusableActionDetector(
+          shortcuts: const {
+            SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+          },
+          actions: {
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (_) {
+                onTap();
+                return null;
+              },
+            ),
+          },
+          mouseCursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: active ? oto.ink : oto.lineStrong,
+                  width: active ? 2 : 1,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                child: active
+                    ? OtoIcon('check', size: 13, color: oto.onAccent)
+                    : null,
+              ),
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  String _labelFor(Accent accent) {
+    return switch (accent) {
+      Accent.teal => 'Teal',
+      Accent.indigo => 'Indigo',
+      Accent.amber => 'Amber',
+      Accent.slate => 'Slate',
+    };
   }
 }

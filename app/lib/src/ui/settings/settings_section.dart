@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
@@ -189,34 +190,59 @@ class _SegmentButton<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oto = context.oto;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return Semantics(
+      label: segment.label ?? segment.icon,
+      button: true,
+      selected: active,
+      focusable: true,
       onTap: () => onChanged(segment.value),
-      child: Container(
-        width: width,
-        height: height,
-        constraints: width == null ? BoxConstraints(minWidth: minWidth) : null,
-        padding: width == null
-            ? const EdgeInsets.symmetric(horizontal: Space.lg10)
-            : EdgeInsets.zero,
-        decoration: BoxDecoration(
-          color: active ? oto.surface : Colors.transparent,
-          borderRadius: BorderRadius.circular(Radius_.control7),
-          boxShadow: active ? Elevation.card : null,
+      excludeSemantics: true,
+      child: FocusableActionDetector(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              onChanged(segment.value);
+              return null;
+            },
+          ),
+        },
+        mouseCursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(segment.value),
+          child: Container(
+            width: width,
+            height: height,
+            constraints: width == null
+                ? BoxConstraints(minWidth: minWidth)
+                : null,
+            padding: width == null
+                ? const EdgeInsets.symmetric(horizontal: Space.lg10)
+                : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: active ? oto.surface : Colors.transparent,
+              borderRadius: BorderRadius.circular(Radius_.control7),
+              boxShadow: active ? Elevation.card : null,
+            ),
+            alignment: Alignment.center,
+            child: segment.icon == null
+                ? Text(
+                    segment.label!,
+                    style: TextStyles.label.copyWith(
+                      color: active ? oto.ink : oto.inkMute,
+                    ),
+                  )
+                : OtoIcon(
+                    segment.icon!,
+                    size: 14,
+                    color: active ? oto.ink : oto.inkMute,
+                  ),
+          ),
         ),
-        alignment: Alignment.center,
-        child: segment.icon == null
-            ? Text(
-                segment.label!,
-                style: TextStyles.label.copyWith(
-                  color: active ? oto.ink : oto.inkMute,
-                ),
-              )
-            : OtoIcon(
-                segment.icon!,
-                size: 14,
-                color: active ? oto.ink : oto.inkMute,
-              ),
       ),
     );
   }
