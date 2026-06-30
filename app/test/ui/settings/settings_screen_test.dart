@@ -5,6 +5,8 @@ import 'package:oto/src/state/household.dart';
 import 'package:oto/src/state/prefs.dart';
 import 'package:oto/src/theme/accent.dart';
 import 'package:oto/src/theme/oto_theme.dart';
+import 'package:oto/src/ui/settings/about_section.dart';
+import 'package:oto/src/ui/settings/device_list.dart';
 import 'package:oto/src/ui/settings/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,6 +38,9 @@ void main() {
     await _pumpSettings(t);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
+    expect(find.byKey(const Key('settings-back')), findsOneWidget);
+    expect(find.byType(DeviceList), findsOneWidget);
+    expect(find.byType(AboutSection), findsOneWidget);
   });
 
   testWidgets('theme, accent, and layout controls persist choices', (t) async {
