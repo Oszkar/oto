@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../state/household.dart';
+import '../../state/home_view_state.dart';
 import '../../state/model/group_state.dart';
 import '../../state/model/household.dart';
 import '../../state/model/source.dart';
@@ -13,6 +13,7 @@ import '../shell/oto_scaffold.dart';
 import 'bottom_strip.dart';
 import 'group_card.dart';
 import 'home_header.dart';
+import 'home_states.dart';
 import 'room_card.dart';
 import 'room_row.dart';
 
@@ -33,46 +34,83 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final layout = ref.watch(settingsProvider.select((s) => s.layout));
-    final household = ref.watch(householdProvider);
-    final groups = _sortedGroups(household);
-
-    return OtoScaffold(
-      body: Stack(
-        children: [
-          // Header + scrollable body fill the scaffold; the strip floats over
-          // the bottom (Positioned below).
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const HomeHeader(),
-              Expanded(
-                child: SingleChildScrollView(
-                  // Bottom padding leaves room for the floating strip so the
-                  // last card never hides behind it.
-                  padding: const EdgeInsets.fromLTRB(
-                    Space.gutter12,
-                    0,
-                    Space.gutter12,
-                    96,
-                  ),
-                  child: layout == HomeLayout.cards
-                      ? _CardsBody(groups: groups)
-                      : _StackBody(groups: groups),
-                ),
-              ),
-            ],
+    final state = ref.watch(homeViewStateProvider);
+    return switch (state) {
+      HomeInitialLoading() => const OtoScaffold(body: HomeLoadingState()),
+      HomeEmpty() => const OtoScaffold(body: HomeEmptyState()),
+      HomeDiscoveryFailedNoCache(:final error) => OtoScaffold(
+        body: HomeErrorState(error: error),
+      ),
+      HomeDiscoveringWithCache(:final household) => OtoScaffold(
+        body: _HomeContent(
+          household: household,
+          banner: HomeStatusBanner(
+            message: 'Scanning again. Showing cached state.',
+            showRetry: false,
           ),
+        ),
+      ),
+      HomeDiscoveryFailedWithCache(:final household) => OtoScaffold(
+        body: _HomeContent(
+          household: household,
+          banner: const HomeStatusBanner(
+            message: 'Refresh failed. Showing cached state.',
+          ),
+        ),
+      ),
+      HomeReady(:final household) => OtoScaffold(
+        body: _HomeContent(household: household),
+      ),
+    };
+  }
+}
+
+class _HomeContent extends ConsumerWidget {
+  const _HomeContent({required this.household, this.banner});
+
+  final Household household;
+  final Widget? banner;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final layout = ref.watch(settingsProvider.select((s) => s.layout));
+    final groups = _sortedGroups(household);
+    final hasActiveStream = groups.any((g) => g.hasActiveStream);
+
+    return Stack(
+      children: [
+        // Header + scrollable body fill the scaffold; the strip floats over
+        // the bottom (Positioned below).
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const HomeHeader(),
+            if (banner != null) banner!,
+            Expanded(
+              child: SingleChildScrollView(
+                // Bottom padding leaves room for the floating strip so the
+                // last card never hides behind it.
+                padding: EdgeInsets.fromLTRB(
+                  Space.gutter12,
+                  0,
+                  Space.gutter12,
+                  hasActiveStream ? 96 : Space.gutter12,
+                ),
+                child: layout == HomeLayout.cards
+                    ? _CardsBody(groups: groups)
+                    : _StackBody(groups: groups),
+              ),
+            ),
+          ],
+        ),
+        if (hasActiveStream)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: BottomStrip(
-              onTapSource: (s) => _openNowPlaying(context, s),
-            ),
+            child: BottomStrip(onTapSource: (s) => _openNowPlaying(context, s)),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -112,7 +150,9 @@ class _CardsBody extends StatelessWidget {
     void flushSolos() {
       for (var i = 0; i < pendingSolos.length; i += 2) {
         final left = pendingSolos[i];
-        final right = (i + 1 < pendingSolos.length) ? pendingSolos[i + 1] : null;
+        final right = (i + 1 < pendingSolos.length)
+            ? pendingSolos[i + 1]
+            : null;
         children.add(_soloRow(left, right));
       }
       pendingSolos.clear();

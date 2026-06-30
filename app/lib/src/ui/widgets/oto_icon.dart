@@ -55,6 +55,7 @@ class OtoIcon extends StatelessWidget {
     'check': LucideIcons.check,
     'more': LucideIcons.moreHorizontal,
     'search': LucideIcons.search,
+    'wifiOff': LucideIcons.wifiOff,
     'plus': LucideIcons.plus,
     'moon': LucideIcons.moon,
     'layoutGrid': LucideIcons.layoutGrid,
