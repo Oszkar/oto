@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+### Added
+
+- **Settings.** Replaced the placeholder with appearance controls, a read-only
+  devices list, and local-first about information.
+- **Home states.** Added explicit loading, empty, discovery-error, cached-error,
+  and partial-offline presentation states.
+
 ## [0.6.1] - 2026-06-20
 
 v0.6.1 - Room management. The Now Playing progress bar (deferred from v0.6.0) arrives, and you can now group and ungroup rooms and open a focused per-room screen. The second slice of the phased v0.6 UI; settings and responsive layouts follow in v0.6.2-.3.
