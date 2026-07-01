@@ -63,7 +63,7 @@ mapped onto cargo target triples internally. Until then: patch.
 
 ---
 
-## 2. sonos-sdk fork — drop unused `native-tls` backend
+## 2. sonos-sdk fork - drop unused `native-tls` backend
 
 **Repo:** [`Oszkar/sonos-sdk`](https://github.com/Oszkar/sonos-sdk) (fork of [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk)) **Branch/tag:** `oto-android-tls-patch` / `oto-android-tls-patch-v0.5.2`, cut from upstream tag `sonos-api-v0.5.2`. **Wired in via:** `[patch.crates-io]` in `native/Cargo.toml`, pinned to commit `181e6bf6ac23d57a2c5b0f0766f220b55866afd6`. Also requires `native/deny.toml`'s `[sources] allow-git` to list the fork URL.
 
@@ -98,7 +98,7 @@ Three crates in the `sonos-sdk` family declare `reqwest = "0.11"` with implicit 
 
 ### Upstream tracking
 
-No upstream issue filed yet (the user will file one). If filed, link it here.
+No upstream issue filed yet. Link it here once one exists.
 
 ---
 

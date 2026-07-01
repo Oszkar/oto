@@ -99,7 +99,7 @@ oto-mock = { workspace = true }
 # `native-tls` → `openssl-sys`) via three `sonos-sdk` crates
 # (sonos-sdk-discovery, sonos-sdk-callback-server, sonos-sdk-stream),
 # which forced a vendored (Perl-driven) OpenSSL build on Android and a
-# WSL/Linux/macOS build-host requirement — see CONTRIBUTING.md history.
+# WSL/Linux/macOS build-host requirement - see CONTRIBUTING.md history.
 # We make zero HTTPS calls anywhere in this graph (ureq + raw UDP for
 # oto's own SOAP/SSDP; the sonos-sdk crates only ever hit plain
 # http:// on the LAN, and two of the three didn't even reference
@@ -112,7 +112,7 @@ oto-mock = { workspace = true }
 # TLS backend. Tracked in LOCAL_PATCHES.md #2; retire when upstream
 # lands a fix. Pinned to an exact commit for reproducibility.
 #
-# `sonos-api` is included unmodified — it isn't patched itself, but it
+# `sonos-api` is included unmodified - it isn't patched itself, but it
 # path-depends on `sonos-discovery` within the same fork checkout. Without
 # also redirecting `sonos-api` here, the graph ends up with two distinct
 # `sonos-api` instances (registry vs git, e.g. via sonos-sdk-event-manager
