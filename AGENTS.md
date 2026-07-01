@@ -47,7 +47,7 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 | Rust edition / MSRV | 2024 / 1.94 (workspace `Cargo.toml`); CI pins toolchain `1.94.0`                                                                                                                                                                                                                                                                                                                                                         |
 | Workspace           | one Cargo workspace at `native/`; root `oto_native` cdylib + `crates/{core,wire,mock,app}`; shared deps via `[workspace.dependencies]`                                                                                                                                                                                                                                                                                   |
 | `oto-core`          | pure: no networking/async/third-party deps; typed newtypes; manual `Error` enum (no `thiserror`); `#![deny(unsafe_code)]`                                                                                                                                                                                                                                                                                                |
-| `sonos-api`         | pinned **`=0.5.2`** (exact) - direct UPnP SOAP (ZoneGroupTopology / AVTransport / RenderingControl). `sonos-api` remains the direct-SOAP crate; v0.4 events use the same SDK family's reactive state/event crates. The `sonos-sdk` umbrella was dropped at v0.3. Don't bump without re-checking the SOAP surface + the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76) |
+| `sonos-api`         | pinned **`=0.5.2`** (exact) - direct UPnP SOAP (ZoneGroupTopology / AVTransport / RenderingControl). `sonos-api` remains the direct-SOAP crate; v0.4 events use the same SDK family's reactive state/event crates. The `sonos-sdk` umbrella was dropped at v0.3. Resolves through a local fork via `[patch.crates-io]` (unused `native-tls` stripped; version string stays `=0.5.2` - see `LOCAL_PATCHES.md` #2). Don't bump without re-checking the SOAP surface + the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76) |
 | FRB surface         | `native/src/api.rs` is the bridge surface (delegates inward, exposes commands and streams events); **target:** sync commands return `Result`, events as a `Stream` (v0.4; SDK reactive event path per ARCHITECTURE / sonos-notes). Extending the surface needs an ARCHITECTURE.md update first                                                                                                                           |
 | Frontend            | Flutter + Riverpod 3 (codegen); providers in `app/lib/src/state/` via `@riverpod`, consumed from `ConsumerWidget`. `app/pubspec.yaml` `version:` is the canonical project version                                                                                                                                                                                                                                        |
 | Generated source    | FRB bindings (`app/lib/src/rust/`, `native/src/frb_generated*`) and `*.g.dart` are committed; regenerate with `just gen` after editing `native/src/api.rs` or any `@riverpod` provider                                                                                                                                                                                                                                   |
@@ -61,8 +61,6 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 **Errors & logging.** `oto-core` stays deps-free: manual `Error` enum, no `thiserror`, no `unwrap()` outside tests. `oto-wire`/`oto-app` may use `anyhow` at boundaries and `tracing` for logs (never `log`; never one-line-per-event at info). Discovery / `sonos-api` SOAP failures are retryable, not fatal.
 
 **Legal.** oto controls the user's own Sonos devices on their LAN via UPnP. Not affiliated with Sonos. Local-only - no cloud, account, or scraping. If a device is unreachable, degrade gracefully; never circumvent device controls.
-
-**Secrets.** None in scope - no API keys, tokens, or credentials (local LAN control only). Don't introduce a secret surface without raising it first.
 
 ## 4. Repo Map
 
@@ -84,13 +82,13 @@ oto/
 └── .github/workflows/           ci.yml + build.yml
 ```
 
-`oto-app` owns runtime state. v0.1: the active `Wire` + `discover` routing; v0.2 added playback/state command routing; v0.3 routes group-addressed commands over real ZoneGroupTopology (the `sonos-api`↔`oto_core` mapping lives in `oto-wire`, never via `SonosSystem` - its topology layer was hardware-proven lazy/non-deterministic and the `sonos-sdk` umbrella was dropped at v0.3); v0.4 adds the event-pump threads; v0.5 added topology change events, SubscriptionError health surfacing, Android MulticastLock, and model repopulation; v0.5.1 added group form/break commands, group volume/mute commands, and fast topology refresh.
+`oto-app` owns runtime state. v0.1: the active `Wire` + `discover` routing; v0.2 added playback/state command routing; v0.3 routes group-addressed commands over real ZoneGroupTopology (the `sonos-api`↔`oto_core` mapping lives in `oto-wire`, never via `SonosSystem` - its topology layer was hardware-proven lazy/non-deterministic and the `sonos-sdk` umbrella was dropped at v0.3); v0.4 adds the event-pump threads; v0.5 added topology change events, SubscriptionError health surfacing, Android MulticastLock, and model repopulation; v0.5.1 added group form/break commands, group volume/mute commands, and fast topology refresh; v0.6.1 added the `track_position` read (Wire trait + FRB surface, backing the Now Playing progress bar).
 
 ### Architectural boundaries - agents must respect
 
 1. **`oto-core` is pure.** Domain types only; no networking/async/deps. Other crates depend inward on it; it depends on nothing.
 2. **`oto-wire` is the only crate that touches Sonos SDK / network integration crates.** Sole direct `sonos-api` integration point: runs its own multi-interface SSDP and reads topology / playback / state via direct `sonos-api` SOAP (ZoneGroupTopology / AVTransport / RenderingControl). v0.4 live events also terminate in `oto-wire` via the SDK reactive state/event layer - **never** `SonosSystem` (the `sonos-sdk` umbrella was dropped at v0.3; its topology layer was hardware-proven lazy / non-deterministic). `sonos-sdk-discovery`'s `0.0.0.0` SSDP is broken on multi-NIC hosts ([`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76)) - which is why `oto-wire` owns SSDP.
-3. **`oto-mock` is the test `Wire` impl** - deterministic fixtures, no network; integration tests run without real Sonos.
+3. **`oto-mock` is the test `Wire` impl** - deterministic fixtures, no network, `#![deny(unsafe_code)]`; integration tests run without real Sonos.
 4. **`oto-app` is the sole owner of runtime state**; SDK / `sonos-api` types are translated to `oto_core` types before crossing inward.
 5. **`oto_native` is glue only.** No business logic in `native/src/api.rs`; it delegates inward. Commands sync, events `Stream`.
 6. **Frontend talks to the backend only via the FRB command/event surface.** Adding a command/event needs an ARCHITECTURE.md update first.
@@ -144,6 +142,6 @@ Before claiming work is done:
 - Correct first, agreeable second. No busywork docs/status files unless asked.
 - Persist until done or genuinely blocked; if blocked, say what you tried and what you need.
 - DO NOT use em-dashes (—), use regular hyphens (-) instead including in code, PR descriptions, everywhere.
-- DO NOT use the ellipsis Uincode character at the end of sentences, use three periods (...) instead.
+- DO NOT use the ellipsis Unicode character at the end of sentences, use three periods (...) instead.
 - Avoid exposing project management jargon, task IDs, etc. into commit messages, PR titles, and publicly facing content (UI, changelog, etc.)
 - Soft wrapping is highly desired in markdown.

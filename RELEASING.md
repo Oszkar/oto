@@ -11,11 +11,12 @@
 ## Cutting a release
 
 1. Choose the version per SemVer. Pre-1.0: breaking changes bump MINOR.
-2. Bump `app/pubspec.yaml` `version:` (including `+BUILD`) and `native/Cargo.toml` `[workspace.package] version` to match.
-3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a fresh empty `## [Unreleased]` above it.
-4. Commit: `chore(release): vX.Y.Z`. Merge to `main` as usual.
-5. Tag the merge commit on `main`: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-6. Create the GitHub Release for that tag; use the CHANGELOG section as the release notes.
+2. Bump `app/pubspec.yaml` `version:` (including `+BUILD`), `native/Cargo.toml` `[workspace.package] version`, and `app/lib/src/app_info.dart`'s `version` constant to match. `flutter test` catches drift on the last one (`settings_screen_test.dart`'s "AppInfo version stays aligned with pubspec base version").
+3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a fresh empty `## [Unreleased]` above it. Update the compare-link footer too: repoint `[Unreleased]` at `compare/vX.Y.Z...HEAD` and add a `[X.Y.Z]: compare/<prev>...vX.Y.Z` line.
+4. Flip the shipped version's status to "released" in `docs/ROADMAP.md`'s status table, and add its checkmark in `README.md`'s milestone table - same commit, so neither doc is ever stale relative to what's tagged.
+5. Commit: `chore: release vX.Y.Z`. Merge to `main` as usual.
+6. Tag the merge commit on `main`: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+7. Create the GitHub Release for that tag; use the CHANGELOG section as the release notes.
 
 ## Deliberately deferred
 
