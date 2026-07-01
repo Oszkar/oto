@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-07-01
+
+v0.6.2 - Settings and honest states. A real Settings screen replaces the
+placeholder, and Home now presents explicit loading, empty, discovery-error,
+and cached-error states instead of assuming the happy path. The third slice of
+the phased v0.6 UI; responsive layouts follow in v0.6.3.
+
 ### Added
 
 - **Settings.** Replaced the placeholder with appearance controls, a read-only
@@ -20,6 +27,13 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
   default (two never referenced it in source at all) - it forced a
   vendored, Perl-driven OpenSSL build on Android for HTTPS calls the app
   never makes. `just build-apk` now builds natively on Windows.
+
+### Known issues
+
+- **Settings' "Default home layout" mirrors the live Home toggle** rather than
+  acting as an independent startup default - changing Home's Cards/Stack view
+  updates what Settings shows, and vice versa. Splitting the persisted default
+  from the current session's layout is deferred.
 
 ## [0.6.1] - 2026-06-20
 
@@ -176,7 +190,8 @@ v0.1 - Foundation + LAN discovery. Identity-only discovery proven end-to-end thr
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone - fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/Oszkar/oto/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Oszkar/oto/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Oszkar/oto/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Oszkar/oto/compare/v0.5.0...v0.5.1

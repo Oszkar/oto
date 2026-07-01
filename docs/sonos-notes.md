@@ -9,6 +9,7 @@ Audience: anyone touching `oto-wire`. If you're touching the GENA event path, th
 ## Dependency pin
 
 - `sonos-api = "=0.5.2"` (exact). Don't bump without re-checking the SOAP surface here and the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76).
+- `sonos-api` and three SDK crates resolve through a local fork ([`Oszkar/sonos-sdk`](https://github.com/Oszkar/sonos-sdk)) via `[patch.crates-io]` in `native/Cargo.toml` - strips an unused `native-tls` backend that forced a vendored Android OpenSSL build. The version string stays `=0.5.2`; only the source is redirected. Re-cut the fork branch and update the pinned commit if the `=0.5.2` pin ever moves. Full rationale and re-application procedure: [`LOCAL_PATCHES.md`](../LOCAL_PATCHES.md) #2.
 - `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl`. Already in the locked graph via `sonos-api` — unify, don't bump.
 - The `sonos-sdk` umbrella and its `test-support` tree are **not** in oto-wire's dependency graph (dropped at v0.3). v0.4 live events add the upstream reactive state/event crates from the same SDK family; `sonos-api` remains the only Sonos crate used for direct SOAP commands and discovery.
 - Raw `callback-server` + own change-detection was prototyped but not chosen; oto uses the upstream reactive stack — see [Event model](#event-model-v04-load-bearing).

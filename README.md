@@ -128,7 +128,7 @@ These generated source files are committed. That keeps a fresh clone usable in I
 
 ## CI
 
-Two workflows under `.github/workflows/`:
+Two of the four workflows under `.github/workflows/` gate code changes (the other two are repo automation - PR-title linting and Dependabot auto-merge, both covered in [CONTRIBUTING.md](CONTRIBUTING.md)):
 
 - `ci.yml` - verifies generated source freshness, then runs lint + tests for Flutter and Rust on every PR (Ubuntu runners). Jobs are split so they run in parallel and can be re-run independently. CI does not exercise the assembled Flutter UI or load the FRB cdylib end-to-end; the Windows desktop build and the `integration_test/` UI flow are verified by hand on a dev machine each release.
 - `build.yml` - debug-builds the Android APK on pushes to `main` to catch toolchain rot. No Windows job - fluctuating runner minutes aren't worth it for a hobby project; dev machines catch Windows issues. (Worth revisiting as the v0.6.3 desktop layout makes Windows a first-class target.)
@@ -154,8 +154,8 @@ Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust�
 | v0.5 ✓   | **Hardening before UI** - topology change events, Android `MulticastLock`, model repopulate, in-band subscription-failure surfacing. Group form/break deferred to v0.5.1.                                                |
 | v0.5.1 ✓ | **Group operations** - form/break (join/leave), group volume/mute (commands + live events), and fast topology refresh after a regroup (~tens of ms, no SSDP).                                                            |
 | v0.6.0 ✓ | **UI: foundation + Home + Now Playing** - theming, source-model state architecture, adaptive shell, persistence. Backend-true core: controls without backing are deferred, not faked.                                    |
-| v0.6.1   | **UI: room management** - group editor + room detail.                                                                                                                                                                    |
-| v0.6.2   | **UI: settings + states** - settings + empty / error / loading / offline.                                                                                                                                                |
+| v0.6.1 ✓ | **UI: room management** - group editor + room detail.                                                                                                                                                                    |
+| v0.6.2 ✓ | **UI: settings + states** - settings + empty / error / loading / offline.                                                                                                                                                |
 | v0.6.3   | **UI: responsive** - tablet master-detail, desktop three-pane.                                                                                                                                                           |
 | v0.7     | **Hardening + polish** - SSDP hardening, cleanup TODOs, dogfooding finds.                                                                                                                                                |
 | v1.0     | **Stable** - externally tested, packaged (signed Android, Windows). Maintenance-only thereafter.                                                                                                                         |
