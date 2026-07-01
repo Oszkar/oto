@@ -13,6 +13,14 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 - **Home states.** Added explicit loading, empty, discovery-error, and
   cached-error states, with offline room and device presentation kept inline.
 
+### Fixed
+
+- **Android builds no longer require WSL/Linux/macOS.** Dropped an unused
+  `native-tls` TLS backend that three `sonos-sdk` dependencies pulled in by
+  default (two never referenced it in source at all) - it forced a
+  vendored, Perl-driven OpenSSL build on Android for HTTPS calls the app
+  never makes. `just build-apk` now builds natively on Windows.
+
 ## [0.6.1] - 2026-06-20
 
 v0.6.1 - Room management. The Now Playing progress bar (deferred from v0.6.0) arrives, and you can now group and ungroup rooms and open a focused per-room screen. The second slice of the phased v0.6 UI; settings and responsive layouts follow in v0.6.2-.3.

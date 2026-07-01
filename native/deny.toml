@@ -14,11 +14,10 @@ ignore = [
     # pinned =0.5.2.
     # TODO(v0.6): re-evaluate if the sonos-api pin is changed.
     { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api (paste → sonos-api → oto-wire); no upgrade path on pinned sonos-api =0.5.2" },
-    # `rustls-pemfile` v1: superseded by v2; used transitively via
-    # sonos-api → sonos-sdk-discovery → reqwest 0.11. No upgrade path on
-    # pinned sonos-api =0.5.2.
-    # TODO(v0.6): re-evaluate if sonos-api pin is changed.
-    { id = "RUSTSEC-2025-0134", reason = "transitive via sonos-api → sonos-sdk-discovery → reqwest 0.11; no upgrade path on pinned sonos-api =0.5.2" },
+    # RUSTSEC-2025-0134 (rustls-pemfile v1) formerly ignored here: it came
+    # in via sonos-sdk-discovery's default-tls reqwest feature. Retired
+    # 2026-07-01 when that feature was dropped (LOCAL_PATCHES.md #2) and
+    # rustls-pemfile left the dependency graph entirely.
 ]
 
 [licenses]
@@ -56,3 +55,6 @@ allow-wildcard-paths = true
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# LOCAL PATCH (oto) fork — see native/Cargo.toml [patch.crates-io] and
+# LOCAL_PATCHES.md #2.
+allow-git = ["https://github.com/Oszkar/sonos-sdk"]

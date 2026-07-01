@@ -95,24 +95,34 @@ oto-core = { workspace = true }
 # third-party transitive deps; `oto-mock` is std-only).
 oto-mock = { workspace = true }
 
-# Android cross-compile only. `sonos-api` pulls `reqwest` with default
-# features → `native-tls` → `openssl-sys`, and the Android NDK ships no
-# system OpenSSL, so the `aarch64/x86_64-linux-android` build fails to
-# build `openssl-sys`. Depending on `openssl` with `vendored` here flips
-# the transitively-shared `openssl-sys` to build a vendored OpenSSL with
-# the NDK toolchain. We make zero HTTPS calls (ureq + raw UDP); this
-# exists solely so the Android link succeeds. Not pulled on Windows
-# (native-tls uses SChannel there). Stays as long as sonos-api (pinned
-# =0.5.2) pulls reqwest/native-tls.
+# `sonos-api` transitively pulled `reqwest` with default features (→
+# `native-tls` → `openssl-sys`) via three `sonos-sdk` crates
+# (sonos-sdk-discovery, sonos-sdk-callback-server, sonos-sdk-stream),
+# which forced a vendored (Perl-driven) OpenSSL build on Android and a
+# WSL/Linux/macOS build-host requirement — see CONTRIBUTING.md history.
+# We make zero HTTPS calls anywhere in this graph (ureq + raw UDP for
+# oto's own SOAP/SSDP; the sonos-sdk crates only ever hit plain
+# http:// on the LAN, and two of the three didn't even reference
+# `reqwest` in source). Patched below instead of carrying the vendored
+# OpenSSL workaround. See LOCAL_PATCHES.md #2.
+
+[patch.crates-io]
+# LOCAL PATCH (oto): fork of tatimblin/sonos-sdk with default-features
+# disabled / the dependency removed on the 3 crates' unused `reqwest`
+# TLS backend. Tracked in LOCAL_PATCHES.md #2; retire when upstream
+# lands a fix. Pinned to an exact commit for reproducibility.
 #
-# BUILD HOST: build the Android APK on Linux/macOS/WSL — vendored OpenSSL
-# needs a full Perl 5 (Configure is Perl-driven), which those ship by
-# default; Windows-native needs msys2 Perl and is discouraged (see
-# CONTRIBUTING.md "Android cross-builds"). Validated on WSL→Pixel 7a
-# 2026-05-30. Post-1.0: a rustls [patch.crates-io] migration would drop
-# this vendored-OpenSSL/Perl dependency entirely (ROADMAP open items).
-[target.'cfg(target_os = "android")'.dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
+# `sonos-api` is included unmodified — it isn't patched itself, but it
+# path-depends on `sonos-discovery` within the same fork checkout. Without
+# also redirecting `sonos-api` here, the graph ends up with two distinct
+# `sonos-api` instances (registry vs git, e.g. via sonos-sdk-event-manager
+# and sonos-sdk-state, which are unpatched and still resolve `sonos-api`
+# from crates.io) and their types don't unify. Patching all four keeps a
+# single `sonos-api` instance across the whole graph.
+sonos-api = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
+sonos-sdk-discovery = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
+sonos-sdk-callback-server = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
+sonos-sdk-stream = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
 
 [dev-dependencies]
 oto-app = { workspace = true }
