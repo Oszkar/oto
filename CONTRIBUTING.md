@@ -15,19 +15,15 @@ just test       # cargo nextest + flutter test
 
 Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed. Always run `just gen` before committing changes to inputs. The Lefthook hooks (`just install-hooks`) mirror CI locally: pre-commit catches stale generated source and rustfmt drift, pre-push runs clippy + cargo-nextest, and commit-msg enforces Conventional Commits. CI's `Generated source freshness` job catches stale generated source server-side.
 
-## Android cross-builds - build on Linux, macOS, or WSL
+## Android cross-builds
 
-**Recommended: build the Android APK from Linux, macOS, or WSL.** The Android NDK ships no system OpenSSL, so the workspace's `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }` compiles OpenSSL from source, and OpenSSL's `Configure` is Perl-driven. Linux/macOS ship a complete Perl 5 by default, so `just build-apk` works out of the box; CI uses `ubuntu-latest` for the same reason. WSL counts as Linux here.
+`just build-apk` builds natively on Windows, Linux, or macOS - no WSL required.
 
-Validated 2026-05-30 on WSL2 (Ubuntu) → real Pixel 7a, debug APK, discovery + events end-to-end (see [docs/evidence/v0.5-android-debug.md](docs/evidence/v0.5-android-debug.md)). Toolchain there: Java 21, Android SDK platform 36 + build-tools 36, NDK auto-selected by Gradle via `flutter.ndkVersion` (install nothing manually - the first build pulls the exact NDK it wants). For a phone attached to Windows, bridge it into WSL with wireless adb (`adb tcpip 5555` on the host, `adb connect <phone-ip>:5555` inside WSL).
+That wasn't always true. Through 2026-06, the workspace carried `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }`, because `sonos-api` transitively pulled `reqwest` with default features (→ `native-tls` → `openssl-sys`) via three `sonos-sdk` crates, and the Android NDK ships no system OpenSSL. That forced a from-source, Perl-driven OpenSSL build, and Windows' common Perl distributions (Strawberry Perl, Git's bundled msys Perl) don't produce output OpenSSL's `Configure` accepts - so building the APK meant Linux, macOS, or WSL.
 
-**Windows-native cross-build is discouraged.** It works only with a Unix-aware Perl carrying the full standard module set, which is per-developer toolchain debt:
+Investigation showed the TLS backend was never actually used: two of the three `sonos-sdk` crates pulling `reqwest` didn't reference it anywhere in their source, and the third only ever fetches plain `http://` device-description XML (Sonos never serves HTTPS on a LAN). oto now carries a local patch (see [LOCAL_PATCHES.md](LOCAL_PATCHES.md) #2) that strips the unused TLS backend via a forked `sonos-sdk`, wired in through `[patch.crates-io]` in `native/Cargo.toml`. `openssl`/`openssl-sys`/`native-tls` no longer appear in the dependency graph at all, so there's no vendored OpenSSL build and no Perl requirement on any host.
 
-- **Strawberry Perl** (MSWin32) - fails: "doesn't produce Unix-like paths" (OpenSSL's Linux config wants forward slashes).
-- **Git-for-Windows' bundled msys perl** - right path semantics, but minimal; missing standard modules like `Locale::Maketext::Simple` that `Configure` loads via `IPC::Cmd`.
-- **msys2** (`winget install MSYS2.MSYS2`, then prepend `C:\msys64\usr\bin` to PATH so `cargo` finds its full Perl) is the only Windows path that works - kept here for reference, but prefer WSL.
-
-Post-1.0 follow-up (per ROADMAP project-bound open items): a rustls migration via `[patch.crates-io]` would drop the vendored-OpenSSL/Perl requirement entirely. Document any new build-target prereqs here as they surface.
+Toolchain needed: Java 21, Android SDK platform 36 + build-tools 36, NDK auto-selected by Gradle via `flutter.ndkVersion` (install nothing manually - the first build pulls the exact NDK it wants). For a phone attached over USB, `adb` works directly - no WSL bridging needed.
 
 ## Version pin policy
 

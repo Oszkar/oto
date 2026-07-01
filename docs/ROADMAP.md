@@ -123,6 +123,12 @@ v0.5 ships the **reactive strategy** (emit on command-dispatch failure): a speak
 
 Offer as a PR against [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76). Acceptance is upside-only: oto-wire keeps its own SSDP either way (the [`oto-wire` boundary](ARCHITECTURE.md#crates) — only crate that touches the SDK), so there's no fork-maintenance burden if upstream declines.
 
+### Upstream TLS-feature cleanup
+
+oto now carries a local `sonos-sdk` fork (see [LOCAL_PATCHES.md](../LOCAL_PATCHES.md) #2) that strips an unused/unnecessary `native-tls` backend from three `sonos-sdk` crates - it was forcing a vendored, Perl-driven OpenSSL build on Android for a TLS backend nothing ever invokes at runtime. The fix is small (drop or feature-gate one `reqwest` line per crate) and evidence-backed (two of the three crates never reference `reqwest` in source at all).
+
+Filing this upstream is a follow-up, not yet done. Same shape as the SSDP item above: acceptance is upside-only, oto keeps the local patch either way.
+
 ### IPv6 SSDP coverage
 
 `oto-wire/src/ssdp.rs` enumerates IPv4 interfaces only and joins `239.255.255.250:1900`. Sonos S2 devices also advertise on `[FF02::C]:1900`. An IPv6-only LAN — or one where the v4 path is blocked/firewalled per-NIC — would currently see zero speakers.
