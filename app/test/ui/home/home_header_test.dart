@@ -6,7 +6,7 @@ import 'package:oto/src/state/prefs.dart';
 import 'package:oto/src/theme/accent.dart';
 import 'package:oto/src/theme/oto_theme.dart';
 import 'package:oto/src/ui/home/home_header.dart';
-import 'package:oto/src/ui/settings/settings_stub.dart';
+import 'package:oto/src/ui/settings/settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '_fixtures.dart';
@@ -64,10 +64,10 @@ void main() {
     expect(find.byKey(const Key('header-search')), findsNothing);
   });
 
-  testWidgets('tapping the gear pushes the Settings stub route', (t) async {
+  testWidgets('tapping the gear pushes the Settings route', (t) async {
     await _pumpHeader(t);
     await t.tap(find.byKey(const Key('header-settings')));
     await t.pumpAndSettle();
-    expect(find.byType(SettingsStub), findsOneWidget);
+    expect(find.byType(SettingsScreen), findsOneWidget);
   });
 }

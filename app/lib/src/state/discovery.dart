@@ -20,7 +20,8 @@ part 'discovery.g.dart';
 ///
 /// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
 /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// retry via `ref.invalidate` / `ref.refresh`.
+/// user-facing retries go through [Discovery.rediscover] so the UI can show a
+/// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
 /// `WifiManager.MulticastLock` — without it Android drops the inbound
@@ -47,6 +48,23 @@ class Discovery extends _$Discovery {
     return rust_api.discover();
   }
 
+  /// User-initiated full SSDP discovery retry.
+  ///
+  /// `ref.invalidate(discoveryProvider)` keeps the previous error attached to
+  /// the in-flight loading state. Publishing a fresh loading state first makes
+  /// retry feedback visible immediately instead of leaving the old error UI on
+  /// screen for the SSDP window.
+  Future<void> rediscover() async {
+    final retrying = ref.read(discoveryRetryingProvider.notifier);
+    retrying.setRetrying(true);
+    state = const AsyncLoading();
+    try {
+      state = await AsyncValue.guard(build);
+    } finally {
+      retrying.setRetrying(false);
+    }
+  }
+
   /// Fast topology re-pull (no SSDP). Replaces the wire via
   /// Rust `refreshTopology()` (re-pull authoritative topology, ~tens of ms, then a
   /// fresh seeded wire) and publishes the new `Topology`. Setting `state` to a
@@ -61,6 +79,14 @@ class Discovery extends _$Discovery {
   Future<void> refreshTopology() async {
     state = AsyncValue.data(await rust_api.refreshTopology());
   }
+}
+
+@riverpod
+class DiscoveryRetrying extends _$DiscoveryRetrying {
+  @override
+  bool build() => false;
+
+  void setRetrying(bool value) => state = value;
 }
 
 /// Run a multicast-lock op, swallowing a `PlatformException` (lock is
