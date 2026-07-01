@@ -8,10 +8,7 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [0.6.2] - 2026-07-01
 
-v0.6.2 - Settings and honest states. A real Settings screen replaces the
-placeholder, and Home now presents explicit loading, empty, discovery-error,
-and cached-error states instead of assuming the happy path. The third slice of
-the phased v0.6 UI; responsive layouts follow in v0.6.3.
+v0.6.2 - Settings and honest states. A real Settings screen replaces the placeholder, and Home now presents explicit loading, empty, discovery-error, and cached-error states instead of assuming the happy path. The third slice of the phased v0.6 UI; responsive layouts follow in v0.6.3.
 
 ### Added
 
