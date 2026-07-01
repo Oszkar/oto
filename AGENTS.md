@@ -62,8 +62,6 @@ Correctness > Cleverness · Simplicity > Flexibility · Precision > Agreeability
 
 **Legal.** oto controls the user's own Sonos devices on their LAN via UPnP. Not affiliated with Sonos. Local-only - no cloud, account, or scraping. If a device is unreachable, degrade gracefully; never circumvent device controls.
 
-**Secrets.** None in scope - no API keys, tokens, or credentials (local LAN control only). Don't introduce a secret surface without raising it first.
-
 ## 4. Repo Map
 
 ```
