@@ -19,27 +19,40 @@ use crate::{control, grouping, ssdp};
 
 const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// The wire's interior-mutable resolution caches, populated together by
+/// `discover()` / `refresh_topology()` and read by the command/read paths.
+///
+/// Held behind ONE `Mutex` (not four) so a snapshot install is a single atomic
+/// swap and every multi-field read (e.g. group -> coordinator -> addr) resolves
+/// under one lock. With separate mutexes a command racing an in-flight
+/// re-populate could observe one map already updated and another not yet,
+/// yielding a transient, spurious `NotFound`.
+#[derive(Default)]
+struct Caches {
+    /// Maps `SpeakerId` -> `SocketAddr(ip, 1400)` for rendering-control calls.
+    id_to_addr: HashMap<SpeakerId, SocketAddr>,
+    /// Maps `GroupId` -> coordinator `SpeakerId` for transport-control calls.
+    group_to_coordinator: HashMap<GroupId, SpeakerId>,
+    /// Maps each member `SpeakerId` -> its group coordinator `SpeakerId`
+    /// (oto-core D2). Coordinator maps to itself.
+    speaker_to_coordinator: HashMap<SpeakerId, SpeakerId>,
+    /// Maps `SpeakerId` -> its `room_name`. Used only by the v0.4 event pump to
+    /// populate the SDK's `sonos_discovery::Device` records.
+    id_to_name: HashMap<SpeakerId, String>,
+}
+
 /// Production wire implementation backed by `sonos_api` direct SOAP calls.
 ///
-/// Interior-mutable caches (`id_to_addr`, `group_to_coordinator`,
-/// `speaker_to_coordinator`, `id_to_name`) are populated by `discover()`
-/// and used by the playback/read methods + the v0.4 event pump.
-/// All methods return `Err(WireError::NotFound)` if called before a
-/// successful `discover()` has populated the relevant entry.
+/// The interior-mutable [`Caches`] are populated by `discover()` and used by
+/// the playback/read methods + the v0.4 event pump. All methods return
+/// `Err(WireError::NotFound)` if called before a successful `discover()` has
+/// populated the relevant entry.
 pub struct SonosWire {
     /// Shared `sonos_api` SOAP client. Held on the wire so each command
     /// reuses it instead of paying `SonosClient::new()` per call.
     client: SonosClient,
-    /// Maps `SpeakerId` → `SocketAddr(ip, 1400)` for rendering-control calls.
-    id_to_addr: Mutex<HashMap<SpeakerId, SocketAddr>>,
-    /// Maps `GroupId` → coordinator `SpeakerId` for transport-control calls.
-    group_to_coordinator: Mutex<HashMap<GroupId, SpeakerId>>,
-    /// Maps each member `SpeakerId` → its group coordinator `SpeakerId`
-    /// (oto-core D2). Coordinator maps to itself.
-    speaker_to_coordinator: Mutex<HashMap<SpeakerId, SpeakerId>>,
-    /// Maps `SpeakerId` → its `room_name`. Used only by the v0.4 event
-    /// pump to populate the SDK's `sonos_discovery::Device` records.
-    id_to_name: Mutex<HashMap<SpeakerId, String>>,
+    /// Resolution caches behind a single lock (see [`Caches`]).
+    caches: Mutex<Caches>,
     /// v0.4 event pump + the still-takeable `Receiver`. `None` until
     /// `subscribe_speakers` is called; `Some` thereafter for the
     /// lifetime of the wire. The `Receiver` is taken once via
@@ -92,10 +105,7 @@ impl SonosWire {
     fn with_seed_ips(seed_ips: Vec<IpAddr>) -> Self {
         Self {
             client: SonosClient::new(),
-            id_to_addr: Mutex::new(HashMap::new()),
-            group_to_coordinator: Mutex::new(HashMap::new()),
-            speaker_to_coordinator: Mutex::new(HashMap::new()),
-            id_to_name: Mutex::new(HashMap::new()),
+            caches: Mutex::new(Caches::default()),
             events_state: Mutex::new(None),
             topology_requested: AtomicBool::new(false),
             seed_ips,
@@ -106,46 +116,26 @@ impl SonosWire {
     /// for `EventPump::spawn`. Returns `NoSpeakersDiscovered` if the
     /// caches are empty (called before discover()).
     fn snapshot_for_pump(&self) -> Result<PumpInputs, WireError> {
-        let id_to_addr = self
-            .id_to_addr
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
-        if id_to_addr.is_empty() {
+        let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        if caches.id_to_addr.is_empty() {
             return Err(WireError::NoSpeakersDiscovered);
         }
-        let group_to_coord = self
+        // Build coord_to_group by inverting group_to_coordinator.
+        let coord_to_group = caches
             .group_to_coordinator
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
-        let speaker_to_coord = self
-            .speaker_to_coordinator
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
-        let id_to_name = self
-            .id_to_name
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
-
-        // Build coord_to_group by inverting group_to_coord.
-        let coord_to_group = group_to_coord
-            .into_iter()
-            .map(|(g, coord)| (coord, g))
+            .iter()
+            .map(|(g, coord)| (coord.clone(), g.clone()))
             .collect();
-
-        let speaker_ips = id_to_addr
-            .into_iter()
-            .map(|(sid, addr)| (sid, addr.ip()))
+        let speaker_ips = caches
+            .id_to_addr
+            .iter()
+            .map(|(sid, addr)| (sid.clone(), addr.ip()))
             .collect();
-
         Ok(PumpInputs {
             speaker_ips,
             coord_to_group,
-            speaker_to_coord,
-            speaker_names: id_to_name,
+            speaker_to_coord: caches.speaker_to_coordinator.clone(),
+            speaker_names: caches.id_to_name.clone(),
             watch_topology: self.topology_requested.load(Ordering::SeqCst),
         })
     }
@@ -154,28 +144,33 @@ impl SonosWire {
     ///
     /// Returns `Err(WireError::NotFound)` if unknown or pre-discovery.
     fn resolve_speaker(&self, speaker: &SpeakerId) -> Result<SocketAddr, WireError> {
-        self.id_to_addr
+        self.caches
             .lock()
             .unwrap_or_else(|p| p.into_inner())
+            .id_to_addr
             .get(speaker)
             .copied()
             .ok_or_else(|| WireError::NotFound(speaker.to_string()))
     }
 
-    /// Resolve a `GroupId` → coordinator `SpeakerId` → `SocketAddr`.
+    /// Resolve a `GroupId` -> coordinator `SpeakerId` -> `SocketAddr`, under a
+    /// single lock so the group and address maps are read as one consistent
+    /// snapshot (a re-populate can't interleave between the two reads).
     ///
     /// Returns `Err(WireError::NotFound)` if the group or its coordinator
     /// address is unknown (pre-discovery or stale cache).
     fn resolve_group(&self, group: &GroupId) -> Result<SocketAddr, WireError> {
-        let coordinator = {
-            self.group_to_coordinator
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .get(group)
-                .cloned()
-                .ok_or_else(|| WireError::NotFound(group.to_string()))?
-        };
-        self.resolve_speaker(&coordinator)
+        let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        let coordinator = caches
+            .group_to_coordinator
+            .get(group)
+            .cloned()
+            .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        caches
+            .id_to_addr
+            .get(&coordinator)
+            .copied()
+            .ok_or_else(|| WireError::NotFound(coordinator.to_string()))
     }
 
     /// Populate the interior-mutable caches from a discovery snapshot.
@@ -183,40 +178,26 @@ impl SonosWire {
     /// the real cache-population path, not a hand-duplicated copy (a
     /// duplicate would still pass if `discover()`'s update were removed).
     fn populate_caches(&self, snapshot: &DiscoverySnapshot) {
-        {
-            let mut cache = self.id_to_addr.lock().unwrap_or_else(|p| p.into_inner());
-            cache.clear();
-            for speaker in &snapshot.speakers {
-                cache.insert(speaker.id.clone(), SocketAddr::new(speaker.ip, 1400));
-            }
+        // One lock, one atomic swap: a racing command sees either the whole old
+        // topology or the whole new one, never a half-updated mix.
+        let mut caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        *caches = Caches::default();
+        for speaker in &snapshot.speakers {
+            caches
+                .id_to_addr
+                .insert(speaker.id.clone(), SocketAddr::new(speaker.ip, 1400));
+            caches
+                .id_to_name
+                .insert(speaker.id.clone(), speaker.room_name.clone());
         }
-        {
-            let mut cache = self
+        for group in &snapshot.groups {
+            caches
                 .group_to_coordinator
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-            cache.clear();
-            for group in &snapshot.groups {
-                cache.insert(group.id.clone(), group.coordinator.clone());
-            }
-        }
-        {
-            let mut cache = self
-                .speaker_to_coordinator
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-            cache.clear();
-            for group in &snapshot.groups {
-                for m in &group.members {
-                    cache.insert(m.clone(), group.coordinator.clone());
-                }
-            }
-        }
-        {
-            let mut cache = self.id_to_name.lock().unwrap_or_else(|p| p.into_inner());
-            cache.clear();
-            for speaker in &snapshot.speakers {
-                cache.insert(speaker.id.clone(), speaker.room_name.clone());
+                .insert(group.id.clone(), group.coordinator.clone());
+            for m in &group.members {
+                caches
+                    .speaker_to_coordinator
+                    .insert(m.clone(), group.coordinator.clone());
             }
         }
     }
@@ -227,17 +208,19 @@ impl SonosWire {
     /// own addr — correct for a solo speaker, and otherwise yields the
     /// same `NotFound` as v0.2 until `discover()` has populated the caches.
     fn resolve_transport_addr(&self, speaker: &SpeakerId) -> Result<SocketAddr, WireError> {
-        let coord = {
-            self.speaker_to_coordinator
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .get(speaker)
-                .cloned()
-        };
-        match coord {
-            Some(c) => self.resolve_speaker(&c),
-            None => self.resolve_speaker(speaker),
-        }
+        // Single lock: coordinator lookup + address lookup read one consistent
+        // snapshot. Falls back to the speaker's own addr when it has no
+        // coordinator mapping (solo speaker, or empty/stale cache).
+        let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        let target = caches
+            .speaker_to_coordinator
+            .get(speaker)
+            .unwrap_or(speaker);
+        caches
+            .id_to_addr
+            .get(target)
+            .copied()
+            .ok_or_else(|| WireError::NotFound(target.to_string()))
     }
 }
 
@@ -468,9 +451,10 @@ impl Wire for SonosWire {
         // called BEFORE `subscribe_speakers` — `discover_with` enforces the
         // ordering. Requires discover() to have populated the caches.
         if self
-            .id_to_addr
+            .caches
             .lock()
             .unwrap_or_else(|p| p.into_inner())
+            .id_to_addr
             .is_empty()
         {
             return Err(WireError::NoSpeakersDiscovered);
@@ -504,8 +488,12 @@ impl Wire for SonosWire {
         // (PerNetwork), so try cached IPs until one answers; this handles
         // the case where the first cached speaker has gone to sleep.
         let ips: Vec<String> = {
-            let guard = self.id_to_addr.lock().unwrap_or_else(|p| p.into_inner());
-            guard.values().map(|addr| addr.ip().to_string()).collect()
+            let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+            caches
+                .id_to_addr
+                .values()
+                .map(|addr| addr.ip().to_string())
+                .collect()
         };
         if ips.is_empty() {
             return Err(WireError::NoSpeakersDiscovered);

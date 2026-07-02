@@ -24,9 +24,9 @@
 /// cached speaker is now unreachable), it falls back to a full re-discover via
 /// `ref.invalidate(discoveryProvider)`.
 ///
-/// Activated by watching [topologyControllerProvider]. The v0.6 UI watches
-/// it once the app shell exists (the same way it will watch
-/// [discoveryProvider]); until then it is exercised by tests.
+/// Activated by watching [topologyControllerProvider]. The app shell
+/// (`HomePage`) watches it for the app lifetime, so while Home is up a regroup
+/// refreshes the UI without a manual re-discover.
 library;
 
 import 'dart:async';

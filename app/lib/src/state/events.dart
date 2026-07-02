@@ -13,18 +13,25 @@ import 'discovery.dart';
 part 'events.g.dart';
 
 /// The current wire generation, or `null` until the first successful
-/// discovery. `currentWireGeneration()` bumps only on a successful
-/// `discover_with`, so although this recomputes on every `discoveryProvider`
-/// transition, its VALUE only changes when a new wire is actually installed.
-/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-/// rebuild only on a real new wire — not on a loading/failed re-discover.
+/// discovery. Recomputes on every `discoveryProvider` transition, but reads the
+/// **authoritative Rust generation** — not `discovery.hasValue`. The Rust
+/// generation reflects the currently-installed wire (`0` before any successful
+/// `discover_with`, `>0` after), and `discover_with` bumps it only on success.
+///
+/// Reading it directly (rather than gating on `discovery.hasValue`) is what
+/// keeps the live event stream alive across a FAILED user re-discover: that
+/// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
+/// the old wire is still installed and its generation unchanged, so this keeps
+/// returning it — no spurious teardown. Riverpod dedupes by `==` (BigInt is
+/// value-equal), so downstream watchers rebuild only when a NEW wire is
+/// actually installed, not on a loading/failed re-discover.
 @riverpod
 BigInt? wireGeneration(Ref ref) {
-  final discovery = ref.watch(discoveryProvider);
-  // hasValue stays true across loading/error once discovery has succeeded
-  // once (AsyncValue retains the prior value), so a failed re-discover keeps
-  // reading the SAME generation → no change → no rebuild downstream.
-  return discovery.hasValue ? rust_api.currentWireGeneration() : null;
+  // Depend on discovery so we recompute on its transitions (a successful
+  // discover bumps the Rust generation); the AsyncValue itself is unused.
+  ref.watch(discoveryProvider);
+  final generation = rust_api.currentWireGeneration();
+  return generation == BigInt.zero ? null : generation;
 }
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per

@@ -154,6 +154,12 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
                         // Harden in v0.7 (validate 200 + `ST`, require the
                         // LOCATION host == source IP, cap candidates) —
                         // wants a hardware re-validation pass on the LAN.
+                        // The candidate cap also bounds an all-fail
+                        // amplification: when NO candidate returns a parseable
+                        // topology, `discover()` issues one GetZoneGroupState
+                        // SOAP per candidate sequentially before giving up, so
+                        // an uncapped LOCATION set turns injected candidates
+                        // into N serial SOAP attempts.
                         if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {
                             found.insert(loc);
                         }

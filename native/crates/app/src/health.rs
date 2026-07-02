@@ -53,12 +53,26 @@ impl HealthTracker {
     /// - `Errored` + `Ok`      → `Healthy`, emit `SubscriptionRecovered`.
     /// - everything else (Backend/NotFound errors, repeated same-state,
     ///   `Ok` while already Healthy) → no transition, `None`.
+    ///
+    /// `cmd_gen` is the wire generation the command ran under; `current_gen`
+    /// reads the live generation. Both are re-checked UNDER the states write
+    /// lock: `reset_all` (called by `discover_with` on wire replacement) takes
+    /// this same lock, so once we hold it AND the generation still matches, no
+    /// replacement can have interleaved between the check and the mutation
+    /// below. This closes the race where a stale command's observation lands in
+    /// the freshly-reset tracker of a NEW wire (which would surface a spurious
+    /// `SubscriptionRecovered` on the next successful command).
     pub(crate) fn observe<R>(
         &self,
+        cmd_gen: u64,
+        current_gen: impl Fn() -> u64,
         speaker: &SpeakerId,
         result: &Result<R, WireError>,
     ) -> Option<ChangeEvent> {
         let mut states = self.states.write().unwrap_or_else(|p| p.into_inner());
+        if current_gen() != cmd_gen {
+            return None;
+        }
         let cur = states.get(speaker).copied().unwrap_or(HealthState::Healthy);
         match (cur, result) {
             (HealthState::Healthy, Err(WireError::Network(msg))) => {
@@ -107,15 +121,15 @@ mod tests {
     #[test]
     fn healthy_then_network_emits_subscription_error() {
         let t = HealthTracker::new();
-        let ev = t.observe(&sid(), &net());
+        let ev = t.observe(0, || 0, &sid(), &net());
         assert!(matches!(ev, Some(ChangeEvent::SubscriptionError { .. })));
     }
 
     #[test]
     fn errored_then_ok_emits_recovered() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &net()).is_some()); // → Errored
-        let ev = t.observe(&sid(), &ok());
+        assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // → Errored
+        let ev = t.observe(0, || 0, &sid(), &ok());
         assert!(matches!(
             ev,
             Some(ChangeEvent::SubscriptionRecovered { .. })
@@ -125,42 +139,45 @@ mod tests {
     #[test]
     fn repeated_network_does_not_re_emit() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &net()).is_some()); // first → error
-        assert!(t.observe(&sid(), &net()).is_none(), "no duplicate error");
-        assert!(t.observe(&sid(), &net()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // first → error
+        assert!(
+            t.observe(0, || 0, &sid(), &net()).is_none(),
+            "no duplicate error"
+        );
+        assert!(t.observe(0, || 0, &sid(), &net()).is_none());
     }
 
     #[test]
     fn repeated_ok_while_healthy_does_not_emit() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &ok()).is_none());
-        assert!(t.observe(&sid(), &ok()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
     }
 
     #[test]
     fn backend_error_does_not_change_health() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &backend()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &backend()).is_none());
         // Still Healthy → a later Ok must not emit Recovered.
-        assert!(t.observe(&sid(), &ok()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
     }
 
     #[test]
     fn notfound_error_does_not_change_health() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &notfound()).is_none());
-        assert!(t.observe(&sid(), &ok()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &notfound()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
     }
 
     #[test]
     fn backend_while_errored_does_not_recover() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &net()).is_some()); // → Errored
+        assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // → Errored
         // A Backend error is still an error — must NOT recover.
-        assert!(t.observe(&sid(), &backend()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &backend()).is_none());
         // And the speaker is still Errored: a real Ok now recovers.
         assert!(matches!(
-            t.observe(&sid(), &ok()),
+            t.observe(0, || 0, &sid(), &ok()),
             Some(ChangeEvent::SubscriptionRecovered { .. })
         ));
     }
@@ -168,11 +185,11 @@ mod tests {
     #[test]
     fn reset_all_clears_errored_state() {
         let t = HealthTracker::new();
-        assert!(t.observe(&sid(), &net()).is_some()); // → Errored
+        assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // → Errored
         t.reset_all();
         // After reset the speaker is Healthy again: an Ok must NOT emit
         // Recovered (no transition from the default).
-        assert!(t.observe(&sid(), &ok()).is_none());
+        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
     }
 
     #[test]
@@ -180,12 +197,12 @@ mod tests {
         let t = HealthTracker::new();
         let a = SpeakerId::new("RINCON_A");
         let b = SpeakerId::new("RINCON_B");
-        assert!(t.observe(&a, &net()).is_some()); // A → Errored
+        assert!(t.observe(0, || 0, &a, &net()).is_some()); // A → Errored
         // B is independent: Ok while Healthy → no event.
-        assert!(t.observe(&b, &ok()).is_none());
+        assert!(t.observe(0, || 0, &b, &ok()).is_none());
         // A recovers independently.
         assert!(matches!(
-            t.observe(&a, &ok()),
+            t.observe(0, || 0, &a, &ok()),
             Some(ChangeEvent::SubscriptionRecovered { .. })
         ));
     }
@@ -196,6 +213,6 @@ mod tests {
         // Result<SpeakerState, _>. observe must accept any Ok payload.
         let t = HealthTracker::new();
         let r: Result<Volume, WireError> = Ok(Volume::new(50).unwrap());
-        assert!(t.observe(&sid(), &r).is_none());
+        assert!(t.observe(0, || 0, &sid(), &r).is_none());
     }
 }

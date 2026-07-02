@@ -49,6 +49,15 @@ class _ErrorDiscovery extends Discovery {
       throw rust_api.DiscoveryError.noDevicesFound();
 }
 
+/// Fake [Discovery] whose `build()` runs [_next] each call (returns a topology
+/// or throws) — lets a test succeed first, then fail on the retry.
+class _SequenceDiscovery extends Discovery {
+  _SequenceDiscovery(this._next);
+  final rust_api.Topology Function() _next;
+  @override
+  Future<rust_api.Topology> build() async => _next();
+}
+
 void main() {
   group('discoveryProvider', () {
     // Listen (keeping the autoDispose provider mounted across the async gap)
@@ -93,6 +102,37 @@ void main() {
       final state = await settledState(container);
       expect(state.hasError, isTrue);
       expect(state.error, isA<rust_api.DiscoveryError>());
+    });
+
+    test('a failed rediscover surfaces the error without throwing', () async {
+      // (The live event stream surviving a failed retry is handled by
+      // `events.dart`'s `wireGeneration`, which reads the Rust generation
+      // directly rather than `discovery.hasValue` — not unit-testable here as it
+      // calls the FRB FFI. This pins rediscover's own error handling.)
+      var buildCount = 0;
+      final container = ProviderContainer(
+        overrides: [
+          discoveryProvider.overrideWith(
+            () => _SequenceDiscovery(() {
+              buildCount++;
+              if (buildCount == 1) return _fakeTopology; // initial success
+              throw rust_api.DiscoveryError.noDevicesFound(); // retry fails
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final initial = await settledState(container);
+      expect(initial.hasValue, isTrue);
+
+      // The user-initiated retry fails; rediscover must not throw, and the
+      // error must be surfaced on the provider.
+      await container.read(discoveryProvider.notifier).rediscover();
+      final after = container.read(discoveryProvider);
+
+      expect(after.hasError, isTrue, reason: 'the retry itself failed');
+      expect(after.error, isA<rust_api.DiscoveryError>());
     });
   });
 }

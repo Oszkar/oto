@@ -136,14 +136,19 @@ fn health_tracker() -> &'static HealthTracker {
 /// wire — bumping the generation and resetting health to a clean slate — the
 /// observation belongs to a dead wire: applying it here would both pollute the
 /// fresh tracker with a stale transition AND stamp the event onto the new
-/// stream. So we drop it when the generation has moved. The event is also
-/// stamped with `cmd_gen` so the FRB consumer drops it if a bump slips in
-/// between this check and the push.
+/// stream. The generation is re-checked **under the tracker's write lock**
+/// inside [`HealthTracker::observe`] (which shares that lock with `reset_all`),
+/// so the check and the health mutation are atomic w.r.t. a concurrent wire
+/// replacement — no stale transition can land in the new wire's fresh tracker.
+/// The event is also stamped with `cmd_gen` so the FRB consumer drops it if a
+/// bump slips in between the observe and the push.
 fn observe_speaker_health<R>(cmd_gen: u64, speaker: &SpeakerId, result: &Result<R, WireError>) {
-    if cmd_gen != state_manager().current_generation() {
-        return;
-    }
-    if let Some(event) = health_tracker().observe(speaker, result) {
+    if let Some(event) = health_tracker().observe(
+        cmd_gen,
+        || state_manager().current_generation(),
+        speaker,
+        result,
+    ) {
         events::push(cmd_gen, event);
     }
 }

@@ -9,31 +9,52 @@ part of 'events.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 /// The current wire generation, or `null` until the first successful
-/// discovery. `currentWireGeneration()` bumps only on a successful
-/// `discover_with`, so although this recomputes on every `discoveryProvider`
-/// transition, its VALUE only changes when a new wire is actually installed.
-/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-/// rebuild only on a real new wire — not on a loading/failed re-discover.
+/// discovery. Recomputes on every `discoveryProvider` transition, but reads the
+/// **authoritative Rust generation** — not `discovery.hasValue`. The Rust
+/// generation reflects the currently-installed wire (`0` before any successful
+/// `discover_with`, `>0` after), and `discover_with` bumps it only on success.
+///
+/// Reading it directly (rather than gating on `discovery.hasValue`) is what
+/// keeps the live event stream alive across a FAILED user re-discover: that
+/// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
+/// the old wire is still installed and its generation unchanged, so this keeps
+/// returning it — no spurious teardown. Riverpod dedupes by `==` (BigInt is
+/// value-equal), so downstream watchers rebuild only when a NEW wire is
+/// actually installed, not on a loading/failed re-discover.
 
 @ProviderFor(wireGeneration)
 final wireGenerationProvider = WireGenerationProvider._();
 
 /// The current wire generation, or `null` until the first successful
-/// discovery. `currentWireGeneration()` bumps only on a successful
-/// `discover_with`, so although this recomputes on every `discoveryProvider`
-/// transition, its VALUE only changes when a new wire is actually installed.
-/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-/// rebuild only on a real new wire — not on a loading/failed re-discover.
+/// discovery. Recomputes on every `discoveryProvider` transition, but reads the
+/// **authoritative Rust generation** — not `discovery.hasValue`. The Rust
+/// generation reflects the currently-installed wire (`0` before any successful
+/// `discover_with`, `>0` after), and `discover_with` bumps it only on success.
+///
+/// Reading it directly (rather than gating on `discovery.hasValue`) is what
+/// keeps the live event stream alive across a FAILED user re-discover: that
+/// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
+/// the old wire is still installed and its generation unchanged, so this keeps
+/// returning it — no spurious teardown. Riverpod dedupes by `==` (BigInt is
+/// value-equal), so downstream watchers rebuild only when a NEW wire is
+/// actually installed, not on a loading/failed re-discover.
 
 final class WireGenerationProvider
     extends $FunctionalProvider<BigInt?, BigInt?, BigInt?>
     with $Provider<BigInt?> {
   /// The current wire generation, or `null` until the first successful
-  /// discovery. `currentWireGeneration()` bumps only on a successful
-  /// `discover_with`, so although this recomputes on every `discoveryProvider`
-  /// transition, its VALUE only changes when a new wire is actually installed.
-  /// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-  /// rebuild only on a real new wire — not on a loading/failed re-discover.
+  /// discovery. Recomputes on every `discoveryProvider` transition, but reads the
+  /// **authoritative Rust generation** — not `discovery.hasValue`. The Rust
+  /// generation reflects the currently-installed wire (`0` before any successful
+  /// `discover_with`, `>0` after), and `discover_with` bumps it only on success.
+  ///
+  /// Reading it directly (rather than gating on `discovery.hasValue`) is what
+  /// keeps the live event stream alive across a FAILED user re-discover: that
+  /// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
+  /// the old wire is still installed and its generation unchanged, so this keeps
+  /// returning it — no spurious teardown. Riverpod dedupes by `==` (BigInt is
+  /// value-equal), so downstream watchers rebuild only when a NEW wire is
+  /// actually installed, not on a loading/failed re-discover.
   WireGenerationProvider._()
     : super(
         from: null,
@@ -67,7 +88,7 @@ final class WireGenerationProvider
   }
 }
 
-String _$wireGenerationHash() => r'6dba8cada3a1a86e67a56791020803b1cc38c96e';
+String _$wireGenerationHash() => r'a566db3d0119333894399d0cd1da4023170636f5';
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
 /// **new wire** — keyed on [wireGenerationProvider], which only changes on a
