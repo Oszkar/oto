@@ -24,87 +24,38 @@ use oto_core::{
 
 // ── Internal model ───────────────────────────────────────────────────────────
 
-/// Per-speaker mutable state held inside the `Mutex`.
-struct Model {
-    speakers: HashMap<SpeakerId, SpeakerState>,
-    /// group coordinator lookup: `GroupId` → coordinator `SpeakerId`.
+/// A grouping snapshot: `GroupId` → coordinator and member → coordinator
+/// lookups. The device holds the authoritative one (`Model::grouping`, mutated
+/// by join/leave); the routing `Model::cache` holds a copy that `discover()` /
+/// `refresh_topology()` commit.
+#[derive(Clone, Default)]
+struct Grouping {
+    /// `GroupId` → coordinator `SpeakerId`.
     coords: HashMap<GroupId, SpeakerId>,
-    /// member → coordinator lookup: every speaker maps to its group coordinator
-    /// (solo speaker maps to itself). Used by `speaker_state` to implement D2
-    /// semantics: own volume/mute + coordinator's transport.
+    /// member → coordinator (solo speaker maps to itself). Backs D2
+    /// `speaker_state`: own volume/mute + the coordinator's transport.
     member_to_coord: HashMap<SpeakerId, SpeakerId>,
-    /// Sender half of the v0.4 unified event channel. Lazy-init: only
-    /// populated by `subscribe_speakers`. `None` ↔ "no pump active".
-    tx: Option<Sender<ChangeEvent>>,
-    /// Receiver half — taken once via `take_event_stream`.
-    rx: Option<Receiver<ChangeEvent>>,
-    /// `true` after `subscribe_topology` succeeds. Idempotent gate: subsequent
-    /// calls remain `Ok(())` regardless of this flag.
-    topology_subscribed: bool,
-    /// Per-speaker forced command error (v0.5 test seam). When a speaker
-    /// (or a group's coordinator) has an entry, its commands return the
-    /// stored error instead of mutating/emitting — modelling an unreachable
-    /// device so oto-app's health tracking can be exercised.
-    command_errors: HashMap<SpeakerId, WireError>,
 }
 
-/// Volume every speaker is seeded at. Shared by `Model::seeded` and the
-/// `seeded_state_initial_values` test so the invariant can't silently drift.
-const SEED_VOLUME: u8 = 30;
-
-impl Model {
-    fn empty() -> Self {
-        Self {
-            speakers: HashMap::new(),
-            coords: HashMap::new(),
-            member_to_coord: HashMap::new(),
-            tx: None,
-            rx: None,
-            topology_subscribed: false,
-            command_errors: HashMap::new(),
-        }
-    }
-
-    fn seeded(snap: &DiscoverySnapshot) -> Self {
-        let mut speakers = HashMap::new();
-        for s in &snap.speakers {
-            speakers.insert(
-                s.id.clone(),
-                SpeakerState {
-                    volume: Some(Volume::new(SEED_VOLUME).expect("SEED_VOLUME in range")),
-                    muted: Some(false),
-                    transport: Some(TransportState {
-                        state: PlaybackState::Stopped,
-                        current_track: None,
-                        position: None,
-                    }),
-                },
-            );
-        }
+impl Grouping {
+    fn from_snapshot(snap: &DiscoverySnapshot) -> Self {
         let mut coords = HashMap::new();
-        for g in &snap.groups {
-            coords.insert(g.id.clone(), g.coordinator.clone());
-        }
         let mut member_to_coord = HashMap::new();
         for g in &snap.groups {
+            coords.insert(g.id.clone(), g.coordinator.clone());
             for m in &g.members {
                 member_to_coord.insert(m.clone(), g.coordinator.clone());
             }
         }
         Self {
-            speakers,
             coords,
             member_to_coord,
-            tx: None,
-            rx: None,
-            topology_subscribed: false,
-            command_errors: HashMap::new(),
         }
     }
 
     /// Re-home members left behind when `departed` stops coordinating its
     /// group (it joined another group, or went standalone). Mirrors the Sonos
-    /// firmware delegating coordination to a remaining member, so the mock
+    /// firmware delegating coordination to a remaining member, so the model
     /// never holds an impossible topology — a member pointing at a coordinator
     /// that now follows someone else. Keeps `member_to_coord` and `coords`
     /// mutually consistent. The caller must already have re-pointed `departed`
@@ -131,6 +82,118 @@ impl Model {
         self.coords
             .insert(GroupId::new(format!("{}:0", new_coord.as_str())), new_coord);
     }
+
+    /// Synthesize the `GroupIdentity` list for a discovery snapshot. Coordinator
+    /// first (D3: `members[0]` is the coordinator), then the remaining members
+    /// sorted for determinism; groups sorted by id so the snapshot is stable
+    /// across `HashMap` iteration order (tests rely on `==`).
+    fn to_group_identities(&self) -> Vec<GroupIdentity> {
+        let mut members_by_coord: HashMap<SpeakerId, Vec<SpeakerId>> = HashMap::new();
+        for (member, coord) in &self.member_to_coord {
+            members_by_coord
+                .entry(coord.clone())
+                .or_default()
+                .push(member.clone());
+        }
+        let mut groups: Vec<GroupIdentity> = self
+            .coords
+            .iter()
+            .map(|(gid, coord)| {
+                let mut members = members_by_coord.get(coord).cloned().unwrap_or_default();
+                members.sort_by(|a, b| match (a == coord, b == coord) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.as_str().cmp(b.as_str()),
+                });
+                GroupIdentity {
+                    id: gid.clone(),
+                    coordinator: coord.clone(),
+                    members,
+                }
+            })
+            .collect();
+        groups.sort_by(|a, b| a.id.to_string().cmp(&b.id.to_string()));
+        groups
+    }
+}
+
+/// Per-speaker mutable state + the device/cache grouping, held inside the
+/// `Mutex`.
+struct Model {
+    speakers: HashMap<SpeakerId, SpeakerState>,
+    /// The device's authoritative grouping (Sonos "ground truth"). `join_group`
+    /// / `leave_group` mutate THIS — like a real regroup mutating the devices.
+    grouping: Grouping,
+    /// Routing cache. Every command/read resolves group→coordinator through
+    /// this. Seeded at construction (so a `MockWire::default()` round-trips
+    /// commands without ceremony — see [`MockWire`]) and RE-committed from
+    /// `grouping` only by `discover()` / `refresh_topology()`. join/leave never
+    /// touch it, so — exactly like `SonosWire`'s id→addr / group→coord caches —
+    /// a regroup does not change routing until a re-pull.
+    cache: Grouping,
+    /// Sender half of the v0.4 unified event channel. Lazy-init: only
+    /// populated by `subscribe_speakers`. `None` ↔ "no pump active".
+    tx: Option<Sender<ChangeEvent>>,
+    /// Receiver half — taken once via `take_event_stream`.
+    rx: Option<Receiver<ChangeEvent>>,
+    /// `true` after `subscribe_topology` succeeds. Gates `TopologyChanged`
+    /// emission (mirrors SonosWire only watching `GroupMembership` when
+    /// topology was subscribed before the pump spawned).
+    topology_subscribed: bool,
+    /// Per-speaker forced command error (v0.5 test seam). When a speaker
+    /// (or a group's coordinator) has an entry, its commands return the
+    /// stored error instead of mutating/emitting — modelling an unreachable
+    /// device so oto-app's health tracking can be exercised.
+    command_errors: HashMap<SpeakerId, WireError>,
+}
+
+/// Volume every speaker is seeded at. Shared by `Model::seeded` and the
+/// `seeded_state_initial_values` test so the invariant can't silently drift.
+const SEED_VOLUME: u8 = 30;
+
+impl Model {
+    fn empty() -> Self {
+        Self {
+            speakers: HashMap::new(),
+            grouping: Grouping::default(),
+            cache: Grouping::default(),
+            tx: None,
+            rx: None,
+            topology_subscribed: false,
+            command_errors: HashMap::new(),
+        }
+    }
+
+    fn seeded(snap: &DiscoverySnapshot) -> Self {
+        let mut speakers = HashMap::new();
+        for s in &snap.speakers {
+            speakers.insert(
+                s.id.clone(),
+                SpeakerState {
+                    volume: Some(Volume::new(SEED_VOLUME).expect("SEED_VOLUME in range")),
+                    muted: Some(false),
+                    transport: Some(TransportState {
+                        state: PlaybackState::Stopped,
+                        current_track: None,
+                        position: None,
+                    }),
+                },
+            );
+        }
+        let grouping = Grouping::from_snapshot(snap);
+        // Cache starts committed so pre-discover commands round-trip (the
+        // documented convenience); `discover()` re-commits it anyway.
+        let cache = grouping.clone();
+        Self {
+            speakers,
+            grouping,
+            cache,
+            tx: None,
+            rx: None,
+            topology_subscribed: false,
+            command_errors: HashMap::new(),
+        }
+    }
 }
 
 // ── MockWire ─────────────────────────────────────────────────────────────────
@@ -145,6 +208,22 @@ impl Model {
 /// then subscribe" lifecycle as a real `SonosWire`. Reason: a fixture-only
 /// MockWire is not the same thing as a wire whose discovery has been
 /// acknowledged by the caller — per /codex review on PR #43, finding P2 #4.
+///
+/// **Fidelity vs. the real wire (v0.6.3):**
+/// - **Grouping is deferred like `SonosWire`.** `join_group` / `leave_group`
+///   mutate the device grouping but NOT the routing cache, so a regroup does
+///   not change command routing (`play`, `speaker_state`, …) until a
+///   `refresh_topology()` / `discover()` re-pull commits it — exactly as the
+///   real wire's caches only change on a `GetZoneGroupState` re-pull. A regroup
+///   surfaces as `TopologyChanged` (only when topology was subscribed), which
+///   in production drives the debounced Dart refresh.
+/// - **Pre-`discover()` commands are a DELIBERATE convenience, not fidelity.**
+///   The seeded cache lets a direct `MockWire::default().set_volume(…)` round-
+///   trip without ceremony; a real `SonosWire` returns `NotFound` until its
+///   caches are populated by `discover()`. This divergence does not leak into
+///   integration tests: the production seam always installs the mock through
+///   `oto_app::discover_with`, which calls `discover()` first. If a future
+///   direct-use test needs the strict contract, call `discover()` up front.
 pub struct MockWire {
     outcome: Result<DiscoverySnapshot, WireError>,
     state: Mutex<Model>,
@@ -234,11 +313,16 @@ macro_rules! lock {
     };
 }
 
-/// Emit a `TopologyChanged` on the event stream if a pump is active — mirrors
-/// the real wire surfacing a regroup as a `GroupMembership` NOTIFY →
-/// `ChangeEvent::TopologyChanged`. No-op before `subscribe_speakers` (no `tx`).
+/// Emit a `TopologyChanged` on the event stream — but only when a topology
+/// watch is active (`topology_subscribed`) AND a pump is running (`tx`).
+/// Mirrors the real wire: the `GroupMembership` watch is registered only if
+/// `subscribe_topology` ran before the pump spawned, so a regroup surfaces a
+/// `ChangeEvent::TopologyChanged` only when the caller subscribed to topology.
+/// No-op before `subscribe_speakers` (no `tx`) or without a topology watch.
 fn emit_topology_changed(model: &Model) {
-    if let Some(tx) = &model.tx {
+    if model.topology_subscribed
+        && let Some(tx) = &model.tx
+    {
         let _ = tx.send(ChangeEvent::TopologyChanged);
     }
 }
@@ -254,10 +338,12 @@ impl MockWire {
         }
     }
 
-    /// Convenience seam: push a `TopologyChanged` event as if a real
-    /// GENA NOTIFY arrived. No-op if no pump is active.
+    /// Convenience seam: push a `TopologyChanged` event as if a real GENA
+    /// NOTIFY arrived. Goes through the gated emit path, so — like a real
+    /// NOTIFY — it delivers only when topology was subscribed and a pump is
+    /// active. No-op otherwise.
     pub fn push_topology_change(&self) {
-        self.push_event(ChangeEvent::TopologyChanged);
+        emit_topology_changed(&lock!(self));
     }
 
     /// Force commands targeting `speaker` (directly, or as a group's
@@ -287,9 +373,26 @@ impl MockWire {
     /// silent-no-op gap (v0.4 review follow-up). The skip itself doesn't
     /// model a queue, so the state value is the current one (no fabricated
     /// metadata); the point is that a skip is observable on the stream.
+    /// Commit the device grouping into the routing cache and synthesize the
+    /// discovery snapshot from it: identity (room / model / ip) from the
+    /// configured outcome, grouping from the device model. Shared by
+    /// `discover()` and `refresh_topology()` so they can't drift. `?` propagates
+    /// a `failing()` mock's discovery error before any cache commit.
+    fn resnapshot(&self) -> Result<DiscoverySnapshot, WireError> {
+        let base = self.outcome.clone()?;
+        let mut guard = lock!(self);
+        guard.cache = guard.grouping.clone();
+        let groups = guard.grouping.to_group_identities();
+        Ok(DiscoverySnapshot {
+            speakers: base.speakers,
+            groups,
+        })
+    }
+
     fn skip(&self, group: &GroupId) -> Result<(), WireError> {
         let guard = lock!(self);
         let coord = guard
+            .cache
             .coords
             .get(group)
             .cloned()
@@ -314,19 +417,22 @@ impl MockWire {
 
 impl Wire for MockWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
-        let result = self.outcome.clone();
-        if result.is_ok() {
-            // Flip the lifecycle gate so `subscribe_speakers` can succeed.
-            // Idempotent: repeat discovers stay `true`. Failed discoveries
-            // (the `failing()` constructor) leave it `false`.
-            self.discovered.store(true, Ordering::SeqCst);
-        }
-        result
+        // Commit the device grouping into the routing cache and synthesize the
+        // snapshot from it (shared with `refresh_topology`, so the two agree
+        // after a regroup — a plain `self.outcome.clone()` would return the
+        // stale original fixture). The `?` propagates a `failing()` mock's error
+        // WITHOUT flipping `discovered`.
+        let snap = self.resnapshot()?;
+        // Flip the lifecycle gate so `subscribe_speakers` can succeed.
+        // Idempotent: repeat discovers stay `true`.
+        self.discovered.store(true, Ordering::SeqCst);
+        Ok(snap)
     }
 
     fn play(&self, group: &GroupId) -> Result<(), WireError> {
         let mut guard = lock!(self);
         let coord = guard
+            .cache
             .coords
             .get(group)
             .cloned()
@@ -361,6 +467,7 @@ impl Wire for MockWire {
     fn pause(&self, group: &GroupId) -> Result<(), WireError> {
         let mut guard = lock!(self);
         let coord = guard
+            .cache
             .coords
             .get(group)
             .cloned()
@@ -442,6 +549,7 @@ impl Wire for MockWire {
         // group → coordinator. Unknown group → NotFound; honor a forced
         // command error on the coordinator (models an unreachable device).
         let coord = guard
+            .cache
             .coords
             .get(group)
             .cloned()
@@ -465,6 +573,7 @@ impl Wire for MockWire {
     fn set_group_mute(&self, group: &GroupId, muted: bool) -> Result<(), WireError> {
         let guard = lock!(self);
         let coord = guard
+            .cache
             .coords
             .get(group)
             .cloned()
@@ -493,14 +602,17 @@ impl Wire for MockWire {
         if let Some(err) = guard.command_errors.get(speaker) {
             return Err(err.clone());
         }
-        // Fold `speaker` into `coordinator`'s group: it now follows that
-        // coordinator. If `speaker` had been coordinating a group, re-home the
-        // members it leaves behind (and drop its now-stale group) so they don't
-        // end up pointing at a coordinator that itself follows another group.
+        // Fold `speaker` into `coordinator`'s group in the DEVICE grouping only
+        // (not the routing cache) — like SonosWire, the regroup doesn't change
+        // routing until a `refresh_topology()`/`discover()` re-pull. If `speaker`
+        // had been coordinating a group, re-home the members it leaves behind
+        // (and drop its now-stale group) so they don't end up pointing at a
+        // coordinator that itself follows another group.
         guard
+            .grouping
             .member_to_coord
             .insert(speaker.clone(), coordinator.clone());
-        guard.reelect_orphans(speaker);
+        guard.grouping.reelect_orphans(speaker);
         emit_topology_changed(&guard);
         Ok(())
     }
@@ -513,17 +625,20 @@ impl Wire for MockWire {
         if let Some(err) = guard.command_errors.get(speaker) {
             return Err(err.clone());
         }
-        // Uniform — no branch on whether `speaker` coordinated a group. First
-        // re-home any members it was coordinating (the firmware delegates the
-        // old group to a remaining member); this also drops `speaker`'s stale
-        // old group. THEN `speaker` becomes its own standalone group with a
-        // fresh solo GroupId. Order matters: re-election must run before the
-        // standalone insert, since it prunes every group `speaker` coordinates.
-        guard.reelect_orphans(speaker);
+        // Mutate the DEVICE grouping only (not the routing cache — deferred like
+        // SonosWire). Uniform — no branch on whether `speaker` coordinated a
+        // group. First re-home any members it was coordinating (the firmware
+        // delegates the old group to a remaining member); this also drops
+        // `speaker`'s stale old group. THEN `speaker` becomes its own standalone
+        // group with a fresh solo GroupId. Order matters: re-election must run
+        // before the standalone insert, since it prunes every group `speaker`
+        // coordinates.
+        guard.grouping.reelect_orphans(speaker);
         guard
+            .grouping
             .member_to_coord
             .insert(speaker.clone(), speaker.clone());
-        guard.coords.insert(
+        guard.grouping.coords.insert(
             GroupId::new(format!("{}:0", speaker.as_str())),
             speaker.clone(),
         );
@@ -539,8 +654,9 @@ impl Wire for MockWire {
             .cloned()
             .ok_or_else(|| WireError::NotFound(speaker.to_string()))?;
         // D2: transport comes from the speaker's group coordinator
-        // (solo speaker = its own coordinator → own transport).
-        let coord = guard.member_to_coord.get(speaker).cloned();
+        // (solo speaker = its own coordinator → own transport). Resolved through
+        // the routing cache, so a not-yet-refreshed regroup reads the old group.
+        let coord = guard.cache.member_to_coord.get(speaker).cloned();
         let transport = match coord {
             Some(c) => guard.speakers.get(&c).and_then(|s| s.transport.clone()),
             None => own.transport.clone(),
@@ -555,6 +671,7 @@ impl Wire for MockWire {
     fn track_position(&self, group: &GroupId) -> Result<TrackPosition, WireError> {
         let guard = lock!(self);
         let coord = guard
+            .cache
             .coords
             .get(group)
             .cloned()
@@ -606,7 +723,7 @@ impl Wire for MockWire {
             // 2 per speaker (Volume + Mute) + 1 per group (Playback);
             // 8 events total for the 3-speaker / 2-group fixture.
             // Capacity is a hint; re-allocation is fine.
-            guard.speakers.len() * 2 + guard.coords.len(),
+            guard.speakers.len() * 2 + guard.cache.coords.len(),
         );
         for (sid, st) in &guard.speakers {
             if let Some(v) = st.volume {
@@ -622,7 +739,7 @@ impl Wire for MockWire {
                 });
             }
         }
-        for (gid, coord) in &guard.coords {
+        for (gid, coord) in &guard.cache.coords {
             // Read the coordinator's cached transport state. The
             // seeded fixture always populates this with
             // PlaybackState::Stopped, so on an unmodified MockWire
@@ -665,40 +782,11 @@ impl Wire for MockWire {
 
     fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
         // Re-pull authoritative topology reflecting any join/leave mutations
-        // since discover() — mirrors SonosWire's GetZoneGroupState re-pull (a
-        // plain `self.outcome.clone()` would return the stale original fixture
-        // after a regroup). The original snapshot supplies speaker IDENTITY
-        // (room / model / ip); the live model supplies the current GROUPING.
-        // The `?` propagates a `failing()` mock's discovery error unchanged.
-        let base = self.outcome.clone()?;
-        let guard = lock!(self);
-        let mut members_by_coord: HashMap<SpeakerId, Vec<SpeakerId>> = HashMap::new();
-        for (member, coord) in &guard.member_to_coord {
-            members_by_coord
-                .entry(coord.clone())
-                .or_default()
-                .push(member.clone());
-        }
-        // Deterministic member + group ordering so the synthesized snapshot is
-        // stable across HashMap iteration nondeterminism (tests rely on `==`).
-        let mut groups: Vec<GroupIdentity> = guard
-            .coords
-            .iter()
-            .map(|(gid, coord)| {
-                let mut members = members_by_coord.get(coord).cloned().unwrap_or_default();
-                members.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-                GroupIdentity {
-                    id: gid.clone(),
-                    coordinator: coord.clone(),
-                    members,
-                }
-            })
-            .collect();
-        groups.sort_by(|a, b| a.id.to_string().cmp(&b.id.to_string()));
-        Ok(DiscoverySnapshot {
-            speakers: base.speakers,
-            groups,
-        })
+        // since the last commit — mirrors SonosWire's GetZoneGroupState re-pull.
+        // Commits the device grouping into the routing cache and synthesizes the
+        // snapshot from it (identity from the configured outcome). Shared with
+        // `discover()` so the two can't drift.
+        self.resnapshot()
     }
 
     fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
@@ -1195,6 +1283,7 @@ mod tests {
     fn join_group_emits_topology_changed_when_subscribed() {
         let w = MockWire::default();
         w.discover().unwrap();
+        w.subscribe_topology().unwrap(); // required before the pump for the emit
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().unwrap();
         let _ = drain_seeds(&rx);
@@ -1214,6 +1303,7 @@ mod tests {
     fn leave_group_emits_topology_changed_when_subscribed() {
         let w = MockWire::default();
         w.discover().unwrap();
+        w.subscribe_topology().unwrap(); // required before the pump for the emit
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().unwrap();
         let _ = drain_seeds(&rx);
@@ -1229,6 +1319,7 @@ mod tests {
     fn push_topology_change_delivers_event() {
         let w = MockWire::default();
         w.discover().unwrap();
+        w.subscribe_topology().unwrap(); // required before the pump for the emit
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().unwrap();
         let _ = drain_seeds(&rx);
@@ -1250,9 +1341,11 @@ mod tests {
         let office = SpeakerId::new("RINCON_OFFICE"); // solo group coordinator
         let kitchen = SpeakerId::new("RINCON_KITCHEN"); // another group's coordinator
 
-        // Office joins Kitchen's group; play Kitchen and confirm Office's
-        // transport now follows the Kitchen coordinator (D2 routing).
+        // Office joins Kitchen's group; a refresh commits the regroup to the
+        // routing cache (deferred like SonosWire); then play Kitchen and confirm
+        // Office's transport now follows the Kitchen coordinator (D2 routing).
         w.join_group(&office, &kitchen).unwrap();
+        w.refresh_topology().unwrap();
         w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap();
         let st = w.speaker_state(&office).unwrap();
         assert_eq!(
@@ -1269,6 +1362,7 @@ mod tests {
         let office = SpeakerId::new("RINCON_OFFICE");
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         w.join_group(&office, &kitchen).unwrap();
+        w.refresh_topology().unwrap(); // commit the regroup to the routing cache
         // The old solo group (RINCON_OFFICE:0) must no longer route, while
         // the Kitchen group is unaffected.
         assert_eq!(
@@ -1294,8 +1388,10 @@ mod tests {
         );
 
         // Dining leaves → its own standalone group; its transport now comes
-        // from itself (Stopped seed), independent of Kitchen.
+        // from itself (Stopped seed), independent of Kitchen. A refresh commits
+        // the regroup to the routing cache (deferred like SonosWire).
         w.leave_group(&dining).unwrap();
+        w.refresh_topology().unwrap();
         assert_eq!(
             w.speaker_state(&dining).unwrap().transport.unwrap().state,
             PlaybackState::Stopped,
@@ -1309,6 +1405,87 @@ mod tests {
         // Kitchen's own group still works for its coordinator.
         let _ = kitchen;
         assert!(w.play(&GroupId::new("RINCON_KITCHEN:1")).is_ok());
+    }
+
+    // ── v0.6.3 fidelity: deferred grouping + gated TopologyChanged ─────────
+
+    /// #1: a regroup does NOT change command routing until a
+    /// `refresh_topology()`/`discover()` re-pull commits it (mirrors SonosWire's
+    /// caches only updating on a `GetZoneGroupState` re-pull). Before the
+    /// refresh the joiner's old solo group still routes; after it, the new
+    /// grouping takes effect.
+    #[test]
+    fn regroup_routing_is_deferred_until_refresh() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        let office = SpeakerId::new("RINCON_OFFICE");
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+
+        w.join_group(&office, &kitchen).unwrap();
+        assert!(
+            w.play(&GroupId::new("RINCON_OFFICE:0")).is_ok(),
+            "before refresh, the joiner's old group still routes (deferred like SonosWire)"
+        );
+
+        w.refresh_topology().unwrap();
+        assert_eq!(
+            w.play(&GroupId::new("RINCON_OFFICE:0")),
+            Err(WireError::NotFound("RINCON_OFFICE:0".into())),
+            "after refresh, the joiner's old group no longer routes"
+        );
+    }
+
+    /// #3: `discover()` and `refresh_topology()` agree after a regroup — both
+    /// re-pull the CURRENT grouping (discover() no longer returns the stale
+    /// original fixture).
+    #[test]
+    fn discover_reflects_regroup_like_refresh() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.join_group(
+            &SpeakerId::new("RINCON_OFFICE"),
+            &SpeakerId::new("RINCON_KITCHEN"),
+        )
+        .unwrap();
+
+        let via_discover = w.discover().unwrap();
+        let via_refresh = w.refresh_topology().unwrap();
+        assert_eq!(
+            via_discover.groups, via_refresh.groups,
+            "discover() and refresh_topology() must agree on the current grouping"
+        );
+        assert!(
+            !via_discover
+                .groups
+                .iter()
+                .any(|g| g.id == GroupId::new("RINCON_OFFICE:0")),
+            "discover() reflects the regroup (Office folded into Kitchen), not the stale fixture"
+        );
+    }
+
+    /// #4: without `subscribe_topology`, a regroup must NOT emit
+    /// `TopologyChanged` (the real `GroupMembership` watch was never
+    /// registered, so the NOTIFY never arrives).
+    #[test]
+    fn regroup_does_not_emit_topology_changed_without_subscription() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        // subscribe_speakers WITHOUT subscribe_topology → no topology watch.
+        w.subscribe_speakers().unwrap();
+        let rx = w.take_event_stream().unwrap();
+        let _ = drain_seeds(&rx);
+
+        w.join_group(
+            &SpeakerId::new("RINCON_OFFICE"),
+            &SpeakerId::new("RINCON_KITCHEN"),
+        )
+        .unwrap();
+
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_millis(50))
+                .is_err(),
+            "no TopologyChanged without a topology subscription"
+        );
     }
 
     // ── v0.5.1 group volume/mute ──────────────────────────────────────────
@@ -1460,6 +1637,7 @@ mod tests {
         // seed), proving it was re-homed off Kitchen rather than orphaned
         // still pointing at the now-departed Kitchen.
         w.leave_group(&kitchen).unwrap();
+        w.refresh_topology().unwrap(); // commit the regroup to the routing cache
         assert_eq!(
             w.speaker_state(&dining).unwrap().transport.unwrap().state,
             PlaybackState::Stopped,
@@ -1479,6 +1657,7 @@ mod tests {
 
         w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap(); // Kitchen playing, Dining follows
         w.join_group(&kitchen, &office).unwrap(); // Kitchen now follows Office
+        w.refresh_topology().unwrap(); // commit the regroup to the routing cache
 
         // Dining is re-homed off Kitchen → independent → its own Stopped seed.
         assert_eq!(
