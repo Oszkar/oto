@@ -2,6 +2,8 @@
 /// value-comparable. Mapped from backend topology/state by Task 3's reducer.
 library;
 
+import 'copy_with.dart';
+
 /// Coarse physical kind of a room's speaker, derived from its model name.
 /// Drives UI affordances (e.g. soundbars get TV/HT controls later).
 enum RoomKind { speaker, soundbar }
@@ -53,31 +55,29 @@ class RoomState {
     this.groupId,
   });
 
-  /// Sentinel for [copyWith] so a nullable field can be explicitly cleared to
-  /// `null`. The `x ?? this.x` idiom can only set-or-keep, never clear; the
-  /// optimistic-command rollback needs to restore a cold-start `null` (a value
-  /// the field had before the user's drag), which a plain `copyWith` can't
-  /// express. Non-nullable fields keep the simple `?? this.x` form.
-  static const Object _unset = Object();
-
+  /// Nullable fields default to the [keep] sentinel so they can be explicitly
+  /// cleared to `null` (the `x ?? this.x` idiom can only set-or-keep, never
+  /// clear; the optimistic-command rollback needs to restore a cold-start
+  /// `null`). [orKeep] resolves each against the current value. Non-nullable
+  /// fields keep the simple `?? this.x` form.
   RoomState copyWith({
     String? id,
     String? name,
-    Object? model = _unset,
+    Object? model = keep,
     RoomKind? kind,
-    Object? volume = _unset,
-    Object? muted = _unset,
+    Object? volume = keep,
+    Object? muted = keep,
     bool? online,
-    Object? groupId = _unset,
+    Object? groupId = keep,
   }) => RoomState(
     id: id ?? this.id,
     name: name ?? this.name,
-    model: identical(model, _unset) ? this.model : model as String?,
+    model: orKeep(model, this.model),
     kind: kind ?? this.kind,
-    volume: identical(volume, _unset) ? this.volume : volume as int?,
-    muted: identical(muted, _unset) ? this.muted : muted as bool?,
+    volume: orKeep(volume, this.volume),
+    muted: orKeep(muted, this.muted),
     online: online ?? this.online,
-    groupId: identical(groupId, _unset) ? this.groupId : groupId as String?,
+    groupId: orKeep(groupId, this.groupId),
   );
 
   @override

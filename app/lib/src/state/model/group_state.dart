@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/foundation.dart' show listEquals;
 
+import 'copy_with.dart';
 import 'track.dart';
 
 /// Transport state of a group's coordinator. Mirrors the backend
@@ -55,35 +56,27 @@ class GroupState {
           transport != null &&
           transport != PlaybackState.stopped);
 
-  /// Sentinel for [copyWith] so a nullable field can be explicitly cleared to
-  /// `null`. The `x ?? this.x` idiom can only set-or-keep, never clear; the
-  /// optimistic-command rollback needs to restore a cold-start `null` (the
-  /// value the field had before the user's action), which a plain `copyWith`
-  /// can't express. Non-nullable fields keep the simple `?? this.x` form.
-  static const Object _unset = Object();
-
+  /// Nullable fields default to the [keep] sentinel so they can be explicitly
+  /// cleared to `null` (the `x ?? this.x` idiom can only set-or-keep, never
+  /// clear; the optimistic-command rollback needs to restore a cold-start
+  /// `null`). [orKeep] resolves each against the current value. Non-nullable
+  /// fields keep the simple `?? this.x` form.
   GroupState copyWith({
     String? id,
     String? coordinatorId,
     List<String>? memberIds,
-    Object? transport = _unset,
-    Object? track = _unset,
-    Object? groupVolume = _unset,
-    Object? groupMuted = _unset,
+    Object? transport = keep,
+    Object? track = keep,
+    Object? groupVolume = keep,
+    Object? groupMuted = keep,
   }) => GroupState(
     id: id ?? this.id,
     coordinatorId: coordinatorId ?? this.coordinatorId,
     memberIds: memberIds ?? this.memberIds,
-    transport: identical(transport, _unset)
-        ? this.transport
-        : transport as PlaybackState?,
-    track: identical(track, _unset) ? this.track : track as Track?,
-    groupVolume: identical(groupVolume, _unset)
-        ? this.groupVolume
-        : groupVolume as int?,
-    groupMuted: identical(groupMuted, _unset)
-        ? this.groupMuted
-        : groupMuted as bool?,
+    transport: orKeep(transport, this.transport),
+    track: orKeep(track, this.track),
+    groupVolume: orKeep(groupVolume, this.groupVolume),
+    groupMuted: orKeep(groupMuted, this.groupMuted),
   );
 
   @override

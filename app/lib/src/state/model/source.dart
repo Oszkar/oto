@@ -65,5 +65,8 @@ List<Source> sourcesFromHousehold(Household h) {
     );
   }
   out.sort((a, b) => a.label.compareTo(b.label));
-  return out;
+  // Unmodifiable: a consumer that accidentally mutated the list could break the
+  // `listEquals` dedupe in `sourcesProvider`. Mirrors the reducer's immutable
+  // household maps/lists.
+  return List.unmodifiable(out);
 }
