@@ -1,7 +1,9 @@
 import 'dart:async';
 
 /// Trailing throttle: at most one [run] action fires per [window]; a burst
-/// collapses to the latest. [flush] fires the pending action now.
+/// collapses to the latest. [dispose] cancels any pending action without
+/// firing it (drag-release fires its final value directly, so flushing here
+/// would double-fire — see `commands.dart` `_ThrottledScalar.end`).
 class Throttle {
   Throttle(this.window);
   final Duration window;
@@ -11,12 +13,6 @@ class Throttle {
   void run(void Function() action) {
     _pending = action;
     _timer ??= Timer(window, _fire);
-  }
-
-  void flush() {
-    _timer?.cancel();
-    _timer = null;
-    _fire();
   }
 
   void _fire() {

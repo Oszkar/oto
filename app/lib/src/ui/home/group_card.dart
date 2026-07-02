@@ -207,7 +207,7 @@ class GroupCard extends ConsumerWidget {
             style: TextStyles.overline.copyWith(
               fontSize: 9.5,
               letterSpacing: 9.5 * 0.07,
-              color: oto.inkFaint,
+              color: oto.inkMute,
             ),
           ),
           for (final id in visible) ...[
@@ -357,7 +357,7 @@ class GroupCard extends ConsumerWidget {
               ),
               Text(
                 ' · Edit',
-                style: TextStyles.caption.copyWith(color: oto.inkFaint),
+                style: TextStyles.caption.copyWith(color: oto.inkMute),
               ),
             ],
           ),

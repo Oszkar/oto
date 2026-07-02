@@ -121,7 +121,7 @@ just build-win    # debug Windows desktop
 
 `just gen` runs in two stages:
 
-1. `flutter_rust_bridge_codegen generate` - reads `native/src/api.rs` and writes Dart bindings into `app/lib/src/rust/` plus Rust glue into `native/src/frb_generated*.rs`.
+1. `flutter_rust_bridge_codegen generate` - reads `native/src/api.rs` and writes Dart bindings into `app/lib/src/rust/` (including the Freezed `api.freezed.dart` union types) plus Rust glue into `native/src/frb_generated*.rs`.
 2. `dart run build_runner build` - runs `riverpod_generator` over Dart sources and emits `*.g.dart` files alongside their inputs.
 
 These generated source files are committed. That keeps a fresh clone usable in IDEs and on Windows/macOS/Linux without requiring every contributor to run codegen before `flutter analyze`, `flutter test`, or `cargo check`. CI and the optional Lefthook pre-commit hook run `scripts/verify_generated.dart`, which regenerates them and fails if the checked-in output is stale.
@@ -165,4 +165,4 @@ See more details in the CHANGELOG file linked above.
 ## Development notes
 
 - State management on the Dart side is **Riverpod 3 with codegen**. Define providers under `app/lib/src/state/` using `@riverpod`; they're consumed via `ref.watch(...)` from `ConsumerWidget`s. The app is wrapped in a single `ProviderScope` in `main.dart`.
-- Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`) is committed for contributor ergonomics. Regenerate it with `just gen` after changing `native/src/api.rs` or any `@riverpod` provider.
+- Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart`, `**/*.freezed.dart`) is committed for contributor ergonomics. Regenerate it with `just gen` after changing `native/src/api.rs` or any `@riverpod` provider.

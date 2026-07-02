@@ -15,13 +15,14 @@ void main() {
     });
   });
 
-  test('flush sends the pending value immediately', () {
+  test('dispose cancels a pending action without firing it', () {
     fakeAsync((async) {
       final sent = <int>[];
       final t = Throttle(const Duration(milliseconds: 150));
       t.run(() => sent.add(1));
-      t.flush();
-      expect(sent, [1]);
+      t.dispose();
+      async.elapse(const Duration(milliseconds: 150));
+      expect(sent, isEmpty, reason: 'dispose must not fire the pending action');
     });
   });
 }
