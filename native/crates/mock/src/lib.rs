@@ -1,11 +1,11 @@
 #![deny(unsafe_code)]
 
-//! Deterministic in-memory `Wire` for tests — no network. Integration
+//! Deterministic in-memory `Wire` for tests - no network. Integration
 //! tests drive these fixtures so v0.1 discovery is provable without a LAN.
 //!
 //! `MockWire::default()` seeds a stateful per-speaker model (volume, mute,
-//! transport) from the fixture topology. Commands (`set_volume`, `pause`, …)
-//! mutate that model; `speaker_state` reads it back — no real Sonos required.
+//! transport) from the fixture topology. Commands (`set_volume`, `pause`, ...)
+//! mutate that model; `speaker_state` reads it back - no real Sonos required.
 
 use std::{
     collections::HashMap,
@@ -56,7 +56,7 @@ impl Grouping {
     /// Re-home members left behind when `departed` stops coordinating its
     /// group (it joined another group, or went standalone). Mirrors the Sonos
     /// firmware delegating coordination to a remaining member, so the model
-    /// never holds an impossible topology — a member pointing at a coordinator
+    /// never holds an impossible topology - a member pointing at a coordinator
     /// that now follows someone else. Keeps `member_to_coord` and `coords`
     /// mutually consistent. The caller must already have re-pointed `departed`
     /// itself.
@@ -67,7 +67,7 @@ impl Grouping {
             .filter(|(member, coord)| *coord == departed && *member != departed)
             .map(|(member, _)| member.clone())
             .collect();
-        // Any group `departed` used to coordinate is stale now — drop it.
+        // Any group `departed` used to coordinate is stale now - drop it.
         self.coords.retain(|_gid, coord| coord != departed);
         if orphans.is_empty() {
             return;
@@ -122,19 +122,19 @@ impl Grouping {
 struct Model {
     speakers: HashMap<SpeakerId, SpeakerState>,
     /// The device's authoritative grouping (Sonos "ground truth"). `join_group`
-    /// / `leave_group` mutate THIS — like a real regroup mutating the devices.
+    /// / `leave_group` mutate THIS - like a real regroup mutating the devices.
     grouping: Grouping,
     /// Routing cache. Every command/read resolves group→coordinator through
     /// this. Seeded at construction (so a `MockWire::default()` round-trips
-    /// commands without ceremony — see [`MockWire`]) and RE-committed from
+    /// commands without ceremony - see [`MockWire`]) and RE-committed from
     /// `grouping` only by `discover()` / `refresh_topology()`. join/leave never
-    /// touch it, so — exactly like `SonosWire`'s id→addr / group→coord caches —
+    /// touch it, so - exactly like `SonosWire`'s id→addr / group→coord caches -
     /// a regroup does not change routing until a re-pull.
     cache: Grouping,
     /// Sender half of the v0.4 unified event channel. Lazy-init: only
     /// populated by `subscribe_speakers`. `None` ↔ "no pump active".
     tx: Option<Sender<ChangeEvent>>,
-    /// Receiver half — taken once via `take_event_stream`.
+    /// Receiver half - taken once via `take_event_stream`.
     rx: Option<Receiver<ChangeEvent>>,
     /// `true` after `subscribe_topology` succeeds. Gates `TopologyChanged`
     /// emission (mirrors SonosWire only watching `GroupMembership` when
@@ -142,7 +142,7 @@ struct Model {
     topology_subscribed: bool,
     /// Per-speaker forced command error (v0.5 test seam). When a speaker
     /// (or a group's coordinator) has an entry, its commands return the
-    /// stored error instead of mutating/emitting — modelling an unreachable
+    /// stored error instead of mutating/emitting - modelling an unreachable
     /// device so oto-app's health tracking can be exercised.
     command_errors: HashMap<SpeakerId, WireError>,
 }
@@ -207,18 +207,18 @@ impl Model {
 /// than `speakers.is_empty()` so the mock enforces the same "discover first,
 /// then subscribe" lifecycle as a real `SonosWire`. Reason: a fixture-only
 /// MockWire is not the same thing as a wire whose discovery has been
-/// acknowledged by the caller — per /codex review on PR #43, finding P2 #4.
+/// acknowledged by the caller - per /codex review on PR #43, finding P2 #4.
 ///
 /// **Fidelity vs. the real wire (v0.6.3):**
 /// - **Grouping is deferred like `SonosWire`.** `join_group` / `leave_group`
 ///   mutate the device grouping but NOT the routing cache, so a regroup does
-///   not change command routing (`play`, `speaker_state`, …) until a
-///   `refresh_topology()` / `discover()` re-pull commits it — exactly as the
+///   not change command routing (`play`, `speaker_state`, ...) until a
+///   `refresh_topology()` / `discover()` re-pull commits it - exactly as the
 ///   real wire's caches only change on a `GetZoneGroupState` re-pull. A regroup
 ///   surfaces as `TopologyChanged` (only when topology was subscribed), which
 ///   in production drives the debounced Dart refresh.
 /// - **Pre-`discover()` commands are a DELIBERATE convenience, not fidelity.**
-///   The seeded cache lets a direct `MockWire::default().set_volume(…)` round-
+///   The seeded cache lets a direct `MockWire::default().set_volume(...)` round-
 ///   trip without ceremony; a real `SonosWire` returns `NotFound` until its
 ///   caches are populated by `discover()`. This divergence does not leak into
 ///   integration tests: the production seam always installs the mock through
@@ -313,7 +313,7 @@ macro_rules! lock {
     };
 }
 
-/// Emit a `TopologyChanged` on the event stream — but only when a topology
+/// Emit a `TopologyChanged` on the event stream - but only when a topology
 /// watch is active (`topology_subscribed`) AND a pump is running (`tx`).
 /// Mirrors the real wire: the `GroupMembership` watch is registered only if
 /// `subscribe_topology` ran before the pump spawned, so a regroup surfaces a
@@ -339,8 +339,8 @@ impl MockWire {
     }
 
     /// Convenience seam: push a `TopologyChanged` event as if a real GENA
-    /// NOTIFY arrived. Goes through the gated emit path, so — like a real
-    /// NOTIFY — it delivers only when topology was subscribed and a pump is
+    /// NOTIFY arrived. Goes through the gated emit path, so - like a real
+    /// NOTIFY - it delivers only when topology was subscribed and a pump is
     /// active. No-op otherwise.
     pub fn push_topology_change(&self) {
         emit_topology_changed(&lock!(self));
@@ -348,20 +348,20 @@ impl MockWire {
 
     /// Force commands targeting `speaker` (directly, or as a group's
     /// coordinator) to return `err` instead of succeeding. Models an
-    /// unreachable device — used by health-tracking tests. Persists
+    /// unreachable device - used by health-tracking tests. Persists
     /// until `clear_command_error`.
     pub fn set_command_error(&self, speaker: &SpeakerId, err: WireError) {
         lock!(self).command_errors.insert(speaker.clone(), err);
     }
 
     /// Clear a forced command error so `speaker`'s commands succeed again
-    /// (models the device coming back — drives the recovery transition).
+    /// (models the device coming back - drives the recovery transition).
     pub fn clear_command_error(&self, speaker: &SpeakerId) {
         lock!(self).command_errors.remove(speaker);
     }
 
     /// Returns `true` if `subscribe_topology` has been called successfully.
-    /// Test-only introspection — confirms `discover_with` auto-subscribes.
+    /// Test-only introspection - confirms `discover_with` auto-subscribes.
     pub fn topology_subscribed(&self) -> bool {
         lock!(self).topology_subscribed
     }
@@ -369,7 +369,7 @@ impl MockWire {
     /// Shared `next`/`previous` body. On real Sonos a skip triggers an
     /// AVTransport NOTIFY (track change, possibly a transitional state),
     /// so the mock mirrors that by emitting a per-group `Playback` event
-    /// carrying the coordinator's current cached state — closing the
+    /// carrying the coordinator's current cached state - closing the
     /// silent-no-op gap (v0.4 review follow-up). The skip itself doesn't
     /// model a queue, so the state value is the current one (no fabricated
     /// metadata); the point is that a skip is observable on the stream.
@@ -419,7 +419,7 @@ impl Wire for MockWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
         // Commit the device grouping into the routing cache and synthesize the
         // snapshot from it (shared with `refresh_topology`, so the two agree
-        // after a regroup — a plain `self.outcome.clone()` would return the
+        // after a regroup - a plain `self.outcome.clone()` would return the
         // stale original fixture). The `?` propagates a `failing()` mock's error
         // WITHOUT flipping `discovered`.
         let snap = self.resnapshot()?;
@@ -445,7 +445,7 @@ impl Wire for MockWire {
             .get_mut(&coord)
             .ok_or_else(|| WireError::NotFound(coord.to_string()))?;
         // Keep the loaded track (Sonos retains it across pause/stop); clear
-        // position — the mock has no playhead.
+        // position - the mock has no playhead.
         let prev_track = entry.transport.take().and_then(|t| t.current_track);
         entry.transport = Some(TransportState {
             state: PlaybackState::Playing,
@@ -559,7 +559,7 @@ impl Wire for MockWire {
         }
         // Auto-emit a per-group GroupVolume event (mirrors real Sonos:
         // SetGroupVolume SOAP success → group_volume NOTIFY). Group volume is
-        // event-fed only — there is no `Model` field to round-trip (unlike the
+        // event-fed only - there is no `Model` field to round-trip (unlike the
         // per-speaker `set_volume`); the emitted event is the read path.
         if let Some(tx) = &guard.tx {
             let _ = tx.send(ChangeEvent::GroupVolume {
@@ -603,7 +603,7 @@ impl Wire for MockWire {
             return Err(err.clone());
         }
         // Fold `speaker` into `coordinator`'s group in the DEVICE grouping only
-        // (not the routing cache) — like SonosWire, the regroup doesn't change
+        // (not the routing cache) - like SonosWire, the regroup doesn't change
         // routing until a `refresh_topology()`/`discover()` re-pull. If `speaker`
         // had been coordinating a group, re-home the members it leaves behind
         // (and drop its now-stale group) so they don't end up pointing at a
@@ -625,8 +625,8 @@ impl Wire for MockWire {
         if let Some(err) = guard.command_errors.get(speaker) {
             return Err(err.clone());
         }
-        // Mutate the DEVICE grouping only (not the routing cache — deferred like
-        // SonosWire). Uniform — no branch on whether `speaker` coordinated a
+        // Mutate the DEVICE grouping only (not the routing cache - deferred like
+        // SonosWire). Uniform - no branch on whether `speaker` coordinated a
         // group. First re-home any members it was coordinating (the firmware
         // delegates the old group to a remaining member); this also drops
         // `speaker`'s stale old group. THEN `speaker` becomes its own standalone
@@ -689,7 +689,7 @@ impl Wire for MockWire {
     fn subscribe_speakers(&self) -> Result<(), WireError> {
         // Match the real-wire contract: subscription requires a prior
         // successful `discover()`. The pre-seeded fixture in
-        // `MockWire::default()` doesn't count as discovery — the caller
+        // `MockWire::default()` doesn't count as discovery - the caller
         // must actually call `discover()` first (per /codex review on
         // PR #43, finding P2 #4).
         if !self.discovered.load(Ordering::SeqCst) {
@@ -707,7 +707,7 @@ impl Wire for MockWire {
         //   - per-speaker Volume (one event per cached speaker.volume)
         //   - per-speaker Mute   (one event per cached speaker.muted)
         //   - per-group   Playback (one event per group, state from
-        //     the coordinator's cached transport — defaults to
+        //     the coordinator's cached transport - defaults to
         //     PlaybackState::Stopped from the seeded fixture)
         //
         // Track is intentionally NOT seeded: `oto_core::Track` carries
@@ -755,7 +755,7 @@ impl Wire for MockWire {
             });
         }
         for ev in seeds {
-            // Pre-pump send — receiver is buffered, so this can't fail.
+            // Pre-pump send - receiver is buffered, so this can't fail.
             let _ = tx.send(ev);
         }
         guard.tx = Some(tx);
@@ -771,7 +771,7 @@ impl Wire for MockWire {
         // Mirror the SonosWire contract: must be called before the pump
         // (here, `subscribe_speakers` sets `tx`). Idempotent before the
         // pump; once the pump is running, `Ok` only if topology was already
-        // requested, else `AlreadySubscribed` (fail fast — the watch can no
+        // requested, else `AlreadySubscribed` (fail fast - the watch can no
         // longer be registered).
         if guard.tx.is_some() && !guard.topology_subscribed {
             return Err(WireError::AlreadySubscribed);
@@ -782,7 +782,7 @@ impl Wire for MockWire {
 
     fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
         // Re-pull authoritative topology reflecting any join/leave mutations
-        // since the last commit — mirrors SonosWire's GetZoneGroupState re-pull.
+        // since the last commit - mirrors SonosWire's GetZoneGroupState re-pull.
         // Commits the device grouping into the routing cache and synthesizes the
         // snapshot from it (identity from the configured outcome). Shared with
         // `discover()` so the two can't drift.
@@ -951,7 +951,7 @@ mod tests {
     /// Default-but-no-discover path: `MockWire::default()` pre-seeds the
     /// model so commands work, but `discover()` hasn't been called, so
     /// `subscribe_speakers` must STILL reject. This is the regression
-    /// fix for /codex review P2 #4 — the previous `speakers.is_empty()`
+    /// fix for /codex review P2 #4 - the previous `speakers.is_empty()`
     /// check let pre-seeded mocks bypass the discover-first contract.
     #[test]
     fn subscribe_speakers_errors_on_default_without_discover() {
@@ -1277,7 +1277,7 @@ mod tests {
         );
     }
 
-    /// A regroup surfaces as `TopologyChanged` on the stream — the real wire's
+    /// A regroup surfaces as `TopologyChanged` on the stream - the real wire's
     /// GroupMembership NOTIFY equivalent, which drives the Dart re-discover.
     #[test]
     fn join_group_emits_topology_changed_when_subscribed() {
@@ -1435,7 +1435,7 @@ mod tests {
         );
     }
 
-    /// #3: `discover()` and `refresh_topology()` agree after a regroup — both
+    /// #3: `discover()` and `refresh_topology()` agree after a regroup - both
     /// re-pull the CURRENT grouping (discover() no longer returns the stale
     /// original fixture).
     #[test]
@@ -1620,7 +1620,7 @@ mod tests {
     #[test]
     fn leave_group_reelects_members_left_behind() {
         // Kitchen COORDINATES [Kitchen, Dining]. When the coordinator leaves,
-        // the remaining member must be re-homed (off Kitchen) — never left
+        // the remaining member must be re-homed (off Kitchen) - never left
         // pointing at the departed coordinator (an impossible topology).
         let w = MockWire::default();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
@@ -1648,7 +1648,7 @@ mod tests {
     #[test]
     fn join_group_reelects_old_group_when_coordinator_moves() {
         // Kitchen COORDINATES [Kitchen, Dining]. When Kitchen joins Office's
-        // group, the left-behind Dining must be re-homed — not left pointing
+        // group, the left-behind Dining must be re-homed - not left pointing
         // at Kitchen, which now follows Office.
         let w = MockWire::default();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
