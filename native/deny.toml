@@ -14,6 +14,19 @@ ignore = [
     # pinned =0.5.2.
     # TODO(v0.6): re-evaluate if the sonos-api pin is changed.
     { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api (paste → sonos-api → oto-wire); no upgrade path on pinned sonos-api =0.5.2" },
+    # `quick-xml v0.31.0` - two DoS-class parsing advisories (RUSTSEC-2026-0194
+    # quadratic duplicate-attribute check; RUSTSEC-2026-0195 unbounded
+    # namespace-declaration allocation), both fixed in >=0.41.0. quick-xml is
+    # pinned =0.31.0 transitively via sonos-api =0.5.2 (DIDL-Lite parsing), so
+    # there is no local upgrade path while that pin holds. Practical exposure is
+    # low: oto only parses XML returned by the user's own Sonos devices on the
+    # LAN (SOAP/DIDL-Lite), never arbitrary untrusted input. This LAN-local
+    # exposure is consistent with the accepted-risk trust stance ARCHITECTURE
+    # records for discovery input (Known constraints: "SSDP responses are
+    # trusted"). Revisit when the sonos-api pin is bumped to a release that
+    # depends on quick-xml >=0.41.0.
+    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-only XML input from the user's own devices" },
+    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-only XML input from the user's own devices" },
     # RUSTSEC-2025-0134 (rustls-pemfile v1) formerly ignored here: it came
     # in via sonos-sdk-discovery's default-tls reqwest feature. Retired
     # 2026-07-01 when that feature was dropped (LOCAL_PATCHES.md #2) and
