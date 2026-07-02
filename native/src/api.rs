@@ -510,16 +510,28 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         // `applyEvent`/`householdProvider` fold has NO generation awareness, so
         // in the window between the Rust bump and the Dart stream re-subscribe
         // a stale Volume/Playback/Track would otherwise land in the UI state.
-        // Drop the forward but keep draining (return `true`) until the old
-        // Sender drops and `recv()` returns `Disconnected`. Mirrors the
-        // generation gate the app-bus drain already applies via
-        // `try_recv_app_event`.
+        // Returning `false` here withholds the stale DTO AND exits the consumer
+        // loop immediately (the caller returns on `!emit`), rather than
+        // lingering on `recv_timeout` until the old Sender drops. The Dart
+        // provider re-subscribes on the new generation, so there is nothing
+        // more to deliver on this stream; exiting now also restores prompt
+        // cancellation semantics (the loop no longer depends on `sink.add` to
+        // notice teardown once the generation has moved).
         if generation != oto_app::current_generation() {
-            return true;
+            return false;
         }
         sink.add(crate::map::to_change_event_dto(event)).is_ok()
     };
     loop {
+        // Exit as soon as our wire is replaced, even if no event arrives to
+        // trip the `emit` guard above. Without this, an idle old-wire channel
+        // would keep this FRB worker parked on `recv_timeout` (one 250 ms poll
+        // at a time) until the old pump joins and drops its Sender. The Dart
+        // provider re-subscribes on the new generation, so there is nothing
+        // left for this consumer to do once the generation has moved.
+        if generation != oto_app::current_generation() {
+            return;
+        }
         // Drain TWO sources onto the one FRB stream (v0.5):
         //   1. oto-app's sibling bus — SubscriptionError/Recovered emitted
         //      on command-dispatch health transitions,
