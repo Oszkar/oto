@@ -53,24 +53,31 @@ class RoomState {
     this.groupId,
   });
 
+  /// Sentinel for [copyWith] so a nullable field can be explicitly cleared to
+  /// `null`. The `x ?? this.x` idiom can only set-or-keep, never clear; the
+  /// optimistic-command rollback needs to restore a cold-start `null` (a value
+  /// the field had before the user's drag), which a plain `copyWith` can't
+  /// express. Non-nullable fields keep the simple `?? this.x` form.
+  static const Object _unset = Object();
+
   RoomState copyWith({
     String? id,
     String? name,
-    String? model,
+    Object? model = _unset,
     RoomKind? kind,
-    int? volume,
-    bool? muted,
+    Object? volume = _unset,
+    Object? muted = _unset,
     bool? online,
-    String? groupId,
+    Object? groupId = _unset,
   }) => RoomState(
     id: id ?? this.id,
     name: name ?? this.name,
-    model: model ?? this.model,
+    model: identical(model, _unset) ? this.model : model as String?,
     kind: kind ?? this.kind,
-    volume: volume ?? this.volume,
-    muted: muted ?? this.muted,
+    volume: identical(volume, _unset) ? this.volume : volume as int?,
+    muted: identical(muted, _unset) ? this.muted : muted as bool?,
     online: online ?? this.online,
-    groupId: groupId ?? this.groupId,
+    groupId: identical(groupId, _unset) ? this.groupId : groupId as String?,
   );
 
   @override

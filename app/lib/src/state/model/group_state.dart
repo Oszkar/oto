@@ -55,22 +55,35 @@ class GroupState {
           transport != null &&
           transport != PlaybackState.stopped);
 
+  /// Sentinel for [copyWith] so a nullable field can be explicitly cleared to
+  /// `null`. The `x ?? this.x` idiom can only set-or-keep, never clear; the
+  /// optimistic-command rollback needs to restore a cold-start `null` (the
+  /// value the field had before the user's action), which a plain `copyWith`
+  /// can't express. Non-nullable fields keep the simple `?? this.x` form.
+  static const Object _unset = Object();
+
   GroupState copyWith({
     String? id,
     String? coordinatorId,
     List<String>? memberIds,
-    PlaybackState? transport,
-    Track? track,
-    int? groupVolume,
-    bool? groupMuted,
+    Object? transport = _unset,
+    Object? track = _unset,
+    Object? groupVolume = _unset,
+    Object? groupMuted = _unset,
   }) => GroupState(
     id: id ?? this.id,
     coordinatorId: coordinatorId ?? this.coordinatorId,
     memberIds: memberIds ?? this.memberIds,
-    transport: transport ?? this.transport,
-    track: track ?? this.track,
-    groupVolume: groupVolume ?? this.groupVolume,
-    groupMuted: groupMuted ?? this.groupMuted,
+    transport: identical(transport, _unset)
+        ? this.transport
+        : transport as PlaybackState?,
+    track: identical(track, _unset) ? this.track : track as Track?,
+    groupVolume: identical(groupVolume, _unset)
+        ? this.groupVolume
+        : groupVolume as int?,
+    groupMuted: identical(groupMuted, _unset)
+        ? this.groupMuted
+        : groupMuted as bool?,
   );
 
   @override

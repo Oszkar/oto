@@ -203,6 +203,72 @@ void main() {
     expect(container.read(householdProvider).rooms['KT']!.volume, 50);
   });
 
+  test('failed volume with a null anchor clears back to null', () async {
+    final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
+    final (:container, :discovery) = _container(spy);
+    await _seedHousehold(container);
+    // KT has no volume yet (cold-start null) — the anchor will be null.
+    expect(container.read(householdProvider).rooms['KT']!.volume, isNull);
+
+    container.read(playbackControllerProvider).setVolumeEnd('KT', 40);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(householdProvider).rooms['KT']!.volume, isNull,
+        reason: 'a failed command clears the optimistic 40 back to null '
+            '(no fabricated value left standing)');
+  });
+
+  test('a newer gesture is not clobbered by an older end cleanup', () async {
+    final spy = _SpyApi()..deferVolume = true; // control completion order.
+    final (:container, :discovery) = _container(spy);
+    await _seedHousehold(container);
+    container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
+
+    final c = container.read(playbackControllerProvider);
+    // Gesture 1: end(20) — send in flight (deferred → completer[0]).
+    c.setVolumeEnd('KT', 20);
+    expect(spy.volumeCompleters.length, 1);
+    // Gesture 2 starts before gesture 1 resolves: end(30) → completer[1].
+    c.setVolumeEnd('KT', 30);
+    expect(spy.volumeCompleters.length, 2);
+
+    // Gesture 1 succeeds now; under the old unconditional cleanup its
+    // whenComplete would wipe gesture 2's anchor + sequence.
+    spy.volumeCompleters[0].complete();
+    await Future<void>.delayed(Duration.zero);
+
+    // Gesture 2 then FAILS — its rollback must still fire (bookkeeping intact),
+    // restoring the pre-interaction anchor 10.
+    spy.volumeCompleters[1].completeError(const CommandError.sonos('late'));
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(householdProvider).rooms['KT']!.volume, 10,
+        reason:
+            'gesture 2 rollback survived gesture 1 cleanup; restored to anchor 10');
+  });
+
+  test('NotFound rolls the optimistic transport back and re-discovers',
+      () async {
+    final spy = _SpyApi()..throwOn = const CommandError.notFound('x');
+    final (:container, :discovery) = _container(spy);
+    await _seedHousehold(container);
+    final before = discovery.buildCount;
+
+    await container
+        .read(playbackControllerProvider)
+        .togglePlay('G1', PlaybackState.paused);
+    await container.read(discoveryProvider.future);
+
+    expect(container.read(householdProvider).groups['G1']!.transport,
+        PlaybackState.paused,
+        reason: 'NotFound rolls the optimistic playing back to paused, rather '
+            'than carrying a wrong guess across re-discovery');
+    expect(discovery.buildCount, greaterThan(before),
+        reason: 'NotFound also re-discovers to refresh the stale id');
+  });
+
   test('a stale failed mid-drag send does not roll back over a newer send (N3)',
       () async {
     final spy = _SpyApi()..deferVolume = true; // control completion order.
@@ -306,6 +372,34 @@ void main() {
 
       expect(spy.calls, ['setGroupMute(G1,true)']);
       expect(container.read(householdProvider).groups['G1']!.groupMuted, true);
+    });
+
+    test('failed group volume with a null anchor clears back to null', () async {
+      final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      // Group volume is event-only — null until the first GroupVolume event.
+      expect(container.read(householdProvider).groups['G1']!.groupVolume, isNull);
+
+      container.read(groupingControllerProvider).setGroupVolumeEnd('G1', 60);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(container.read(householdProvider).groups['G1']!.groupVolume, isNull,
+          reason: 'a failed group-volume command clears the optimistic 60');
+    });
+
+    test('failed group mute with a null prior clears back to null', () async {
+      final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      expect(container.read(householdProvider).groups['G1']!.groupMuted, isNull);
+
+      await container.read(groupingControllerProvider).setGroupMute('G1', true);
+
+      expect(container.read(householdProvider).groups['G1']!.groupMuted, isNull,
+          reason: 'a failed mute clears the optimistic true back to null '
+              '(no prior value to restore)');
     });
   });
 }

@@ -89,29 +89,29 @@ Household householdFromTopology(Topology topo, {Household? previous}) {
 Household applyEvent(Household h, ChangeEventDto e) {
   switch (e) {
     case ChangeEventDto_Volume(:final speakerId, :final volume):
-      return _updateRoom(h, speakerId, (r) => r.copyWith(volume: volume));
+      return updateRoom(h, speakerId, (r) => r.copyWith(volume: volume));
     case ChangeEventDto_Mute(:final speakerId, :final muted):
-      return _updateRoom(h, speakerId, (r) => r.copyWith(muted: muted));
+      return updateRoom(h, speakerId, (r) => r.copyWith(muted: muted));
     case ChangeEventDto_Playback(:final groupId, :final state):
-      return _updateGroup(
+      return updateGroup(
         h,
         groupId,
         (g) => g.copyWith(transport: playbackStateFromDto(state)),
       );
     case ChangeEventDto_Track(:final groupId, :final track):
-      return _updateGroup(
+      return updateGroup(
         h,
         groupId,
         (g) => g.copyWith(track: Track.fromDto(track)),
       );
     case ChangeEventDto_GroupVolume(:final groupId, :final volume):
-      return _updateGroup(h, groupId, (g) => g.copyWith(groupVolume: volume));
+      return updateGroup(h, groupId, (g) => g.copyWith(groupVolume: volume));
     case ChangeEventDto_GroupMute(:final groupId, :final muted):
-      return _updateGroup(h, groupId, (g) => g.copyWith(groupMuted: muted));
+      return updateGroup(h, groupId, (g) => g.copyWith(groupMuted: muted));
     case ChangeEventDto_SubscriptionError(:final speakerId):
-      return _updateRoom(h, speakerId, (r) => r.copyWith(online: false));
+      return updateRoom(h, speakerId, (r) => r.copyWith(online: false));
     case ChangeEventDto_SubscriptionRecovered(:final speakerId):
-      return _updateRoom(h, speakerId, (r) => r.copyWith(online: true));
+      return updateRoom(h, speakerId, (r) => r.copyWith(online: true));
     case ChangeEventDto_TopologyChanged():
       // No-op: the topology controller re-discovers on this event, which
       // routes through `householdFromTopology`, not the reducer.
@@ -121,7 +121,8 @@ Household applyEvent(Household h, ChangeEventDto e) {
 
 /// Apply [f] to the room [id] if it exists, returning a new household;
 /// otherwise return [h] unchanged (unknown ids are ignored, never crash).
-Household _updateRoom(Household h, String id, RoomState Function(RoomState) f) {
+/// Public so the optimistic mutators in `household.dart` fold the same way.
+Household updateRoom(Household h, String id, RoomState Function(RoomState) f) {
   final r = h.rooms[id];
   if (r == null) return h;
   return h.copyWith(rooms: Map.unmodifiable({...h.rooms, id: f(r)}));
@@ -129,7 +130,8 @@ Household _updateRoom(Household h, String id, RoomState Function(RoomState) f) {
 
 /// Apply [f] to the group [id] if it exists, returning a new household;
 /// otherwise return [h] unchanged (unknown ids are ignored, never crash).
-Household _updateGroup(
+/// Public so the optimistic mutators in `household.dart` fold the same way.
+Household updateGroup(
   Household h,
   String id,
   GroupState Function(GroupState) f,
