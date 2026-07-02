@@ -208,9 +208,9 @@ sealed class ChangeEventDto with _$ChangeEventDto {
   }) = ChangeEventDto_SubscriptionRecovered;
 
   /// Household topology changed (speakers regrouped). Payload-less: the
-  /// Dart `TopologyController` debounces then re-pulls topology on
-  /// receipt (invalidates `discoveryProvider` → full re-discover;
-  /// v0.6 may swap in a lighter SOAP refresh).
+  /// Dart `TopologyController` debounces 250 ms then drives a fast
+  /// `refreshTopology()` re-pull (a no-SSDP seeded re-discover, ~tens of
+  /// ms), with a full SSDP re-discover as the error fallback.
   const factory ChangeEventDto.topologyChanged() =
       ChangeEventDto_TopologyChanged;
 }
