@@ -498,8 +498,11 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         // succeeds, this fn will be called again against the new wire.
         return;
     };
-    // Apply one event to the cache + forward it to Dart. Returns `false`
-    // if the Dart subscriber cancelled (the caller should then return).
+    // Apply one event to the cache, then forward it to Dart. Returns `false`
+    // to tell the caller to exit the loop, for either reason: the Dart
+    // subscriber has cancelled (`sink.add` failed) OR our captured `generation`
+    // is no longer current (the wire was replaced; see the stale-wire guard
+    // below, which withholds the stale DTO and exits).
     let emit = |event: oto_core::ChangeEvent| -> bool {
         oto_app::apply_event_at_generation(generation, &event);
         // Stale-wire guard for the Dart side. This consumer's `rx` is paired
