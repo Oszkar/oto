@@ -299,4 +299,36 @@ void main() {
       },
     );
   });
+
+  group('HomeViewState value equality', () {
+    test('HomeReady compares by household', () {
+      expect(HomeReady(_cachedHousehold), HomeReady(_cachedHousehold));
+      expect(
+        HomeReady(_cachedHousehold) == const HomeReady(Household()),
+        isFalse,
+      );
+    });
+
+    test('singleton states are value-equal', () {
+      expect(const HomeInitialLoading(), const HomeInitialLoading());
+      expect(const HomeEmpty(), const HomeEmpty());
+      expect(const HomeInitialLoading() == const HomeEmpty(), isFalse);
+    });
+
+    test('failure states compare by their fields', () {
+      final err = rust_api.DiscoveryError.noDevicesFound();
+      expect(
+        HomeDiscoveryFailedNoCache(err),
+        HomeDiscoveryFailedNoCache(err),
+      );
+      expect(
+        HomeDiscoveryFailedWithCache(_cachedHousehold, err),
+        HomeDiscoveryFailedWithCache(_cachedHousehold, err),
+      );
+      expect(
+        HomeDiscoveringWithCache(_cachedHousehold),
+        HomeDiscoveringWithCache(_cachedHousehold),
+      );
+    });
+  });
 }

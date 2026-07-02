@@ -8,13 +8,35 @@ part of 'sources.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// Derived active-source list for the UI.
+///
+/// A class Notifier (not a bare function provider) so [updateShouldNotify] can
+/// dedupe by value: [sourcesFromHousehold] returns a fresh `List` on every
+/// household delta, and `List` has no value equality, so a plain provider would
+/// notify consumers (`bottom_strip`) on *every* event - an unrelated room's
+/// volume tick - even when the derived sources are identical. `listEquals` over
+/// the value-equal [Source] elements suppresses those no-op rebuilds.
 
-@ProviderFor(sources)
+@ProviderFor(Sources)
 final sourcesProvider = SourcesProvider._();
 
-final class SourcesProvider
-    extends $FunctionalProvider<List<Source>, List<Source>, List<Source>>
-    with $Provider<List<Source>> {
+/// Derived active-source list for the UI.
+///
+/// A class Notifier (not a bare function provider) so [updateShouldNotify] can
+/// dedupe by value: [sourcesFromHousehold] returns a fresh `List` on every
+/// household delta, and `List` has no value equality, so a plain provider would
+/// notify consumers (`bottom_strip`) on *every* event - an unrelated room's
+/// volume tick - even when the derived sources are identical. `listEquals` over
+/// the value-equal [Source] elements suppresses those no-op rebuilds.
+final class SourcesProvider extends $NotifierProvider<Sources, List<Source>> {
+  /// Derived active-source list for the UI.
+  ///
+  /// A class Notifier (not a bare function provider) so [updateShouldNotify] can
+  /// dedupe by value: [sourcesFromHousehold] returns a fresh `List` on every
+  /// household delta, and `List` has no value equality, so a plain provider would
+  /// notify consumers (`bottom_strip`) on *every* event - an unrelated room's
+  /// volume tick - even when the derived sources are identical. `listEquals` over
+  /// the value-equal [Source] elements suppresses those no-op rebuilds.
   SourcesProvider._()
     : super(
         from: null,
@@ -31,13 +53,7 @@ final class SourcesProvider
 
   @$internal
   @override
-  $ProviderElement<List<Source>> $createElement($ProviderPointer pointer) =>
-      $ProviderElement(pointer);
-
-  @override
-  List<Source> create(Ref ref) {
-    return sources(ref);
-  }
+  Sources create() => Sources();
 
   /// {@macro riverpod.override_with_value}
   Override overrideWithValue(List<Source> value) {
@@ -48,4 +64,31 @@ final class SourcesProvider
   }
 }
 
-String _$sourcesHash() => r'68809a56bd620122f39b7a69664f124934d8ea33';
+String _$sourcesHash() => r'8fedb09b2b913f91da121589b04b5b8abcb2108b';
+
+/// Derived active-source list for the UI.
+///
+/// A class Notifier (not a bare function provider) so [updateShouldNotify] can
+/// dedupe by value: [sourcesFromHousehold] returns a fresh `List` on every
+/// household delta, and `List` has no value equality, so a plain provider would
+/// notify consumers (`bottom_strip`) on *every* event - an unrelated room's
+/// volume tick - even when the derived sources are identical. `listEquals` over
+/// the value-equal [Source] elements suppresses those no-op rebuilds.
+
+abstract class _$Sources extends $Notifier<List<Source>> {
+  List<Source> build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<List<Source>, List<Source>>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<List<Source>, List<Source>>,
+              List<Source>,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

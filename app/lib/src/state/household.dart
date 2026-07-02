@@ -81,4 +81,27 @@ class HouseholdNotifier extends _$HouseholdNotifier {
         state,
         ChangeEventDto.playback(groupId: groupId, state: playbackStateToDto(t)),
       );
+
+  // ── Rollback restores ──────────────────────────────────────────────────
+  //
+  // Unlike the optimistic setters above (which mirror a non-null event), these
+  // restore a field to its PRE-gesture value, which may be `null` at cold-start
+  // — before any event has landed. The optimistic-event path can't express a
+  // `null` (a `ChangeEventDto` always carries a concrete value), so rollback
+  // folds through `copyWith` directly, whose sentinel form clears to `null`.
+  // Without this a failed command on a never-yet-observed field would leave a
+  // fabricated value standing (most reachable for group volume/mute, which are
+  // event-only and often `null` until the user's first change).
+
+  /// Restore a room's volume to [v] (may be `null`) after a failed command.
+  void restoreVolume(String speakerId, int? v) =>
+      state = updateRoom(state, speakerId, (r) => r.copyWith(volume: v));
+
+  /// Restore a group's master volume to [v] (may be `null`).
+  void restoreGroupVolume(String groupId, int? v) =>
+      state = updateGroup(state, groupId, (g) => g.copyWith(groupVolume: v));
+
+  /// Restore a group's master mute to [m] (may be `null`).
+  void restoreGroupMuted(String groupId, bool? m) =>
+      state = updateGroup(state, groupId, (g) => g.copyWith(groupMuted: m));
 }

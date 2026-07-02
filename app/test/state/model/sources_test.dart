@@ -67,6 +67,11 @@ void main() {
     expect(s.first.track!.title, 'Black Star');
   });
 
+  test('returns an unmodifiable list', () {
+    final s = sourcesFromHousehold(_h());
+    expect(() => s.clear(), throwsUnsupportedError);
+  });
+
   test('a paused group with a track is still a source', () {
     final h = _h();
     final g = h.groups['G2']!.copyWith(transport: PlaybackState.paused);

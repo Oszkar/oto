@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/foundation.dart' show listEquals;
 
+import 'copy_with.dart';
 import 'track.dart';
 
 /// Transport state of a group's coordinator. Mirrors the backend
@@ -55,22 +56,27 @@ class GroupState {
           transport != null &&
           transport != PlaybackState.stopped);
 
+  /// Nullable fields default to the [keep] sentinel so they can be explicitly
+  /// cleared to `null` (the `x ?? this.x` idiom can only set-or-keep, never
+  /// clear; the optimistic-command rollback needs to restore a cold-start
+  /// `null`). [orKeep] resolves each against the current value. Non-nullable
+  /// fields keep the simple `?? this.x` form.
   GroupState copyWith({
     String? id,
     String? coordinatorId,
     List<String>? memberIds,
-    PlaybackState? transport,
-    Track? track,
-    int? groupVolume,
-    bool? groupMuted,
+    Object? transport = keep,
+    Object? track = keep,
+    Object? groupVolume = keep,
+    Object? groupMuted = keep,
   }) => GroupState(
     id: id ?? this.id,
     coordinatorId: coordinatorId ?? this.coordinatorId,
     memberIds: memberIds ?? this.memberIds,
-    transport: transport ?? this.transport,
-    track: track ?? this.track,
-    groupVolume: groupVolume ?? this.groupVolume,
-    groupMuted: groupMuted ?? this.groupMuted,
+    transport: orKeep(transport, this.transport),
+    track: orKeep(track, this.track),
+    groupVolume: orKeep(groupVolume, this.groupVolume),
+    groupMuted: orKeep(groupMuted, this.groupMuted),
   );
 
   @override

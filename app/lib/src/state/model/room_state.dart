@@ -2,6 +2,8 @@
 /// value-comparable. Mapped from backend topology/state by Task 3's reducer.
 library;
 
+import 'copy_with.dart';
+
 /// Coarse physical kind of a room's speaker, derived from its model name.
 /// Drives UI affordances (e.g. soundbars get TV/HT controls later).
 enum RoomKind { speaker, soundbar }
@@ -53,24 +55,29 @@ class RoomState {
     this.groupId,
   });
 
+  /// Nullable fields default to the [keep] sentinel so they can be explicitly
+  /// cleared to `null` (the `x ?? this.x` idiom can only set-or-keep, never
+  /// clear; the optimistic-command rollback needs to restore a cold-start
+  /// `null`). [orKeep] resolves each against the current value. Non-nullable
+  /// fields keep the simple `?? this.x` form.
   RoomState copyWith({
     String? id,
     String? name,
-    String? model,
+    Object? model = keep,
     RoomKind? kind,
-    int? volume,
-    bool? muted,
+    Object? volume = keep,
+    Object? muted = keep,
     bool? online,
-    String? groupId,
+    Object? groupId = keep,
   }) => RoomState(
     id: id ?? this.id,
     name: name ?? this.name,
-    model: model ?? this.model,
+    model: orKeep(model, this.model),
     kind: kind ?? this.kind,
-    volume: volume ?? this.volume,
-    muted: muted ?? this.muted,
+    volume: orKeep(volume, this.volume),
+    muted: orKeep(muted, this.muted),
     online: online ?? this.online,
-    groupId: groupId ?? this.groupId,
+    groupId: orKeep(groupId, this.groupId),
   );
 
   @override

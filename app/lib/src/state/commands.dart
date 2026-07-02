@@ -56,14 +56,16 @@ mixin _Reconciling {
     try {
       await op();
     } on CommandError catch (e) {
+      // Any thrown error means the optimistic guess didn't take, so undo it. A
+      // *successful* no-op set emits no echo, so a standing optimistic value is
+      // correct — we roll back only on a thrown error, never for a missing echo.
+      rollback?.call();
       if (e is CommandError_NotFound) {
-        // Stale identifier — re-discover (sonos-notes § Identifiers).
+        // Stale identifier — also re-discover so the id is refreshed (sonos-notes
+        // § Identifiers). Rolling back first means the view shows the last-known
+        // value until the fresh topology re-seeds it via events, rather than a
+        // wrong optimistic guess carried across re-discovery by coordinator.
         ref.invalidate(discoveryProvider);
-      } else {
-        // Sonos device-reject / Network unreachable → roll back. A *successful*
-        // no-op emits no echo, so a standing optimistic value is correct;
-        // rollback only on a thrown error.
-        rollback?.call();
       }
     }
   }
@@ -84,6 +86,7 @@ class _ThrottledScalar {
   _ThrottledScalar({
     required this.readCurrent,
     required this.applyOptimistic,
+    required this.restore,
     required this.command,
     required this.reconcile,
   });
@@ -93,6 +96,12 @@ class _ThrottledScalar {
 
   /// Apply an optimistic [value] for [id] to local household state.
   final void Function(String id, int value) applyOptimistic;
+
+  /// Restore [id] to a possibly-null pre-gesture anchor on rollback. Distinct
+  /// from [applyOptimistic] (which only ever sets a concrete drag value)
+  /// because the anchor can be `null` at cold-start, and a failed command must
+  /// then clear the field rather than leave a fabricated value standing.
+  final void Function(String id, int? value) restore;
 
   /// Fire the SOAP command for [id] at [value].
   final Future<void> Function(String id, int value) command;
@@ -123,10 +132,18 @@ class _ThrottledScalar {
     _anchor.putIfAbsent(id, () => readCurrent(id));
     applyOptimistic(id, value);
     _throttle.remove(id)?.dispose();
-    _fire(id, value).whenComplete(() {
-      // Gesture done - release the per-id bookkeeping.
-      _anchor.remove(id);
-      _seq.remove(id);
+    final future = _fire(id, value);
+    final mySeq = _seq[id]; // the sequence _fire just assigned (synchronously).
+    future.whenComplete(() {
+      // Release the per-id bookkeeping ONLY if this gesture is still the latest.
+      // A new drag/end on the same id can start while our send is in flight;
+      // clearing unconditionally would wipe the newer gesture's anchor +
+      // sequence, stranding its rollback (it would see a null sequence and skip,
+      // leaving a failed newer command's optimistic value standing).
+      if (_seq[id] == mySeq) {
+        _anchor.remove(id);
+        _seq.remove(id);
+      }
     });
   }
 
@@ -140,8 +157,10 @@ class _ThrottledScalar {
       () => command(id, value),
       rollback: () {
         if (_seq[id] != mySeq) return; // superseded by a newer gesture.
-        final prev = _anchor[id];
-        if (prev != null) applyOptimistic(id, prev);
+        // Restore the pre-gesture anchor, which may be null (cold-start) -
+        // `restore` clears to null so a failed command can't leave a fabricated
+        // value standing.
+        restore(id, _anchor[id]);
       },
     );
   }
@@ -153,6 +172,7 @@ class PlaybackController with _Reconciling {
     _volume = _ThrottledScalar(
       readCurrent: (id) => ref.read(householdProvider).rooms[id]?.volume,
       applyOptimistic: (id, v) => _h.setOptimisticVolume(id, v),
+      restore: (id, v) => _h.restoreVolume(id, v),
       command: (id, v) => api.setVolume(id, v),
       reconcile: send,
     );
@@ -200,6 +220,7 @@ class GroupingController with _Reconciling {
     _groupVolume = _ThrottledScalar(
       readCurrent: (id) => ref.read(householdProvider).groups[id]?.groupVolume,
       applyOptimistic: (id, v) => _h.setOptimisticGroupVolume(id, v),
+      restore: (id, v) => _h.restoreGroupVolume(id, v),
       command: (id, v) => api.setGroupVolume(id, v),
       reconcile: send,
     );
@@ -226,9 +247,9 @@ class GroupingController with _Reconciling {
     _h.setOptimisticGroupMuted(groupId, muted);
     return send(
       () => api.setGroupMute(groupId, muted),
-      rollback: () {
-        if (prev != null) _h.setOptimisticGroupMuted(groupId, prev);
-      },
+      // `prev` may be null (event-only field, no value seen yet) - restore it
+      // as-is so a failed mute can't leave a fabricated value standing.
+      rollback: () => _h.restoreGroupMuted(groupId, prev),
     );
   }
 }
