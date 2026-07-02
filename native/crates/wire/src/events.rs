@@ -48,6 +48,13 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// missed-seed hole without re-opening the seed → rediscover → seed loop (a
 /// fresh pump still swallows its own in-window seed burst). 5 s gives generous
 /// margin over the observed ~1 s seed latency.
+///
+/// Load-bearing knob: seed and regroup are payload-identical at this layer, so
+/// timing is the only discriminator. If dogfooding ever surfaces a
+/// rediscover-churn loop (a speaker whose seed consistently lands after this
+/// window is treated as a real regroup → re-discover → fresh pump → same late
+/// seed), widen this to exceed the measured worst-case seed latency on the
+/// target LAN rather than tightening it. See `tests/live_topology_events.rs`.
 const SEED_WINDOW: Duration = Duration::from_secs(5);
 
 /// Inputs the pump needs from the wire's discover-built caches.

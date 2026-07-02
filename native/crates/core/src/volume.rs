@@ -31,7 +31,7 @@ impl Volume {
         Self(v.clamp(0, 100) as u8)
     }
 
-    /// Borrow the underlying `u8`.
+    /// Return the underlying `u8` (`Volume` is `Copy`).
     pub fn get(self) -> u8 {
         self.0
     }
