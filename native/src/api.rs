@@ -121,9 +121,9 @@ pub enum ChangeEventDto {
         speaker_id: String,
     },
     /// Household topology changed (speakers regrouped). Payload-less: the
-    /// Dart `TopologyController` debounces then re-pulls topology on
-    /// receipt (invalidates `discoveryProvider` → full re-discover;
-    /// v0.6 may swap in a lighter SOAP refresh).
+    /// Dart `TopologyController` debounces 250 ms then drives a fast
+    /// `refreshTopology()` re-pull (a no-SSDP seeded re-discover, ~tens of
+    /// ms), with a full SSDP re-discover as the error fallback.
     TopologyChanged,
 }
 
@@ -502,6 +502,21 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // if the Dart subscriber cancelled (the caller should then return).
     let emit = |event: oto_core::ChangeEvent| -> bool {
         oto_app::apply_event_at_generation(generation, &event);
+        // Stale-wire guard for the Dart side. This consumer's `rx` is paired
+        // with `generation`; once a rediscover/refresh bumps the StateManager
+        // past it, every remaining event on this OLD-wire channel is stale by
+        // construction. The cache apply above already no-ops on the gen
+        // mismatch, but the DTO must ALSO be withheld from Dart: the Dart
+        // `applyEvent`/`householdProvider` fold has NO generation awareness, so
+        // in the window between the Rust bump and the Dart stream re-subscribe
+        // a stale Volume/Playback/Track would otherwise land in the UI state.
+        // Drop the forward but keep draining (return `true`) until the old
+        // Sender drops and `recv()` returns `Disconnected`. Mirrors the
+        // generation gate the app-bus drain already applies via
+        // `try_recv_app_event`.
+        if generation != oto_app::current_generation() {
+            return true;
+        }
         sink.add(crate::map::to_change_event_dto(event)).is_ok()
     };
     loop {
