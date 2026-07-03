@@ -10,14 +10,14 @@ library;
 
 import 'package:flutter/widgets.dart';
 
-import 'package:oto/src/rust/frb_generated.dart';
 import 'showcase_app.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialise the bridge so the app runs in a realistic environment. The
-  // showcase itself drives zero FFI (all backend-touching providers are
-  // overridden), but init keeps parity with the real `main.dart`.
-  await RustLib.init();
+  // Deliberately NO `RustLib.init()`: the showcase drives zero FFI (every
+  // backend-touching provider is overridden with a fixture double), so skipping
+  // init keeps it truly backend-free and makes any accidental Rust call
+  // fail-fast instead of silently reaching for a native library. The smoke test
+  // enforces the same contract by pumping every entry without init.
   runApp(const ShowcaseApp());
 }

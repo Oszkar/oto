@@ -207,6 +207,20 @@ class SeededSettings extends SettingsNotifier {
       state = (mode: state.mode, accent: state.accent, layout: l);
 }
 
+/// A [PositionApi] that returns a fixed position without the `track_position`
+/// SOAP read. Installed globally so a `NowPlayingScreen` reached by *navigation*
+/// (e.g. tapping a Home bottom-strip source) - where there is no entry-specific
+/// `nowPlayingPositionProvider` override - still never touches Rust.
+class InertPositionApi extends PositionApi {
+  const InertPositionApi();
+  @override
+  Future<rust_api.TrackPositionDto> trackPosition(String groupId) async =>
+      rust_api.TrackPositionDto(
+        positionSecs: BigInt.from(74),
+        durationSecs: BigInt.from(327),
+      );
+}
+
 /// Build a fixed [NowPlayingProgress] for the Now Playing preview, bypassing the
 /// SOAP position read and its ~500 ms ticker.
 NowPlayingProgress progress(Duration position, Duration duration) =>

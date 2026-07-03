@@ -318,6 +318,7 @@ class ShowcasePreview extends StatelessWidget {
           (ref) => const Stream<rust_api.ChangeEventDto>.empty(),
         ),
         commandApiProvider.overrideWithValue(const InertCommandApi()),
+        positionApiProvider.overrideWithValue(const InertPositionApi()),
         settingsProvider.overrideWith(() => SeededSettings(seed)),
         if (entry.homeState != null)
           homeViewStateProvider.overrideWithValue(entry.homeState!),
