@@ -53,10 +53,10 @@ The core abstraction is a **source**, not a speaker. A source is either a
   group-wide. To play something different in one room, ungroup it first.
 - **Volume is per-room** (the exception); a group also has a **group master**
   that moves all members proportionally.
-- Now-playing surfaces are **derived from room state**, never hand-authored -
-  `sourcesFromRooms` is the single guardrail (a screen can't claim a different
-  source count than its rooms imply). See
-  [`app/lib/src/state/sources.dart`](../../app/lib/src/state/sources.dart).
+- Now-playing surfaces are **derived from room/group state**, never
+  hand-authored - `sourcesFromHousehold` is the single guardrail (a screen
+  can't claim a different source count than its rooms imply). See
+  [`app/lib/src/state/model/source.dart`](../../app/lib/src/state/model/source.dart).
 - Idle / powered-off rooms are not sources.
 
 ### Colour & type
