@@ -89,6 +89,13 @@ install-hooks:
 dev:
     flutter run
 
+# Run the fixture-driven design-system showcase (screens/states gallery, no
+# LAN/Sonos needed). A live design board - hot reload to iterate on UI. See
+# docs/design-system/README.md.
+[working-directory: 'app']
+showcase:
+    flutter run -t lib/showcase/main.dart
+
 # Debug builds.
 [working-directory: 'app']
 build-apk:
