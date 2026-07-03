@@ -37,3 +37,10 @@ lcov.info
 # Claude Code per-user settings (the shared `.claude/settings.json` may be
 # committed if/when one is added; the `.local.json` overlay is per-developer).
 .claude/settings.local.json
+
+# Mac / xcode specific
+*.mode1v3
+*.mode2v3
+*.storyboardc
+*.xcuserstate
+user.xcuserdatad/
