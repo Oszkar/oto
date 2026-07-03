@@ -112,11 +112,17 @@ impl SonosWire {
         }
     }
 
+    /// Lock the resolution caches, recovering from a poisoned lock (a panic in
+    /// another thread). Every cache access goes through here.
+    fn caches(&self) -> std::sync::MutexGuard<'_, Caches> {
+        self.caches.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
     /// Snapshot the wire's interior-mutable caches into a `PumpInputs`
     /// for `EventPump::spawn`. Returns `NoSpeakersDiscovered` if the
     /// caches are empty (called before discover()).
     fn snapshot_for_pump(&self) -> Result<PumpInputs, WireError> {
-        let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        let caches = self.caches();
         if caches.id_to_addr.is_empty() {
             return Err(WireError::NoSpeakersDiscovered);
         }
@@ -144,9 +150,7 @@ impl SonosWire {
     ///
     /// Returns `Err(WireError::NotFound)` if unknown or pre-discovery.
     fn resolve_speaker(&self, speaker: &SpeakerId) -> Result<SocketAddr, WireError> {
-        self.caches
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
+        self.caches()
             .id_to_addr
             .get(speaker)
             .copied()
@@ -160,7 +164,7 @@ impl SonosWire {
     /// Returns `Err(WireError::NotFound)` if the group or its coordinator
     /// address is unknown (pre-discovery or stale cache).
     fn resolve_group(&self, group: &GroupId) -> Result<SocketAddr, WireError> {
-        let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        let caches = self.caches();
         let coordinator = caches
             .group_to_coordinator
             .get(group)
@@ -178,10 +182,15 @@ impl SonosWire {
     /// the real cache-population path, not a hand-duplicated copy (a
     /// duplicate would still pass if `discover()`'s update were removed).
     fn populate_caches(&self, snapshot: &DiscoverySnapshot) {
-        // One lock, one atomic swap: a racing command sees either the whole old
-        // topology or the whole new one, never a half-updated mix.
-        let mut caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
-        *caches = Caches::default();
+        // One lock: a racing command sees either the whole old topology or the
+        // whole new one, never a half-updated mix. Clear each map in place
+        // (retaining its allocation) rather than replacing the struct, so a
+        // same-sized re-populate doesn't churn allocations.
+        let mut caches = self.caches();
+        caches.id_to_addr.clear();
+        caches.group_to_coordinator.clear();
+        caches.speaker_to_coordinator.clear();
+        caches.id_to_name.clear();
         for speaker in &snapshot.speakers {
             caches
                 .id_to_addr
@@ -211,7 +220,7 @@ impl SonosWire {
         // Single lock: coordinator lookup + address lookup read one consistent
         // snapshot. Falls back to the speaker's own addr when it has no
         // coordinator mapping (solo speaker, or empty/stale cache).
-        let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+        let caches = self.caches();
         let target = caches
             .speaker_to_coordinator
             .get(speaker)
@@ -488,7 +497,7 @@ impl Wire for SonosWire {
         // (PerNetwork), so try cached IPs until one answers; this handles
         // the case where the first cached speaker has gone to sleep.
         let ips: Vec<String> = {
-            let caches = self.caches.lock().unwrap_or_else(|p| p.into_inner());
+            let caches = self.caches();
             caches
                 .id_to_addr
                 .values()

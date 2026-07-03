@@ -215,4 +215,22 @@ mod tests {
         let r: Result<Volume, WireError> = Ok(Volume::new(50).unwrap());
         assert!(t.observe(0, || 0, &sid(), &r).is_none());
     }
+
+    #[test]
+    fn stale_generation_observation_is_dropped_and_does_not_poison() {
+        // The under-lock generation re-check: a Network result observed at a
+        // STALE generation (a rediscover already moved the live gen to 1) must
+        // be dropped — no event — AND must not poison the fresh tracker.
+        let t = HealthTracker::new();
+        assert!(
+            t.observe(0, || 1, &sid(), &net()).is_none(),
+            "a stale-generation observation must be dropped (no emit)"
+        );
+        // The speaker was never marked Errored, so an Ok at the CURRENT
+        // generation is a no-op — no spurious SubscriptionRecovered.
+        assert!(
+            t.observe(1, || 1, &sid(), &ok()).is_none(),
+            "the dropped stale observation must not leave the speaker Errored"
+        );
+    }
 }
