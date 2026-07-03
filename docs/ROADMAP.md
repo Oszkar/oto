@@ -82,7 +82,7 @@ Spike-gated, risk-ordered (spike → form/break → group volume → fast topolo
 
 ## v0.6 — UI
 
-The designed Flutter interface on the proven capability layers — pure design + implementation, no new capability-layer work. The visual design system landed in [`docs/design-system/`](design-system/handoff/HANDOFF.md) (tokens, screens, states, responsive, brand). v0.6 builds the **backend-true core**: exactly the controls the `Wire` + event stream support today. Controls in the design that need new backend (shuffle/repeat/seek, queue, EQ/Sound) or are outside oto's scope (search/library, stereo pair, surround, TruePlay, add-speaker, sleep timer, telemetry) are **not rendered** — deferred to later milestones together with their backend work, never faked or shown disabled.
+The designed Flutter interface on the proven capability layers — pure design + implementation, no new capability-layer work. The visual design system lives in [`docs/design-system/`](design-system/README.md) (canonical Dart tokens, the fixture-driven screens/states showcase, and brand assets). v0.6 builds the **backend-true core**: exactly the controls the `Wire` + event stream support today. Controls in the design that need new backend (shuffle/repeat/seek, queue, EQ/Sound) or are outside oto's scope (search/library, stereo pair, surround, TruePlay, add-speaker, sleep timer, telemetry) are **not rendered** — deferred to later milestones together with their backend work, never faked or shown disabled.
 
 Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0.5.1 cadence; each provable end-to-end and dogfoodable):
 

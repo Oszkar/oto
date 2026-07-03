@@ -7,8 +7,8 @@
 # are kept as-is.
 reviews:
   path_filters:
-    # Imported visual design system — React/JSX prototype, design tokens,
-    # brand assets, handoff notes. Reference material, not application code.
+    # Design system reference dir — brand assets + the durable-rules README.
+    # Reference material, not application code.
     - "!docs/design-system/**"
     # superpowers brainstorm / spec / plan working docs — process artifacts,
     # not code. Skip review entirely.
