@@ -50,10 +50,12 @@ class Discovery extends _$Discovery {
 
   /// User-initiated full SSDP discovery retry.
   ///
-  /// `ref.invalidate(discoveryProvider)` keeps the previous error attached to
-  /// the in-flight loading state. Publishing a fresh loading state first makes
-  /// retry feedback visible immediately instead of leaving the old error UI on
-  /// screen for the SSDP window.
+  /// Publishing a fresh loading state first makes retry feedback visible
+  /// immediately instead of leaving the old error UI on screen for the SSDP
+  /// window. A *failed* retry ends in `AsyncError` (no retained value), but the
+  /// live event stream is NOT torn down: `events.dart`'s `wireGeneration` reads
+  /// the authoritative Rust generation, not `discovery.hasValue`, so it keeps
+  /// returning the installed (old) wire's generation across a failed retry.
   Future<void> rediscover() async {
     final retrying = ref.read(discoveryRetryingProvider.notifier);
     retrying.setRetrying(true);
