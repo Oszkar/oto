@@ -39,6 +39,12 @@ Builds and links the oto Rust core for Flutter targets.
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/liboto_native.a',
+    # liboto_native pulls the `system_configuration` crate (via reqwest, for
+    # proxy detection); its SC*/kSC* symbols live in
+    # SystemConfiguration.framework. A Rust staticlib can't carry that link
+    # directive, so link the framework here - without it the macOS Runner fails
+    # to link (undefined _SCDynamicStore*, _SCNetwork*, _kSCNetworkInterface*).
+    # See LOCAL_PATCHES.md #3.
+    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/liboto_native.a -framework SystemConfiguration',
   }
 end

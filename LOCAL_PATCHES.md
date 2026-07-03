@@ -8,6 +8,7 @@ Catalog of every file under `app/rust_builder/cargokit/` (and any other vendored
 |---|------|---------------|-----|--------|
 | 1 | `app/rust_builder/cargokit/gradle/plugin.gradle` | Drop 32-bit Android ABIs from the Rust build target list | Project targets `minSdk = 35` (Android 15+, arm64 + x86_64 only); building `i686-linux-android` and `armv7-linux-androideabi` is wasted work and the targets aren't installed by `rust-toolchain.toml` | Active |
 | 2 | `sonos-api` / `sonos-sdk-discovery` / `sonos-sdk-callback-server` / `sonos-sdk-stream` (forked, via `[patch.crates-io]`) | Drop the unused/unnecessary `native-tls` TLS backend from `reqwest` on the 3 `sonos-sdk` crates that pull it | Forced a vendored, Perl-driven OpenSSL build on Android (and a Linux/macOS/WSL build-host requirement) for a TLS backend that's never invoked at runtime | Active |
+| 3 | `app/rust_builder/macos/oto_native.podspec` | Append `-framework SystemConfiguration` to `OTHER_LDFLAGS` | `liboto_native` pulls `system_configuration` (via `reqwest` proxy detection); the staticlib can't carry the framework link directive, so the macOS Runner fails to link with undefined `_SCDynamicStore*` / `_SCNetwork*` / `_kSCNetworkInterface*` symbols. macOS is a dev-only target (not shipped; oto ships Windows + Android) | Active |
 
 ---
 
@@ -99,6 +100,28 @@ Three crates in the `sonos-sdk` family declare `reqwest = "0.11"` with implicit 
 ### Upstream tracking
 
 No upstream issue filed yet. Link it here once one exists.
+
+---
+
+## 3. macos/oto_native.podspec — link SystemConfiguration.framework
+
+**File:** `app/rust_builder/macos/oto_native.podspec` **Affected block:** the second `s.pod_target_xcconfig` (`OTHER_LDFLAGS`).
+
+### What the patch does
+
+Appends `-framework SystemConfiguration` to the existing `-force_load ${BUILT_PRODUCTS_DIR}/liboto_native.a`:
+
+```ruby
+'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/liboto_native.a -framework SystemConfiguration',
+```
+
+### Why
+
+`liboto_native` pulls the `system_configuration` crate transitively (via `reqwest`'s platform proxy detection). Its `SC*` / `kSC*` symbols live in Apple's `SystemConfiguration.framework`. The crate emits `cargo:rustc-link-lib=framework=SystemConfiguration`, but a Rust **staticlib** can't carry that directive to Xcode's final link step, so the macOS Runner fails with `Undefined symbols ... _SCDynamicStoreCopyProxies`, `_SCNetworkInterfaceCopyAll`, `_kSCNetworkInterfaceTypeEthernet`, etc. macOS is a **dev-only** target (for previewing e.g. the showcase off a Mac); oto ships Windows + Android, so this isn't wired into CI. The identical latent gap exists in `ios/oto_native.podspec` - apply the same fix there if iOS is ever built.
+
+### Re-application
+
+`flutter create`-generated; regenerated only if the platform folder is recreated. After a regen, re-append the `-framework SystemConfiguration` flag and confirm with `flutter build macos -t lib/showcase/main.dart` (or `just showcase` → macOS).
 
 ---
 

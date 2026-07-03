@@ -1,9 +1,16 @@
-# Treat all text files as text. Line endings are normalized to LF in the repo
-# and converted to the platform-native EOL on checkout (CRLF on Windows).
-* text=auto eol=lf
+# Treat all text files as text. Line endings are normalized to LF in the repo.
+* text=auto
 
-# Force LF on files that must use it regardless of platform.
-*.sh   text eol=lf
+# Force LF on files that must use it regardless of platform (Crucial for Mac/Windows switching).
+*.sh            text eol=lf
+*.pbxproj       text eol=lf
+*.xcworkspace   text eol=lf
+*.xcworkspacedata text eol=lf
+*.xcscheme      text eol=lf
+Podfile.lock    text eol=lf
+pubspec.lock    text eol=lf
+
+# Force Windows EOL for Windows-specific scripts.
 *.cmd  text eol=crlf
 *.ps1  text eol=crlf
 *.bat  text eol=crlf
