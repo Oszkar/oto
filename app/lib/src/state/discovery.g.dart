@@ -108,7 +108,7 @@ final class DiscoveryProvider
   Discovery create() => Discovery();
 }
 
-String _$discoveryHash() => r'2ee71c461c16e222f70a5050d0f26cb8e380aad3';
+String _$discoveryHash() => r'24aa9eb6b43fc7b8d294f9a8d88fce0c917f3c29';
 
 /// LAN discovery + the v0.5.1 topology fast-path.
 ///
@@ -148,6 +148,100 @@ abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
             as $ClassProviderElement<
               AnyNotifier<AsyncValue<rust_api.Topology>, rust_api.Topology>,
               AsyncValue<rust_api.Topology>,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
+
+/// A monotonic signal bumped on every wire install that may NOT transition
+/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// force a re-read of the Rust generation so the event stream re-subscribes
+/// against the new wire. Lives here because [Discovery] owns the wire lifecycle
+/// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
+/// direction events → discovery, avoiding a cycle).
+///
+/// `keepAlive`: the count must persist for the app lifetime (it outlives any
+/// single widget subscription and accumulates across regroups).
+
+@ProviderFor(WireInstallSignal)
+final wireInstallSignalProvider = WireInstallSignalProvider._();
+
+/// A monotonic signal bumped on every wire install that may NOT transition
+/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// force a re-read of the Rust generation so the event stream re-subscribes
+/// against the new wire. Lives here because [Discovery] owns the wire lifecycle
+/// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
+/// direction events → discovery, avoiding a cycle).
+///
+/// `keepAlive`: the count must persist for the app lifetime (it outlives any
+/// single widget subscription and accumulates across regroups).
+final class WireInstallSignalProvider
+    extends $NotifierProvider<WireInstallSignal, int> {
+  /// A monotonic signal bumped on every wire install that may NOT transition
+  /// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+  /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+  /// force a re-read of the Rust generation so the event stream re-subscribes
+  /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
+  /// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
+  /// direction events → discovery, avoiding a cycle).
+  ///
+  /// `keepAlive`: the count must persist for the app lifetime (it outlives any
+  /// single widget subscription and accumulates across regroups).
+  WireInstallSignalProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'wireInstallSignalProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$wireInstallSignalHash();
+
+  @$internal
+  @override
+  WireInstallSignal create() => WireInstallSignal();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(int value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<int>(value),
+    );
+  }
+}
+
+String _$wireInstallSignalHash() => r'2bf533d35d8e5429c890c41b9e404b5358f7c8a6';
+
+/// A monotonic signal bumped on every wire install that may NOT transition
+/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// force a re-read of the Rust generation so the event stream re-subscribes
+/// against the new wire. Lives here because [Discovery] owns the wire lifecycle
+/// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
+/// direction events → discovery, avoiding a cycle).
+///
+/// `keepAlive`: the count must persist for the app lifetime (it outlives any
+/// single widget subscription and accumulates across regroups).
+
+abstract class _$WireInstallSignal extends $Notifier<int> {
+  int build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<int, int>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<int, int>,
+              int,
               Object?,
               Object?
             >;

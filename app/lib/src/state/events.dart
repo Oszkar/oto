@@ -12,20 +12,53 @@ import 'discovery.dart';
 
 part 'events.g.dart';
 
-/// The current wire generation, or `null` until the first successful
-/// discovery. `currentWireGeneration()` bumps only on a successful
-/// `discover_with`, so although this recomputes on every `discoveryProvider`
-/// transition, its VALUE only changes when a new wire is actually installed.
-/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-/// rebuild only on a real new wire — not on a loading/failed re-discover.
+/// Reads the authoritative wire generation from Rust. Extracted behind an
+/// overridable provider so [wireGeneration]'s keying logic is unit-testable
+/// without FRB (a test injects a controllable counter). The default tears off
+/// the sync FRB `currentWireGeneration()`.
+@riverpod
+BigInt Function() wireGenerationReader(Ref ref) =>
+    rust_api.currentWireGeneration;
+
+/// The current wire generation, or `null` until the first successful discovery.
+///
+/// Keyed on the MONOTONIC Rust generation VALUE (not on the topology value): it
+/// bumps once per successful `discover_with`, so downstream [changeEvents]
+/// re-subscribes EXACTLY once per new wire. Exactly-once is load-bearing — the
+/// wire's event receiver is one-shot, so a double re-subscribe against the same
+/// wire would take an already-taken receiver and strand the stream.
+///
+/// Recompute triggers:
+///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
+///     and re-reads the generation.
+///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+///     regroup) does NOT transition discovery (FRB `Topology` has value
+///     equality), so the install bumps this signal to force a re-read. Without
+///     it the new wire's generation would go unnoticed and the stream would
+///     strand on the replaced wire's dead receiver.
+///
+/// A failed re-discover does not bump the Rust generation, so the value is
+/// unchanged and the live stream is preserved (review #67-followup #2).
 @riverpod
 BigInt? wireGeneration(Ref ref) {
+  // Force a re-read on a wire install that did NOT transition discovery (a
+  // value-equal fast `refreshTopology()`); see [wireInstallSignalProvider].
+  ref.watch(wireInstallSignalProvider);
   final discovery = ref.watch(discoveryProvider);
-  // hasValue stays true across loading/error once discovery has succeeded
-  // once (AsyncValue retains the prior value), so a failed re-discover keeps
-  // reading the SAME generation → no change → no rebuild downstream.
-  return discovery.hasValue ? rust_api.currentWireGeneration() : null;
+  final readGeneration = ref.watch(wireGenerationReaderProvider);
+  // hasValue stays true across loading/error once discovery has succeeded once
+  // (Riverpod attaches the prior value), so a failed re-discover keeps reading
+  // the SAME generation → no change → no rebuild downstream.
+  return discovery.hasValue ? readGeneration() : null;
 }
+
+/// Builds the raw FRB change-event stream. Extracted behind an overridable
+/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
+@riverpod
+Stream<rust_api.ChangeEventDto> Function() changeEventStreamFactory(Ref ref) =>
+    rust_api.subscribeChangeEvents;
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
 /// **new wire** — keyed on [wireGenerationProvider], which only changes on a
@@ -54,5 +87,5 @@ Stream<rust_api.ChangeEventDto> changeEvents(Ref ref) {
     // No wire installed yet — nothing to subscribe to.
     return const Stream<rust_api.ChangeEventDto>.empty();
   }
-  return rust_api.subscribeChangeEvents();
+  return ref.watch(changeEventStreamFactoryProvider)();
 }

@@ -67,7 +67,12 @@ class _FakeDiscovery extends Discovery {
     if (_counters.refreshThrows) {
       throw StateError('fast re-pull failed');
     }
+    // Publishes a value-EQUAL Topology (the same const every time), so
+    // discoveryProvider does NOT transition — the exact case the fix handles.
+    // Mirror Discovery._publishInstalledWire: bump the install signal so the
+    // event stream re-keys against the new wire regardless.
     state = const AsyncValue.data(_fakeTopology);
+    ref.read(wireInstallSignalProvider.notifier).bump();
   }
 }
 

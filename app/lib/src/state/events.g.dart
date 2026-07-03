@@ -8,32 +8,136 @@ part of 'events.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// The current wire generation, or `null` until the first successful
-/// discovery. `currentWireGeneration()` bumps only on a successful
-/// `discover_with`, so although this recomputes on every `discoveryProvider`
-/// transition, its VALUE only changes when a new wire is actually installed.
-/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-/// rebuild only on a real new wire — not on a loading/failed re-discover.
+/// Reads the authoritative wire generation from Rust. Extracted behind an
+/// overridable provider so [wireGeneration]'s keying logic is unit-testable
+/// without FRB (a test injects a controllable counter). The default tears off
+/// the sync FRB `currentWireGeneration()`.
+
+@ProviderFor(wireGenerationReader)
+final wireGenerationReaderProvider = WireGenerationReaderProvider._();
+
+/// Reads the authoritative wire generation from Rust. Extracted behind an
+/// overridable provider so [wireGeneration]'s keying logic is unit-testable
+/// without FRB (a test injects a controllable counter). The default tears off
+/// the sync FRB `currentWireGeneration()`.
+
+final class WireGenerationReaderProvider
+    extends
+        $FunctionalProvider<
+          BigInt Function(),
+          BigInt Function(),
+          BigInt Function()
+        >
+    with $Provider<BigInt Function()> {
+  /// Reads the authoritative wire generation from Rust. Extracted behind an
+  /// overridable provider so [wireGeneration]'s keying logic is unit-testable
+  /// without FRB (a test injects a controllable counter). The default tears off
+  /// the sync FRB `currentWireGeneration()`.
+  WireGenerationReaderProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'wireGenerationReaderProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$wireGenerationReaderHash();
+
+  @$internal
+  @override
+  $ProviderElement<BigInt Function()> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  BigInt Function() create(Ref ref) {
+    return wireGenerationReader(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(BigInt Function() value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<BigInt Function()>(value),
+    );
+  }
+}
+
+String _$wireGenerationReaderHash() =>
+    r'8efe14ef92ffed55bed217bfe23c9da18b8e1c64';
+
+/// The current wire generation, or `null` until the first successful discovery.
+///
+/// Keyed on the MONOTONIC Rust generation VALUE (not on the topology value): it
+/// bumps once per successful `discover_with`, so downstream [changeEvents]
+/// re-subscribes EXACTLY once per new wire. Exactly-once is load-bearing — the
+/// wire's event receiver is one-shot, so a double re-subscribe against the same
+/// wire would take an already-taken receiver and strand the stream.
+///
+/// Recompute triggers:
+///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
+///     and re-reads the generation.
+///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+///     regroup) does NOT transition discovery (FRB `Topology` has value
+///     equality), so the install bumps this signal to force a re-read. Without
+///     it the new wire's generation would go unnoticed and the stream would
+///     strand on the replaced wire's dead receiver.
+///
+/// A failed re-discover does not bump the Rust generation, so the value is
+/// unchanged and the live stream is preserved (review #67-followup #2).
 
 @ProviderFor(wireGeneration)
 final wireGenerationProvider = WireGenerationProvider._();
 
-/// The current wire generation, or `null` until the first successful
-/// discovery. `currentWireGeneration()` bumps only on a successful
-/// `discover_with`, so although this recomputes on every `discoveryProvider`
-/// transition, its VALUE only changes when a new wire is actually installed.
-/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-/// rebuild only on a real new wire — not on a loading/failed re-discover.
+/// The current wire generation, or `null` until the first successful discovery.
+///
+/// Keyed on the MONOTONIC Rust generation VALUE (not on the topology value): it
+/// bumps once per successful `discover_with`, so downstream [changeEvents]
+/// re-subscribes EXACTLY once per new wire. Exactly-once is load-bearing — the
+/// wire's event receiver is one-shot, so a double re-subscribe against the same
+/// wire would take an already-taken receiver and strand the stream.
+///
+/// Recompute triggers:
+///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
+///     and re-reads the generation.
+///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+///     regroup) does NOT transition discovery (FRB `Topology` has value
+///     equality), so the install bumps this signal to force a re-read. Without
+///     it the new wire's generation would go unnoticed and the stream would
+///     strand on the replaced wire's dead receiver.
+///
+/// A failed re-discover does not bump the Rust generation, so the value is
+/// unchanged and the live stream is preserved (review #67-followup #2).
 
 final class WireGenerationProvider
     extends $FunctionalProvider<BigInt?, BigInt?, BigInt?>
     with $Provider<BigInt?> {
-  /// The current wire generation, or `null` until the first successful
-  /// discovery. `currentWireGeneration()` bumps only on a successful
-  /// `discover_with`, so although this recomputes on every `discoveryProvider`
-  /// transition, its VALUE only changes when a new wire is actually installed.
-  /// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
-  /// rebuild only on a real new wire — not on a loading/failed re-discover.
+  /// The current wire generation, or `null` until the first successful discovery.
+  ///
+  /// Keyed on the MONOTONIC Rust generation VALUE (not on the topology value): it
+  /// bumps once per successful `discover_with`, so downstream [changeEvents]
+  /// re-subscribes EXACTLY once per new wire. Exactly-once is load-bearing — the
+  /// wire's event receiver is one-shot, so a double re-subscribe against the same
+  /// wire would take an already-taken receiver and strand the stream.
+  ///
+  /// Recompute triggers:
+  ///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+  ///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
+  ///     and re-reads the generation.
+  ///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+  ///     regroup) does NOT transition discovery (FRB `Topology` has value
+  ///     equality), so the install bumps this signal to force a re-read. Without
+  ///     it the new wire's generation would go unnoticed and the stream would
+  ///     strand on the replaced wire's dead receiver.
+  ///
+  /// A failed re-discover does not bump the Rust generation, so the value is
+  /// unchanged and the live stream is preserved (review #67-followup #2).
   WireGenerationProvider._()
     : super(
         from: null,
@@ -67,7 +171,67 @@ final class WireGenerationProvider
   }
 }
 
-String _$wireGenerationHash() => r'6dba8cada3a1a86e67a56791020803b1cc38c96e';
+String _$wireGenerationHash() => r'6a8cecc1fabdfeb4e089aa13307318ab8eb8f173';
+
+/// Builds the raw FRB change-event stream. Extracted behind an overridable
+/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
+
+@ProviderFor(changeEventStreamFactory)
+final changeEventStreamFactoryProvider = ChangeEventStreamFactoryProvider._();
+
+/// Builds the raw FRB change-event stream. Extracted behind an overridable
+/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
+
+final class ChangeEventStreamFactoryProvider
+    extends
+        $FunctionalProvider<
+          Stream<rust_api.ChangeEventDto> Function(),
+          Stream<rust_api.ChangeEventDto> Function(),
+          Stream<rust_api.ChangeEventDto> Function()
+        >
+    with $Provider<Stream<rust_api.ChangeEventDto> Function()> {
+  /// Builds the raw FRB change-event stream. Extracted behind an overridable
+  /// provider so [changeEvents]'s re-subscription is observable in tests (count
+  /// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
+  ChangeEventStreamFactoryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'changeEventStreamFactoryProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$changeEventStreamFactoryHash();
+
+  @$internal
+  @override
+  $ProviderElement<Stream<rust_api.ChangeEventDto> Function()> $createElement(
+    $ProviderPointer pointer,
+  ) => $ProviderElement(pointer);
+
+  @override
+  Stream<rust_api.ChangeEventDto> Function() create(Ref ref) {
+    return changeEventStreamFactory(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(Stream<rust_api.ChangeEventDto> Function() value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride:
+          $SyncValueProvider<Stream<rust_api.ChangeEventDto> Function()>(value),
+    );
+  }
+}
+
+String _$changeEventStreamFactoryHash() =>
+    r'228bff73bc2aa543f38510adef172bcf543173ad';
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
 /// **new wire** — keyed on [wireGenerationProvider], which only changes on a
@@ -170,4 +334,4 @@ final class ChangeEventsProvider
   }
 }
 
-String _$changeEventsHash() => r'5cb7b520b72864c1031e9fc532a4c68f58870165';
+String _$changeEventsHash() => r'5ab0efe7273ceff530275f62f3d7a79510938332';
