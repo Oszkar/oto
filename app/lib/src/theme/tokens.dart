@@ -2,10 +2,11 @@ import 'package:flutter/widgets.dart';
 
 /// Design tokens: spacing, radius, the type scale, and elevation.
 ///
-/// These mirror `docs/design-system/handoff/design-tokens.json`. Sizes are in
-/// logical pixels (== Flutter logical px, 1:1). Type tracking from the JSON is
-/// given in `em`; Flutter's `letterSpacing` is logical px, so each style here
-/// pre-multiplies the em tracking by its font size.
+/// This file (with `oto_colors.dart`) is the canonical token source - see
+/// `docs/design-system/README.md`. Sizes are in logical pixels (== Flutter
+/// logical px, 1:1). Type tracking is expressed in `em`; Flutter's
+/// `letterSpacing` is logical px, so each style here pre-multiplies the em
+/// tracking by its font size.
 
 /// Font families. Bundled TTFs (see `pubspec.yaml`); no system fallback.
 abstract final class Fonts {
