@@ -185,6 +185,25 @@ void main() {
     });
 
     test(
+      'non-empty topology with an unseeded household shows loading, not empty Ready',
+      () async {
+        // Discovery resolved with a speaker, but the household reducer hasn't
+        // folded it yet (empty household) - a transient settle frame.
+        final container = _container(
+          discovery: () => _DataDiscovery(_oneRoomTopology),
+          // household defaults to const Household() (empty).
+        );
+
+        final state = await _settledState(container);
+        expect(
+          state,
+          isA<HomeInitialLoading>(),
+          reason: 'must not flash an empty HomeReady before the household seeds',
+        );
+      },
+    );
+
+    test(
       'ready from real household never carries an empty household',
       () async {
         final discovery = _CompletingDiscovery();

@@ -20,13 +20,18 @@ part 'events.g.dart';
 BigInt Function() wireGenerationReader(Ref ref) =>
     rust_api.currentWireGeneration;
 
-/// The current wire generation, or `null` until the first successful discovery.
+/// The current wire generation, or `null` until the first successful
+/// discovery. Recomputes on every `discoveryProvider` transition, but reads
+/// the **authoritative Rust generation** via [wireGenerationReaderProvider] —
+/// not `discovery.hasValue`. The Rust generation reflects the
+/// currently-installed wire (`0` before any successful `discover_with`, `>0`
+/// after), and `discover_with` bumps it only on success.
 ///
-/// Keyed on the MONOTONIC Rust generation VALUE (not on the topology value): it
-/// bumps once per successful `discover_with`, so downstream [changeEvents]
-/// re-subscribes EXACTLY once per new wire. Exactly-once is load-bearing — the
-/// wire's event receiver is one-shot, so a double re-subscribe against the same
-/// wire would take an already-taken receiver and strand the stream.
+/// Reading it directly (rather than gating on `discovery.hasValue`) is what
+/// keeps the live event stream alive across a FAILED user re-discover: that
+/// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
+/// the old wire is still installed and its generation unchanged, so this keeps
+/// returning it — no spurious teardown (review #67-followup #2).
 ///
 /// Recompute triggers:
 ///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
@@ -38,19 +43,20 @@ BigInt Function() wireGenerationReader(Ref ref) =>
 ///     it the new wire's generation would go unnoticed and the stream would
 ///     strand on the replaced wire's dead receiver.
 ///
-/// A failed re-discover does not bump the Rust generation, so the value is
-/// unchanged and the live stream is preserved (review #67-followup #2).
+/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
+/// rebuild only when a NEW wire is actually installed, not on a loading/failed
+/// re-discover or a redundant signal bump.
 @riverpod
 BigInt? wireGeneration(Ref ref) {
   // Force a re-read on a wire install that did NOT transition discovery (a
   // value-equal fast `refreshTopology()`); see [wireInstallSignalProvider].
   ref.watch(wireInstallSignalProvider);
-  final discovery = ref.watch(discoveryProvider);
-  final readGeneration = ref.watch(wireGenerationReaderProvider);
-  // hasValue stays true across loading/error once discovery has succeeded once
-  // (Riverpod attaches the prior value), so a failed re-discover keeps reading
-  // the SAME generation → no change → no rebuild downstream.
-  return discovery.hasValue ? readGeneration() : null;
+  // Depend on discovery so we recompute on its transitions (a successful
+  // discover bumps the Rust generation); the AsyncValue itself is unused —
+  // gating on `hasValue` would tear the stream down on a failed rediscover.
+  ref.watch(discoveryProvider);
+  final generation = ref.watch(wireGenerationReaderProvider)();
+  return generation == BigInt.zero ? null : generation;
 }
 
 /// Builds the raw FRB change-event stream. Extracted behind an overridable

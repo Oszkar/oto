@@ -126,5 +126,13 @@ HomeViewState homeViewState(Ref ref) {
     return const HomeEmpty();
   }
 
+  // Discovery resolved WITH speakers, but the household reducer hasn't folded
+  // them into rooms/groups yet (a transient settle frame between the discovery
+  // transition and the reducer running). Don't flash an empty `HomeReady`; keep
+  // the loading state until the household has content.
+  if (!hasCache) {
+    return const HomeInitialLoading();
+  }
+
   return HomeReady(household);
 }
