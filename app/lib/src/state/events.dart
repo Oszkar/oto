@@ -12,27 +12,59 @@ import 'discovery.dart';
 
 part 'events.g.dart';
 
+/// Reads the authoritative wire generation from Rust. Extracted behind an
+/// overridable provider so [wireGeneration]'s keying logic is unit-testable
+/// without FRB (a test injects a controllable counter). The default tears off
+/// the sync FRB `currentWireGeneration()`.
+@riverpod
+BigInt Function() wireGenerationReader(Ref ref) =>
+    rust_api.currentWireGeneration;
+
 /// The current wire generation, or `null` until the first successful
-/// discovery. Recomputes on every `discoveryProvider` transition, but reads the
-/// **authoritative Rust generation** — not `discovery.hasValue`. The Rust
-/// generation reflects the currently-installed wire (`0` before any successful
-/// `discover_with`, `>0` after), and `discover_with` bumps it only on success.
+/// discovery. Recomputes on every `discoveryProvider` transition, but reads
+/// the **authoritative Rust generation** via [wireGenerationReaderProvider] —
+/// not `discovery.hasValue`. The Rust generation reflects the
+/// currently-installed wire (`0` before any successful `discover_with`, `>0`
+/// after), and `discover_with` bumps it only on success.
 ///
 /// Reading it directly (rather than gating on `discovery.hasValue`) is what
 /// keeps the live event stream alive across a FAILED user re-discover: that
 /// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
 /// the old wire is still installed and its generation unchanged, so this keeps
-/// returning it — no spurious teardown. Riverpod dedupes by `==` (BigInt is
-/// value-equal), so downstream watchers rebuild only when a NEW wire is
-/// actually installed, not on a loading/failed re-discover.
+/// returning it — no spurious teardown (review #67-followup #2).
+///
+/// Recompute triggers:
+///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
+///     and re-reads the generation.
+///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+///     regroup) does NOT transition discovery (FRB `Topology` has value
+///     equality), so the install bumps this signal to force a re-read. Without
+///     it the new wire's generation would go unnoticed and the stream would
+///     strand on the replaced wire's dead receiver.
+///
+/// Riverpod dedupes by `==` (BigInt is value-equal), so downstream watchers
+/// rebuild only when a NEW wire is actually installed, not on a loading/failed
+/// re-discover or a redundant signal bump.
 @riverpod
 BigInt? wireGeneration(Ref ref) {
+  // Force a re-read on a wire install that did NOT transition discovery (a
+  // value-equal fast `refreshTopology()`); see [wireInstallSignalProvider].
+  ref.watch(wireInstallSignalProvider);
   // Depend on discovery so we recompute on its transitions (a successful
-  // discover bumps the Rust generation); the AsyncValue itself is unused.
+  // discover bumps the Rust generation); the AsyncValue itself is unused —
+  // gating on `hasValue` would tear the stream down on a failed rediscover.
   ref.watch(discoveryProvider);
-  final generation = rust_api.currentWireGeneration();
+  final generation = ref.watch(wireGenerationReaderProvider)();
   return generation == BigInt.zero ? null : generation;
 }
+
+/// Builds the raw FRB change-event stream. Extracted behind an overridable
+/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
+@riverpod
+Stream<rust_api.ChangeEventDto> Function() changeEventStreamFactory(Ref ref) =>
+    rust_api.subscribeChangeEvents;
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
 /// **new wire** — keyed on [wireGenerationProvider], which only changes on a
@@ -61,5 +93,5 @@ Stream<rust_api.ChangeEventDto> changeEvents(Ref ref) {
     // No wire installed yet — nothing to subscribe to.
     return const Stream<rust_api.ChangeEventDto>.empty();
   }
-  return rust_api.subscribeChangeEvents();
+  return ref.watch(changeEventStreamFactoryProvider)();
 }

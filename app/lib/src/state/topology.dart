@@ -14,14 +14,13 @@
 /// **Fast re-discover (no SSDP).** The debounce body calls
 /// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~tens of ms vs the
 /// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
-/// the same wire-replacement lifecycle. The Rust generation always bumps, so
-/// the controller invalidates [wireGenerationProvider] to force the event
-/// stream to re-subscribe against the new wire's fresh pump (clean
-/// `TopologyFilter`) — even when the new `Topology` is value-equal to the old
-/// (a no-op `TopologyChanged`), which would otherwise suppress the
-/// `discoveryProvider` transition (FRB `Topology` has value equality) and
-/// silently strand the new receiver. If the fast re-pull throws (e.g. every
-/// cached speaker is now unreachable), it falls back to a full re-discover via
+/// the same wire-replacement lifecycle. `refreshTopology()` re-keys the event
+/// stream itself (it bumps the wire-install signal that `wireGenerationProvider`
+/// watches — see `Discovery._publishInstalledWire`), so the new wire's fresh
+/// pump (clean `TopologyFilter`) is picked up even when the new `Topology` is
+/// value-equal to the old (a no-op `TopologyChanged`) and `discoveryProvider`
+/// does not transition. If the fast re-pull throws (e.g. every cached speaker is
+/// now unreachable), it falls back to a full re-discover via
 /// `ref.invalidate(discoveryProvider)`.
 ///
 /// Activated by watching [topologyControllerProvider]. The app shell
@@ -66,17 +65,12 @@ void topologyController(Ref ref) {
           // cached speaker is now unreachable) fall back to a full
           // re-discover, which re-runs SSDP.
           try {
+            // refreshTopology() re-keys the event stream itself — it bumps the
+            // wire-install signal so changeEventsProvider re-subscribes against
+            // the new wire even on a value-equal re-pull that does not transition
+            // discoveryProvider (see Discovery._publishInstalledWire). Nothing to
+            // invalidate here.
             await ref.read(discoveryProvider.notifier).refreshTopology();
-            // refresh_topology() ALWAYS replaces the Rust wire + bumps the
-            // generation, but if the new Topology VALUE equals the current one
-            // (a no-op / duplicate TopologyChanged) the discoveryProvider state
-            // does NOT transition — FRB `Topology` has value equality — so
-            // wireGenerationProvider wouldn't recompute and changeEventsProvider
-            // wouldn't re-take the new wire's receiver, while the OLD receiver
-            // has already ended: events would silently stop. Invalidate the
-            // generation provider to force the re-subscribe regardless of
-            // value-equality (codex review of PR #74).
-            ref.invalidate(wireGenerationProvider);
           } catch (_) {
             ref.invalidate(discoveryProvider);
           }
