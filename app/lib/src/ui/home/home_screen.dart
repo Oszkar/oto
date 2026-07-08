@@ -10,6 +10,7 @@ import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../now_playing/now_playing_pane.dart';
 import '../shell/nav.dart';
+import '../shell/oto_nav_rail.dart';
 import '../shell/oto_scaffold.dart';
 import 'bottom_strip.dart';
 import 'group_card.dart';
@@ -44,6 +45,7 @@ class HomeScreen extends ConsumerWidget {
       ),
       HomeDiscoveringWithCache(:final household) => OtoScaffold(
         detail: const NowPlayingPane(),
+        rail: const OtoNavRail(),
         body: _HomeContent(
           household: household,
           banner: HomeStatusBanner(
@@ -54,6 +56,7 @@ class HomeScreen extends ConsumerWidget {
       ),
       HomeDiscoveryFailedWithCache(:final household) => OtoScaffold(
         detail: const NowPlayingPane(),
+        rail: const OtoNavRail(),
         body: _HomeContent(
           household: household,
           banner: const HomeStatusBanner(
@@ -63,6 +66,7 @@ class HomeScreen extends ConsumerWidget {
       ),
       HomeReady(:final household) => OtoScaffold(
         detail: const NowPlayingPane(),
+        rail: const OtoNavRail(),
         body: _HomeContent(household: household),
       ),
     };

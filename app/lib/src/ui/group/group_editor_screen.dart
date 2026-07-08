@@ -10,20 +10,25 @@ import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
 import '../widgets/oto_icon.dart';
+import '../widgets/pane_dismiss.dart';
 
-/// Full-screen group editor. Will be opened from the Home group bar (the
-/// navigation entry point is wired in a later change); lets the user pick which
-/// rooms join the host group. Ported from the design-system `V3Group`. No
-/// Stereo-pair button (backend-true: oto has no stereo-pair API).
+/// Embeddable group editor content. Lets the user pick which rooms join the host
+/// group. Ported from the design-system `V3Group`. No Stereo-pair button
+/// (backend-true: oto has no stereo-pair API).
+///
+/// Chrome-free (no `OtoScaffold`): [GroupEditorScreen] wraps this for the phone
+/// route, and on wide layouts the same body renders inside a centered dialog.
+/// The header dismiss control is a [PaneDismiss] driven by [onDismiss].
 ///
 /// Selection state lives in [groupEditorSelectionProvider]. Save computes a
 /// [MembershipDiff] and fires [GroupingController.joinGroup] /
 /// [GroupingController.leaveGroup] per the diff, then pops. Ungroup-all leaves
 /// every non-host current member, then pops.
-class GroupEditorScreen extends ConsumerWidget {
-  const GroupEditorScreen({super.key, required this.hostId});
+class GroupEditorBody extends ConsumerWidget {
+  const GroupEditorBody({super.key, required this.hostId, this.onDismiss});
 
   final String hostId;
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -51,38 +56,37 @@ class GroupEditorScreen extends ConsumerWidget {
         return byName != 0 ? byName : a.id.compareTo(b.id);
       });
 
-    return OtoScaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Header(
-            hostId: hostId,
-            selectedCount: selection.length,
-            onSave: () => _onSave(context, ref, currentMembers),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Header(
+          hostId: hostId,
+          selectedCount: selection.length,
+          onDismiss: onDismiss,
+          onSave: () => _onSave(context, ref, currentMembers),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: roomList.length,
+            itemBuilder: (context, i) {
+              final room = roomList[i];
+              return _RoomRow(
+                room: room,
+                hostId: hostId,
+                hostGroup: hostGroup,
+                selected: selection.contains(room.id),
+                hasConflict: conflicts.contains(room.id),
+                onTap: () => ref
+                    .read(groupEditorSelectionProvider(hostId).notifier)
+                    .toggle(room.id),
+              );
+            },
           ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: roomList.length,
-              itemBuilder: (context, i) {
-                final room = roomList[i];
-                return _RoomRow(
-                  room: room,
-                  hostId: hostId,
-                  hostGroup: hostGroup,
-                  selected: selection.contains(room.id),
-                  hasConflict: conflicts.contains(room.id),
-                  onTap: () => ref
-                      .read(groupEditorSelectionProvider(hostId).notifier)
-                      .toggle(room.id),
-                );
-              },
-            ),
-          ),
-          _Footer(
-            onUngroupAll: () => _onUngroupAll(context, ref, currentMembers),
-          ),
-        ],
-      ),
+        ),
+        _Footer(
+          onUngroupAll: () => _onUngroupAll(context, ref, currentMembers),
+        ),
+      ],
     );
   }
 
@@ -126,6 +130,22 @@ class GroupEditorScreen extends ConsumerWidget {
   }
 }
 
+/// Full-screen group editor route (phone). On wide layouts the same content is
+/// rendered by `GroupEditorBody` inside a centered dialog instead.
+class GroupEditorScreen extends StatelessWidget {
+  const GroupEditorScreen({super.key, required this.hostId});
+
+  final String hostId;
+
+  @override
+  Widget build(BuildContext context) => OtoScaffold(
+    body: GroupEditorBody(
+      hostId: hostId,
+      onDismiss: () => Navigator.of(context).maybePop(),
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Header: close button + centered title/subtitle + Save button
 // ---------------------------------------------------------------------------
@@ -134,11 +154,13 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.hostId,
     required this.selectedCount,
+    required this.onDismiss,
     required this.onSave,
   });
 
   final String hostId;
   final int selectedCount;
+  final VoidCallback? onDismiss;
   final VoidCallback onSave;
 
   @override
@@ -154,10 +176,11 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            key: Key('group-close-$hostId'),
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: OtoIcon('x', size: 17, color: oto.ink2),
+          PaneDismiss(
+            onDismiss: onDismiss,
+            icon: 'x',
+            iconSize: 17,
+            buttonKey: Key('group-close-$hostId'),
           ),
           Expanded(
             child: Column(

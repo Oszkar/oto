@@ -26,6 +26,7 @@ import 'package:oto/src/ui/home/bottom_strip.dart';
 import 'package:oto/src/ui/home/group_card.dart';
 import 'package:oto/src/ui/home/home_screen.dart';
 import 'package:oto/src/ui/now_playing/now_playing_pane.dart';
+import 'package:oto/src/ui/shell/oto_nav_rail.dart';
 import 'package:oto/src/ui/widgets/album_art.dart';
 
 import 'home/_fixtures.dart';
@@ -216,4 +217,52 @@ void main() {
       expect(find.byType(NowPlayingPane), findsNothing);
     },
   );
+
+  testWidgets('desktop (>=1200): shows the leading nav rail', (tester) async {
+    await _pump(
+      tester,
+      household: _activeGroupHousehold(),
+      size: const Size(1280, 800),
+    );
+
+    expect(find.byType(OtoNavRail), findsOneWidget);
+  });
+
+  testWidgets('tablet (840-1199): no nav rail (two-pane stays two-pane)', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      household: _activeGroupHousehold(),
+      size: const Size(1024, 768),
+    );
+
+    expect(find.byType(OtoNavRail), findsNothing);
+  });
+
+  testWidgets('desktop: Settings lives only in the rail, not a second header gear', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      household: _activeGroupHousehold(),
+      size: const Size(1280, 800),
+    );
+
+    expect(find.byKey(const Key('rail-settings')), findsOneWidget);
+    expect(find.byKey(const Key('header-settings')), findsNothing);
+  });
+
+  testWidgets('tablet: Settings lives in the header gear (no rail to own it)', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      household: _activeGroupHousehold(),
+      size: const Size(1024, 768),
+    );
+
+    expect(find.byKey(const Key('rail-settings')), findsNothing);
+    expect(find.byKey(const Key('header-settings')), findsOneWidget);
+  });
 }

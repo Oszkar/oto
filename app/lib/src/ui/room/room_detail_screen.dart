@@ -6,7 +6,7 @@ import '../../state/household.dart';
 import '../../state/model/group_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../group/group_editor_screen.dart';
+import '../shell/nav.dart';
 import '../shell/oto_scaffold.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
@@ -371,11 +371,7 @@ class _KebabButton extends ConsumerWidget {
         memberCount: memberCount,
         onGroupRooms: () {
           Navigator.of(ctx).pop();
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => GroupEditorScreen(hostId: hostId),
-            ),
-          );
+          openGroupEditor(context, hostId);
         },
         // Ungroup removes THIS room from its group, so it targets speakerId
         // (not the coordinator).

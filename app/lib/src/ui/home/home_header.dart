@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/breakpoints.dart';
 import '../../state/household.dart';
 import '../../state/model/household.dart';
 import '../../state/prefs.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../settings/settings_section.dart';
-import '../settings/settings_screen.dart';
+import '../shell/nav.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_mark.dart';
 
@@ -84,14 +85,15 @@ class HomeHeader extends ConsumerWidget {
                 onChanged: (l) =>
                     ref.read(settingsProvider.notifier).setHomeLayout(l),
               ),
-              const SizedBox(width: Space.lg10),
-              _GearButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const SettingsScreen(),
-                  ),
+              // On desktop the nav rail owns Settings, so the header gear would
+              // be a second cogwheel - drop it there. Tablet (no rail) and phone
+              // keep it as their only Settings entry point.
+              if (!context.isDesktop) ...[
+                const SizedBox(width: Space.lg10),
+                _GearButton(
+                  onPressed: () => openSettings(context),
                 ),
-              ),
+              ],
             ],
           ),
         ),

@@ -8,7 +8,7 @@ import '../../state/model/group_state.dart';
 import '../../state/selected_source.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../group/group_editor_screen.dart';
+import '../shell/nav.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
@@ -152,11 +152,7 @@ class GroupCard extends ConsumerWidget {
           // editor and could never be ungrouped.
           IconButton(
             key: Key('group-open-$groupId'),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => GroupEditorScreen(hostId: group.coordinatorId),
-              ),
-            ),
+            onPressed: () => openGroupEditor(context, group.coordinatorId),
             icon: OtoIcon('more', size: 18, color: oto.ink2),
           ),
         ],
@@ -339,8 +335,8 @@ class GroupCard extends ConsumerWidget {
     );
   }
 
-  /// "+N more · Edit" overflow entry - pushes [GroupEditorScreen] seeded with
-  /// the group's coordinator so the user can see and edit all members.
+  /// "+N more · Edit" overflow entry - opens the group editor seeded with the
+  /// group's coordinator so the user can see and edit all members.
   Widget _overflowButton(
     BuildContext context,
     int overflow,
@@ -351,11 +347,7 @@ class GroupCard extends ConsumerWidget {
       alignment: Alignment.centerLeft,
       child: InkWell(
         key: Key('group-more-$groupId'),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => GroupEditorScreen(hostId: coordinatorId),
-          ),
-        ),
+        onTap: () => openGroupEditor(context, coordinatorId),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.xs4),
           child: Row(
