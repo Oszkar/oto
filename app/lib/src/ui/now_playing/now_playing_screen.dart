@@ -12,19 +12,24 @@ import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
-/// Full-screen Now Playing for one group. Ported from the design-system
-/// `V3NowPlaying`, deliberately OMITTING the queue icon, shuffle, repeat, and
-/// the Spotify-origin pill (v0.6.0 spec §7) - oto is backend-true and the
-/// backend exposes none of those.
+/// Embeddable Now Playing content for one group. Ported from the
+/// design-system `V3NowPlaying`, deliberately OMITTING the queue icon,
+/// shuffle, repeat, and the Spotify-origin pill (v0.6.0 spec §7) - oto is
+/// backend-true and the backend exposes none of those.
+///
+/// Chrome-free (no `OtoScaffold`): [NowPlayingScreen] wraps this for the
+/// phone route, and on wide layouts the same body renders inside the detail
+/// pane. Pass `onDismiss: null` to hide the dismiss chevron for pane use.
 ///
 /// A read-only progress bar sits between the track info and the transport
 /// controls. It is fed by [nowPlayingPositionProvider], which reads
 /// `track_position` (GetPositionInfo SOAP) for the real mid-track position and
 /// duration, then ticks locally at ~500 ms. No seek - there is no seek backend.
-class NowPlayingScreen extends ConsumerWidget {
-  const NowPlayingScreen({super.key, required this.groupId});
+class NowPlayingBody extends ConsumerWidget {
+  const NowPlayingBody({super.key, required this.groupId, this.onDismiss});
 
   final String groupId;
+  final VoidCallback? onDismiss;
 
   /// Album-art inset from the screen edge, matching the JSX `HF.W - 88`.
   static const double _artInset = 88;
@@ -33,33 +38,34 @@ class NowPlayingScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final group = ref.watch(householdProvider.select((h) => h.groups[groupId]));
     if (group == null) {
-      return OtoScaffold(
-        body: _Header(groupId: groupId, child: const SizedBox.shrink()),
+      return _Header(
+        groupId: groupId,
+        onDismiss: onDismiss,
+        child: const SizedBox.shrink(),
       );
     }
 
-    return OtoScaffold(
-      body: _Header(
-        groupId: groupId,
-        child: Expanded(
-          child: SingleChildScrollView(
-            child: Padding(
-              // JSX content inset `12px 24px 16px`.
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _art(context, group),
-                  const SizedBox(height: Space.screen18),
-                  _trackInfo(context, group),
-                  const SizedBox(height: Space.screen18),
-                  _progress(context, ref),
-                  const SizedBox(height: Space.screen18),
-                  _transport(context, ref, group),
-                  const SizedBox(height: Space.screen18),
-                  _volumeSection(context, ref, group),
-                ],
-              ),
+    return _Header(
+      groupId: groupId,
+      onDismiss: onDismiss,
+      child: Expanded(
+        child: SingleChildScrollView(
+          child: Padding(
+            // JSX content inset `12px 24px 16px`.
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _art(context, group),
+                const SizedBox(height: Space.screen18),
+                _trackInfo(context, group),
+                const SizedBox(height: Space.screen18),
+                _progress(context, ref),
+                const SizedBox(height: Space.screen18),
+                _transport(context, ref, group),
+                const SizedBox(height: Space.screen18),
+                _volumeSection(context, ref, group),
+              ],
             ),
           ),
         ),
@@ -292,13 +298,15 @@ class NowPlayingScreen extends ConsumerWidget {
   }
 }
 
-/// The dismiss header (a `chevronDown` back button) plus a "Playing on" host
-/// caption, wrapping the screen body in a Column. Kept as a small private
-/// widget so the unknown-group fallback reuses the same chrome.
+/// The dismiss header (a `chevronDown` back button, omitted when [onDismiss]
+/// is null) plus a "Playing on" host caption, wrapping the body in a Column.
+/// Kept as a small private widget so the unknown-group fallback reuses the
+/// same chrome.
 class _Header extends ConsumerWidget {
-  const _Header({required this.groupId, required this.child});
+  const _Header({required this.groupId, required this.onDismiss, required this.child});
 
   final String groupId;
+  final VoidCallback? onDismiss;
   final Widget child;
 
   @override
@@ -327,11 +335,14 @@ class _Header extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              IconButton(
-                key: Key('np-dismiss-$groupId'),
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: OtoIcon('chevronDown', size: 18, color: oto.ink2),
-              ),
+              if (onDismiss != null)
+                IconButton(
+                  key: Key('np-dismiss-$groupId'),
+                  onPressed: onDismiss,
+                  icon: OtoIcon('chevronDown', size: 18, color: oto.ink2),
+                )
+              else
+                const SizedBox(width: 48), // keep the caption centered in pane mode
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -375,4 +386,19 @@ class _Header extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// Full-screen Now Playing route (phone). On wide layouts the same content is
+/// rendered by `NowPlayingBody` inside the detail pane instead.
+class NowPlayingScreen extends StatelessWidget {
+  const NowPlayingScreen({super.key, required this.groupId});
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context) => OtoScaffold(
+    body: NowPlayingBody(
+      groupId: groupId,
+      onDismiss: () => Navigator.of(context).maybePop(),
+    ),
+  );
 }
