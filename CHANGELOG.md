@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-07-09
+
+v0.6.3 - Responsive layouts. oto now fills the window it is given: a tablet gets a master-detail layout and a Windows desktop a three-pane one, so the controls stop being phone-shaped on a large screen. The final phase of the v0.6 UI.
+
+### Added
+
+- **Tablet and desktop layouts.** On a wider window the room grid keeps its place and a persistent Now Playing pane sits beside it, in place of the phone's floating strip. Desktop adds a slim navigation rail, for a three-pane layout. Picking a room or group shows it in the pane in place, with no full-screen jump.
+- **Dialogs on wide.** Settings and the group editor open as centered dialogs over the layout on a wide window, rather than taking over the whole screen; on a phone they stay full-screen.
+- **The window remembers its size.** On Windows, oto reopens at the size and position you left it (centered on first run).
+
+### Changed
+
+- On a wide window, tapping a room shows it in the Now Playing pane instead of opening the separate room screen - that screen stays the phone experience.
+
+Validated on a Windows desktop across phone, tablet, and desktop widths; the phone layout is unchanged.
+
 ## [0.6.2] - 2026-07-01
 
 v0.6.2 - Settings and honest states. A real Settings screen replaces the placeholder, and Home now presents explicit loading, empty, discovery-error, and cached-error states instead of assuming the happy path.
@@ -178,7 +194,8 @@ v0.1 - Foundation + LAN discovery. Identity-only discovery proven end-to-end thr
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone - fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/Oszkar/oto/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/Oszkar/oto/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Oszkar/oto/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Oszkar/oto/compare/v0.5.1...v0.6.0
