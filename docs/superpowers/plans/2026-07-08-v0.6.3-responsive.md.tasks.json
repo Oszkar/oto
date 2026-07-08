@@ -1,0 +1,64 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-08-v0.6.3-responsive.md",
+  "lastUpdated": "2026-07-08T00:00:00Z",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Layout breakpoints helper",
+      "status": "pending",
+      "description": "**Goal:** A single source of truth for the width tiers, unit-tested.\n\n**Files:** create app/lib/src/state/breakpoints.dart, app/test/state/breakpoints_test.dart.\n\n**Acceptance Criteria:** layoutTierForWidth boundaries (compact <840, tablet [840,1200), desktop >=1200); BuildContext extension layoutTier/isWide/isDesktop; unit test passes.\n\n**Verify:** cd app && flutter test test/state/breakpoints_test.dart\n\n```json:metadata\n{\"files\": [\"app/lib/src/state/breakpoints.dart\", \"app/test/state/breakpoints_test.dart\"], \"verifyCommand\": \"cd app && flutter test test/state/breakpoints_test.dart\", \"acceptanceCriteria\": [\"layoutTierForWidth boundaries correct\", \"context extension exposes layoutTier/isWide/isDesktop\", \"unit test passes\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Selection provider (selectedSource + resolvedSource)",
+      "status": "pending",
+      "description": "**Goal:** selectedSourceProvider (explicit pick) + resolvedSourceProvider (default + stale fallback), unit-tested.\n\n**Files:** create app/lib/src/state/selected_source.dart, app/test/state/selected_source_test.dart; regenerate selected_source.g.dart via just gen.\n\n**Acceptance Criteria:** default -> first active source; explicit existing group honored (even idle); stale selection falls back; no sources -> null.\n\n**Verify:** cd app && flutter test test/state/selected_source_test.dart\n\n```json:metadata\n{\"files\": [\"app/lib/src/state/selected_source.dart\", \"app/lib/src/state/selected_source.g.dart\", \"app/test/state/selected_source_test.dart\"], \"verifyCommand\": \"cd app && flutter test test/state/selected_source_test.dart\", \"acceptanceCriteria\": [\"default resolves to first active source\", \"explicit existing selection honored\", \"stale selection falls back\", \"no sources -> null\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Showcase viewport toggle (wide-preview infra)",
+      "status": "pending",
+      "description": "**Goal:** Preview the showcase at phone/tablet/desktop widths for hot-reload iteration.\n\n**Files:** modify app/lib/showcase/showcase_app.dart.\n\n**Acceptance Criteria:** Phone/Tablet/Desktop segmented control resizes the preview frame (390x844 / 1024x768 / 1440x900); existing showcase smoke test passes.\n\n**Verify:** existing showcase smoke test + just showcase.\n\n```json:metadata\n{\"files\": [\"app/lib/showcase/showcase_app.dart\"], \"verifyCommand\": \"cd app && flutter analyze lib/showcase/ && flutter test test/state/showcase\", \"acceptanceCriteria\": [\"viewport toggle in toolbar\", \"selecting a size resizes the frame\", \"showcase smoke test passes\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Split NowPlayingBody from NowPlayingScreen",
+      "status": "pending",
+      "description": "**Goal:** Make Now Playing embeddable (wide pane) while keeping the phone route; establishes the *Body/*Screen pattern.\n\n**Files:** modify app/lib/src/ui/now_playing/now_playing_screen.dart; add a body-renders test under app/test/ui/.\n\n**Acceptance Criteria:** NowPlayingBody({groupId, onDismiss}) renders content with no OtoScaffold; onDismiss null hides the chevron; NowPlayingScreen is a thin wrapper; existing tests pass (keys unchanged).\n\n**Verify:** cd app && flutter test test/ui\n\n```json:metadata\n{\"files\": [\"app/lib/src/ui/now_playing/now_playing_screen.dart\"], \"verifyCommand\": \"cd app && flutter test test/ui\", \"acceptanceCriteria\": [\"NowPlayingBody chrome-free\", \"onDismiss null hides chevron\", \"thin NowPlayingScreen wrapper\", \"existing NowPlaying tests pass\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Wide Home shell (SPIKE GATE - grid + detail pane + selection)",
+      "status": "pending",
+      "blockedBy": [1, 2, 4],
+      "description": "**Goal:** Tablet master-detail (grid + Now Playing pane), select-in-place, bottom strip suppressed on wide. Milestone core; iterate via the showcase toggle, fold findings into spec §9.\n\n**Files:** modify oto_scaffold.dart, home_screen.dart, group_card.dart, room_card.dart, room_row.dart; create now_playing_pane.dart, nav.dart; test wide_home_test.dart.\n\n**Acceptance Criteria:** wide (>=840) grid+pane, no strip; phone (<840) unchanged; wide tap group/room selects into pane with accent border; empty-pane placeholder when no source.\n\n**Verify:** cd app && flutter test test/ui/wide_home_test.dart\n\n```json:metadata\n{\"files\": [\"app/lib/src/ui/shell/oto_scaffold.dart\", \"app/lib/src/ui/now_playing/now_playing_pane.dart\", \"app/lib/src/ui/shell/nav.dart\", \"app/lib/src/ui/home/home_screen.dart\", \"app/lib/src/ui/home/group_card.dart\", \"app/lib/src/ui/home/room_card.dart\", \"app/lib/src/ui/home/room_row.dart\", \"app/test/ui/wide_home_test.dart\"], \"verifyCommand\": \"cd app && flutter test test/ui/wide_home_test.dart\", \"acceptanceCriteria\": [\"wide grid+pane no strip\", \"phone unchanged\", \"wide tap selects into pane with accent border\", \"empty pane placeholder\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Desktop nav rail (three-pane)",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** 56px leading rail at >=1200 for a true three-pane; tablet stays two-pane.\n\n**Files:** create app/lib/src/ui/shell/oto_nav_rail.dart; modify home_screen.dart; extend wide_home_test.dart.\n\n**Acceptance Criteria:** rail (Home active + Settings) at >=1200, absent at 840-1200; Settings button routes through the tier-aware helper.\n\n**Verify:** cd app && flutter test test/ui/wide_home_test.dart\n\n```json:metadata\n{\"files\": [\"app/lib/src/ui/shell/oto_nav_rail.dart\", \"app/lib/src/ui/home/home_screen.dart\", \"app/test/ui/wide_home_test.dart\"], \"verifyCommand\": \"cd app && flutter test test/ui/wide_home_test.dart\", \"acceptanceCriteria\": [\"56px rail at >=1200\", \"no rail at 840-1200\", \"Settings via tier-aware helper\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Fold Room-detail away on wide; Settings & Group-editor as dialogs",
+      "status": "pending",
+      "blockedBy": [1, 5],
+      "description": "**Goal:** Split remaining detail screens into *Body/*Screen; Settings + Group-editor open as dialogs on wide / routes on phone via one helper. Room-detail not composed on wide.\n\n**Files:** modify settings_screen.dart, group_editor_screen.dart, room_detail_screen.dart, nav.dart, home_header.dart, group_card.dart; test dialog_nav_test.dart.\n\n**Acceptance Criteria:** *Body widgets chrome-free with onDismiss header; thin *Screen wrappers; openSettings/openGroupEditor dialog-on-wide/route-on-phone; call sites route through helpers.\n\n**Verify:** cd app && flutter test test/ui\n\n```json:metadata\n{\"files\": [\"app/lib/src/ui/settings/settings_screen.dart\", \"app/lib/src/ui/group/group_editor_screen.dart\", \"app/lib/src/ui/room/room_detail_screen.dart\", \"app/lib/src/ui/shell/nav.dart\", \"app/lib/src/ui/home/home_header.dart\", \"app/lib/src/ui/home/group_card.dart\", \"app/test/ui/dialog_nav_test.dart\"], \"verifyCommand\": \"cd app && flutter test test/ui\", \"acceptanceCriteria\": [\"*Body chrome-free onDismiss header\", \"thin *Screen wrappers\", \"dialog on wide / route on phone\", \"call sites use helpers\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Windows window-size persistence",
+      "status": "pending",
+      "description": "**Goal:** Restore last window size/position on Windows; persist on resize/move; no-op on Android.\n\n**Files:** modify app/pubspec.yaml, app/lib/main.dart; create app/lib/src/platform/window_bounds.dart.\n\n**Acceptance Criteria:** window_manager added, pub get clean; window restores saved bounds / centered default, persists to shared_preferences; Android path never calls window_manager.\n\n**Verify:** cd app && flutter run -d windows (resize, quit, relaunch same size); just build-apk builds.\n\n```json:metadata\n{\"files\": [\"app/pubspec.yaml\", \"app/lib/src/platform/window_bounds.dart\", \"app/lib/main.dart\"], \"verifyCommand\": \"cd app && flutter analyze && flutter run -d windows\", \"acceptanceCriteria\": [\"window_manager added, pub get clean\", \"restores + persists size/position\", \"Android never calls window_manager\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Wide integration test + doc sync + release notes",
+      "status": "pending",
+      "blockedBy": [5, 6, 7, 8],
+      "description": "**Goal:** End-to-end wide flow on -d windows; docs updated to match the shipped shell.\n\n**Files:** create app/integration_test/v0_6_3_responsive_test.dart; modify docs/ARCHITECTURE.md, README.md, docs/ROADMAP.md, CHANGELOG.md.\n\n**Acceptance Criteria:** integration test drives a wide window (grid+pane, no strip, tap group updates pane, Settings dialog); ARCHITECTURE responsive-shell note; README/ROADMAP mark v0.6.3 done; jargon-free CHANGELOG [0.6.3]; just check + just test green.\n\n**Verify:** cd app && flutter test integration_test/v0_6_3_responsive_test.dart -d windows; just check + just test.\n\n```json:metadata\n{\"files\": [\"app/integration_test/v0_6_3_responsive_test.dart\", \"docs/ARCHITECTURE.md\", \"README.md\", \"docs/ROADMAP.md\", \"CHANGELOG.md\"], \"verifyCommand\": \"cd app && flutter test integration_test/v0_6_3_responsive_test.dart -d windows\", \"acceptanceCriteria\": [\"wide integration flow passes on -d windows\", \"docs updated\", \"just check + just test green\"]}\n```"
+    }
+  ]
+}
