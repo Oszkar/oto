@@ -30,17 +30,25 @@ Rect? _rectFrom(String? s) {
 /// on resize/move. No-op off desktop (Android/web never call window_manager).
 Future<void> initWindowBounds(SharedPreferences prefs) async {
   if (!_isDesktop) return;
-  await windowManager.ensureInitialized();
-  final saved = _rectFrom(prefs.getString(_kBounds));
-  final opts = WindowOptions(
-    size: saved?.size ?? const Size(1100, 760),
-    center: saved == null,
-  );
-  await windowManager.waitUntilReadyToShow(opts, () async {
-    if (saved != null) await windowManager.setPosition(saved.topLeft);
-    await windowManager.show();
-  });
-  windowManager.addListener(_BoundsPersister(prefs));
+  // Best-effort: window persistence is a UX nicety, never a launch blocker.
+  // If a window_manager channel call fails, swallow it and let the platform
+  // runner show the window at its default size (mirrors the graceful
+  // degradation of android_multicast_lock).
+  try {
+    await windowManager.ensureInitialized();
+    final saved = _rectFrom(prefs.getString(_kBounds));
+    final opts = WindowOptions(
+      size: saved?.size ?? const Size(1100, 760),
+      center: saved == null,
+    );
+    await windowManager.waitUntilReadyToShow(opts, () async {
+      if (saved != null) await windowManager.setPosition(saved.topLeft);
+      await windowManager.show();
+    });
+    windowManager.addListener(_BoundsPersister(prefs));
+  } catch (_) {
+    // A broken persist path must not prevent the app from starting.
+  }
 }
 
 /// Writes the live window rect back to prefs on every resize/move. No
@@ -50,11 +58,17 @@ class _BoundsPersister extends WindowListener {
   final SharedPreferences _prefs;
 
   Future<void> _save() async {
-    final b = await windowManager.getBounds();
-    await _prefs.setString(
-      _kBounds,
-      '${b.left},${b.top},${b.width},${b.height}',
-    );
+    // These fire from unawaited listener callbacks, so a throw here would
+    // become an unhandled future error - keep it self-contained + best-effort.
+    try {
+      final b = await windowManager.getBounds();
+      await _prefs.setString(
+        _kBounds,
+        '${b.left},${b.top},${b.width},${b.height}',
+      );
+    } catch (_) {
+      // A failed bounds write is inconsequential.
+    }
   }
 
   @override
