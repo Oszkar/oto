@@ -19,32 +19,33 @@ class OtoScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oto = context.oto;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final tier = layoutTierForWidth(constraints.maxWidth);
-        if (tier == LayoutTier.compact || detail == null) {
-          return Scaffold(backgroundColor: oto.bg, body: SafeArea(child: body));
-        }
-        return Scaffold(
-          backgroundColor: oto.bg,
-          body: SafeArea(
-            child: Row(
-              children: [
-                if (tier == LayoutTier.desktop && rail != null) ...[
-                  rail!,
-                  VerticalDivider(width: 1, thickness: 1, color: oto.line),
-                ],
-                Expanded(child: body),
-                VerticalDivider(width: 1, thickness: 1, color: oto.line),
-                SizedBox(
-                  width: tier == LayoutTier.desktop ? 340 : 320,
-                  child: detail!,
-                ),
-              ],
+    // Key the branch off the SAME MediaQuery-derived tier the child widgets use
+    // (context.isWide / layoutTier). Reading LayoutBuilder constraints here would
+    // be a second source of truth that can diverge from the children when this
+    // scaffold is embedded under a narrower parent - a compact shell whose body
+    // already thinks it is wide (strip suppressed, no pane), or the reverse.
+    final tier = context.layoutTier;
+    if (tier == LayoutTier.compact || detail == null) {
+      return Scaffold(backgroundColor: oto.bg, body: SafeArea(child: body));
+    }
+    return Scaffold(
+      backgroundColor: oto.bg,
+      body: SafeArea(
+        child: Row(
+          children: [
+            if (tier == LayoutTier.desktop && rail != null) ...[
+              rail!,
+              VerticalDivider(width: 1, thickness: 1, color: oto.line),
+            ],
+            Expanded(child: body),
+            VerticalDivider(width: 1, thickness: 1, color: oto.line),
+            SizedBox(
+              width: tier == LayoutTier.desktop ? 340 : 320,
+              child: detail!,
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }
