@@ -11,6 +11,8 @@ import 'package:oto/src/state/model/group_state.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 
+import 'fixture_household.dart';
+
 const _emptyTopology = rust_api.Topology(speakers: [], groups: []);
 
 const _oneRoomTopology = rust_api.Topology(
@@ -93,15 +95,6 @@ class _SequenceDiscovery extends Discovery {
   Future<rust_api.Topology> build() => _next();
 }
 
-class _FixtureHousehold extends HouseholdNotifier {
-  _FixtureHousehold(this._household);
-
-  final Household _household;
-
-  @override
-  Household build() => _household;
-}
-
 ProviderContainer _container({
   required Discovery Function() discovery,
   Household household = const Household(),
@@ -109,7 +102,7 @@ ProviderContainer _container({
   final container = ProviderContainer(
     overrides: [
       discoveryProvider.overrideWith(discovery),
-      householdProvider.overrideWith(() => _FixtureHousehold(household)),
+      householdProvider.overrideWith(() => FixtureHousehold(household)),
     ],
   );
   addTearDown(container.dispose);

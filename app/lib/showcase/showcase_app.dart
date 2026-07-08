@@ -23,6 +23,14 @@ import '../src/theme/oto_theme.dart';
 import 'entries.dart';
 import 'fixtures.dart';
 
+enum Viewport { phone, tablet, desktop }
+
+const _viewportSizes = <Viewport, Size>{
+  Viewport.phone: Size(390, 844),
+  Viewport.tablet: Size(1024, 768),
+  Viewport.desktop: Size(1440, 900),
+};
+
 class ShowcaseApp extends StatefulWidget {
   const ShowcaseApp({super.key});
 
@@ -34,6 +42,7 @@ class _ShowcaseAppState extends State<ShowcaseApp> {
   Brightness _brightness = Brightness.light;
   Accent _accent = Accent.teal;
   HomeLayout _layout = HomeLayout.cards;
+  Viewport _viewport = Viewport.phone;
   int _selected = 0;
 
   @override
@@ -61,9 +70,11 @@ class _ShowcaseAppState extends State<ShowcaseApp> {
                       brightness: _brightness,
                       accent: _accent,
                       layout: _layout,
+                      viewport: _viewport,
                       onBrightness: (b) => setState(() => _brightness = b),
                       onAccent: (a) => setState(() => _accent = a),
                       onLayout: (l) => setState(() => _layout = l),
+                      onViewport: (v) => setState(() => _viewport = v),
                     ),
                     const Divider(height: 1),
                     Expanded(
@@ -73,11 +84,14 @@ class _ShowcaseAppState extends State<ShowcaseApp> {
                           // Rebuild the whole preview (fresh fixtures) when any
                           // of these change - resetting optimistic state on a
                           // toggle is fine for a design board.
-                          key: ValueKey('$_selected-$_brightness-$_accent-$_layout'),
+                          key: ValueKey(
+                            '$_selected-$_brightness-$_accent-$_layout-$_viewport',
+                          ),
                           entry: entries[_selected],
                           brightness: _brightness,
                           accent: _accent,
                           layout: _layout,
+                          viewport: _viewport,
                         ),
                       ),
                     ),
@@ -154,17 +168,21 @@ class _Toolbar extends StatelessWidget {
     required this.brightness,
     required this.accent,
     required this.layout,
+    required this.viewport,
     required this.onBrightness,
     required this.onAccent,
     required this.onLayout,
+    required this.onViewport,
   });
 
   final Brightness brightness;
   final Accent accent;
   final HomeLayout layout;
+  final Viewport viewport;
   final ValueChanged<Brightness> onBrightness;
   final ValueChanged<Accent> onAccent;
   final ValueChanged<HomeLayout> onLayout;
+  final ValueChanged<Viewport> onViewport;
 
   @override
   Widget build(BuildContext context) {
@@ -190,6 +208,15 @@ class _Toolbar extends StatelessWidget {
             ],
             selected: {layout},
             onSelectionChanged: (s) => onLayout(s.first),
+          ),
+          SegmentedButton<Viewport>(
+            segments: const [
+              ButtonSegment(value: Viewport.phone, label: Text('Phone')),
+              ButtonSegment(value: Viewport.tablet, label: Text('Tablet')),
+              ButtonSegment(value: Viewport.desktop, label: Text('Desktop')),
+            ],
+            selected: {viewport},
+            onSelectionChanged: (s) => onViewport(s.first),
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -250,22 +277,25 @@ class _PreviewFrame extends StatelessWidget {
     required this.brightness,
     required this.accent,
     required this.layout,
+    required this.viewport,
   });
 
   final Entry entry;
   final Brightness brightness;
   final Accent accent;
   final HomeLayout layout;
+  final Viewport viewport;
 
   @override
   Widget build(BuildContext context) {
+    final size = _viewportSizes[viewport]!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: FittedBox(
           child: Container(
-            width: 390,
-            height: 844,
+            width: size.width,
+            height: size.height,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(28),
               boxShadow: const [
@@ -278,6 +308,7 @@ class _PreviewFrame extends StatelessWidget {
               brightness: brightness,
               accent: accent,
               layout: layout,
+              viewport: viewport,
             ),
           ),
         ),
@@ -296,12 +327,14 @@ class ShowcasePreview extends StatelessWidget {
     required this.brightness,
     required this.accent,
     required this.layout,
+    this.viewport = Viewport.phone,
   });
 
   final Entry entry;
   final Brightness brightness;
   final Accent accent;
   final HomeLayout layout;
+  final Viewport viewport;
 
   @override
   Widget build(BuildContext context) {
@@ -310,6 +343,7 @@ class ShowcasePreview extends StatelessWidget {
       accent: accent,
       layout: layout,
     );
+    final size = _viewportSizes[viewport]!;
     return ProviderScope(
       overrides: [
         householdProvider.overrideWith(() => FixtureHousehold(entry.household)),
@@ -335,7 +369,16 @@ class ShowcasePreview extends StatelessWidget {
             theme: otoTheme(Brightness.light, s.accent),
             darkTheme: otoTheme(Brightness.dark, s.accent),
             themeMode: s.mode,
-            home: entry.build(),
+            // Override the MediaQuery size below the MaterialApp so the
+            // previewed screen sees the selected viewport, not the real
+            // window - this is what makes the Phone/Tablet/Desktop toggle
+            // actually flip `context.layoutTier`.
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(size: size),
+                child: entry.build(),
+              ),
+            ),
           );
         },
       ),
