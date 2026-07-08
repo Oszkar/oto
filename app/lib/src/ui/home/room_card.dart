@@ -8,7 +8,7 @@ import '../../state/model/household.dart';
 import '../../state/model/room_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../room/room_detail_screen.dart';
+import '../shell/nav.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
@@ -52,7 +52,7 @@ class RoomCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _titleRow(context, room, offline),
+          _titleRow(context, ref, room, offline),
           const SizedBox(height: Space.lg10),
           if (canResume)
             _nowPlaying(context, ref, room, group!, playing)
@@ -70,7 +70,12 @@ class RoomCard extends ConsumerWidget {
     return offline ? Opacity(opacity: 0.55, child: card) : card;
   }
 
-  Widget _titleRow(BuildContext context, RoomState room, bool offline) {
+  Widget _titleRow(
+    BuildContext context,
+    WidgetRef ref,
+    RoomState room,
+    bool offline,
+  ) {
     final oto = context.oto;
     return Row(
       children: [
@@ -86,11 +91,11 @@ class RoomCard extends ConsumerWidget {
             behavior: HitTestBehavior.opaque,
             onTap: offline
                 ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            RoomDetailScreen(speakerId: speakerId),
-                      ),
+                : () => openRoom(
+                      context,
+                      ref,
+                      speakerId: speakerId,
+                      groupId: room.groupId,
                     ),
             child: Text(
               room.name,

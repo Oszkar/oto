@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/breakpoints.dart';
 import '../../state/commands.dart';
 import '../../state/household.dart';
 import '../../state/model/group_state.dart';
+import '../../state/selected_source.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../group/group_editor_screen.dart';
@@ -38,20 +40,31 @@ class GroupCard extends ConsumerWidget {
 
     final canResume = group.hasActiveStream;
     final playing = group.transport == PlaybackState.playing;
+    // On wide the card body is a select-in-place target for the detail pane, and
+    // the selected group is accent-bordered. On phone the body is not tappable
+    // (the inner transport/menu buttons keep their own hits either way).
+    final wide = context.isWide;
+    final selected = wide && ref.watch(resolvedSourceProvider) == groupId;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: oto.surface,
-        border: Border.all(color: oto.line),
-        borderRadius: BorderRadius.circular(Radius_.card16),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _header(context, ref, group, canResume, playing),
-          _volumeSection(context, ref, group),
-        ],
+    return GestureDetector(
+      onTap: wide
+          ? () => ref.read(selectedSourceProvider.notifier).select(groupId)
+          : null,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: BoxDecoration(
+          color: oto.surface,
+          border: Border.all(color: selected ? oto.accent : oto.line),
+          borderRadius: BorderRadius.circular(Radius_.card16),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _header(context, ref, group, canResume, playing),
+            _volumeSection(context, ref, group),
+          ],
+        ),
       ),
     );
   }

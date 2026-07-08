@@ -1,29 +1,48 @@
 import 'package:flutter/material.dart';
 
+import '../../state/breakpoints.dart';
 import '../../theme/oto_colors.dart';
 
-/// App scaffold with an adaptive seam. v0.6.0 always renders the compact
-/// (phone) layout; v0.6.3 will branch a wide layout at [wideBreakpoint]
-/// (tablet master-detail / desktop three-pane).
+/// App scaffold. Compact (<840): the phone body. Wide (>=840) when a [detail]
+/// pane is supplied: grid body + detail pane, plus a leading [rail] at desktop.
 class OtoScaffold extends StatelessWidget {
-  const OtoScaffold({super.key, required this.body});
+  const OtoScaffold({super.key, required this.body, this.detail, this.rail});
 
-  /// The compact (phone) body slot. The only layout in v0.6.0.
   final Widget body;
 
-  /// Reserved for v0.6.3 (tablet master-detail / desktop three-pane). The
-  /// [LayoutBuilder] seam below is a no-op until then.
-  static const double wideBreakpoint = 840;
+  /// Wide-only detail pane (Now Playing). Null -> compact-only screen.
+  final Widget? detail;
+
+  /// Desktop-only leading nav rail. Ignored below the desktop breakpoint.
+  final Widget? rail;
 
   @override
   Widget build(BuildContext context) {
+    final oto = context.oto;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // TODO(v0.6.3): branch a wide layout here.
-        // final wide = constraints.maxWidth >= wideBreakpoint;
+        final tier = layoutTierForWidth(constraints.maxWidth);
+        if (tier == LayoutTier.compact || detail == null) {
+          return Scaffold(backgroundColor: oto.bg, body: SafeArea(child: body));
+        }
         return Scaffold(
-          backgroundColor: context.oto.bg,
-          body: SafeArea(child: body),
+          backgroundColor: oto.bg,
+          body: SafeArea(
+            child: Row(
+              children: [
+                if (tier == LayoutTier.desktop && rail != null) ...[
+                  rail!,
+                  VerticalDivider(width: 1, thickness: 1, color: oto.line),
+                ],
+                Expanded(child: body),
+                VerticalDivider(width: 1, thickness: 1, color: oto.line),
+                SizedBox(
+                  width: tier == LayoutTier.desktop ? 340 : 320,
+                  child: detail!,
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
