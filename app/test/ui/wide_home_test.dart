@@ -239,4 +239,30 @@ void main() {
 
     expect(find.byType(OtoNavRail), findsNothing);
   });
+
+  testWidgets('desktop: Settings lives only in the rail, not a second header gear', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      household: _activeGroupHousehold(),
+      size: const Size(1280, 800),
+    );
+
+    expect(find.byKey(const Key('rail-settings')), findsOneWidget);
+    expect(find.byKey(const Key('header-settings')), findsNothing);
+  });
+
+  testWidgets('tablet: Settings lives in the header gear (no rail to own it)', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      household: _activeGroupHousehold(),
+      size: const Size(1024, 768),
+    );
+
+    expect(find.byKey(const Key('rail-settings')), findsNothing);
+    expect(find.byKey(const Key('header-settings')), findsOneWidget);
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/breakpoints.dart';
 import '../../state/household.dart';
 import '../../state/model/household.dart';
 import '../../state/prefs.dart';
@@ -84,10 +85,15 @@ class HomeHeader extends ConsumerWidget {
                 onChanged: (l) =>
                     ref.read(settingsProvider.notifier).setHomeLayout(l),
               ),
-              const SizedBox(width: Space.lg10),
-              _GearButton(
-                onPressed: () => openSettings(context),
-              ),
+              // On desktop the nav rail owns Settings, so the header gear would
+              // be a second cogwheel - drop it there. Tablet (no rail) and phone
+              // keep it as their only Settings entry point.
+              if (!context.isDesktop) ...[
+                const SizedBox(width: Space.lg10),
+                _GearButton(
+                  onPressed: () => openSettings(context),
+                ),
+              ],
             ],
           ),
         ),
