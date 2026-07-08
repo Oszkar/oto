@@ -11,6 +11,7 @@ import '../shell/oto_scaffold.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
+import '../widgets/pane_dismiss.dart';
 
 /// Embeddable Now Playing content for one group. Ported from the
 /// design-system `V3NowPlaying`, deliberately OMITTING the queue icon,
@@ -335,14 +336,11 @@ class _Header extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              if (onDismiss != null)
-                IconButton(
-                  key: Key('np-dismiss-$groupId'),
-                  onPressed: onDismiss,
-                  icon: OtoIcon('chevronDown', size: 18, color: oto.ink2),
-                )
-              else
-                const SizedBox(width: 48), // keep the caption centered in pane mode
+              PaneDismiss(
+                onDismiss: onDismiss,
+                icon: 'chevronDown',
+                buttonKey: Key('np-dismiss-$groupId'),
+              ),
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

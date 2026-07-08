@@ -6,16 +6,7 @@ import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/selected_source.dart';
 
-/// Fixture notifier so the test can drive a fixed household without any real
-/// discovery / event stream. Mirrors `sources_provider_test.dart`.
-class _FixtureHousehold extends HouseholdNotifier {
-  _FixtureHousehold(this._household);
-
-  final Household _household;
-
-  @override
-  Household build() => _household;
-}
+import 'fixture_household.dart';
 
 final _household = Household(
   rooms: {
@@ -51,7 +42,7 @@ final _household = Household(
 ProviderContainer _container(Household household) {
   final container = ProviderContainer(
     overrides: [
-      householdProvider.overrideWith(() => _FixtureHousehold(household)),
+      householdProvider.overrideWith(() => FixtureHousehold(household)),
     ],
   );
   addTearDown(container.dispose);

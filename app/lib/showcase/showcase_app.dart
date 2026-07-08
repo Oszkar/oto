@@ -308,6 +308,7 @@ class _PreviewFrame extends StatelessWidget {
               brightness: brightness,
               accent: accent,
               layout: layout,
+              viewport: viewport,
             ),
           ),
         ),
@@ -326,12 +327,14 @@ class ShowcasePreview extends StatelessWidget {
     required this.brightness,
     required this.accent,
     required this.layout,
+    this.viewport = Viewport.phone,
   });
 
   final Entry entry;
   final Brightness brightness;
   final Accent accent;
   final HomeLayout layout;
+  final Viewport viewport;
 
   @override
   Widget build(BuildContext context) {
@@ -340,6 +343,7 @@ class ShowcasePreview extends StatelessWidget {
       accent: accent,
       layout: layout,
     );
+    final size = _viewportSizes[viewport]!;
     return ProviderScope(
       overrides: [
         householdProvider.overrideWith(() => FixtureHousehold(entry.household)),
@@ -365,7 +369,16 @@ class ShowcasePreview extends StatelessWidget {
             theme: otoTheme(Brightness.light, s.accent),
             darkTheme: otoTheme(Brightness.dark, s.accent),
             themeMode: s.mode,
-            home: entry.build(),
+            // Override the MediaQuery size below the MaterialApp so the
+            // previewed screen sees the selected viewport, not the real
+            // window - this is what makes the Phone/Tablet/Desktop toggle
+            // actually flip `context.layoutTier`.
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(size: size),
+                child: entry.build(),
+              ),
+            ),
           );
         },
       ),
