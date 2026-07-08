@@ -8,7 +8,7 @@ import '../../state/model/household.dart';
 import '../../state/model/room_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../room/room_detail_screen.dart';
+import '../shell/nav.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
@@ -91,11 +91,11 @@ class RoomRow extends ConsumerWidget {
             behavior: HitTestBehavior.opaque,
             onTap: offline
                 ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            RoomDetailScreen(speakerId: speakerId),
-                      ),
+                : () => openRoom(
+                      context,
+                      ref,
+                      speakerId: speakerId,
+                      groupId: room.groupId,
                     ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/breakpoints.dart';
 import '../../state/home_view_state.dart';
 import '../../state/model/group_state.dart';
 import '../../state/model/household.dart';
-import '../../state/model/source.dart';
 import '../../state/prefs.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../now_playing/now_playing_screen.dart';
+import '../now_playing/now_playing_pane.dart';
+import '../shell/nav.dart';
 import '../shell/oto_scaffold.dart';
 import 'bottom_strip.dart';
 import 'group_card.dart';
@@ -42,6 +43,7 @@ class HomeScreen extends ConsumerWidget {
         body: HomeErrorState(error: error),
       ),
       HomeDiscoveringWithCache(:final household) => OtoScaffold(
+        detail: const NowPlayingPane(),
         body: _HomeContent(
           household: household,
           banner: HomeStatusBanner(
@@ -51,6 +53,7 @@ class HomeScreen extends ConsumerWidget {
         ),
       ),
       HomeDiscoveryFailedWithCache(:final household) => OtoScaffold(
+        detail: const NowPlayingPane(),
         body: _HomeContent(
           household: household,
           banner: const HomeStatusBanner(
@@ -59,6 +62,7 @@ class HomeScreen extends ConsumerWidget {
         ),
       ),
       HomeReady(:final household) => OtoScaffold(
+        detail: const NowPlayingPane(),
         body: _HomeContent(household: household),
       ),
     };
@@ -76,6 +80,9 @@ class _HomeContent extends ConsumerWidget {
     final layout = ref.watch(settingsProvider.select((s) => s.layout));
     final groups = _sortedGroups(household);
     final hasActiveStream = groups.any((g) => g.hasActiveStream);
+    // On wide the persistent detail pane replaces the floating strip; only the
+    // phone layout keeps the strip (and reserves bottom room for it).
+    final wide = context.isWide;
 
     return Stack(
       children: [
@@ -89,12 +96,12 @@ class _HomeContent extends ConsumerWidget {
             Expanded(
               child: SingleChildScrollView(
                 // Bottom padding leaves room for the floating strip so the
-                // last card never hides behind it.
+                // last card never hides behind it (phone only).
                 padding: EdgeInsets.fromLTRB(
                   Space.gutter12,
                   0,
                   Space.gutter12,
-                  hasActiveStream ? 96 : Space.gutter12,
+                  (!wide && hasActiveStream) ? 96 : Space.gutter12,
                 ),
                 child: layout == HomeLayout.cards
                     ? _CardsBody(groups: groups)
@@ -103,20 +110,16 @@ class _HomeContent extends ConsumerWidget {
             ),
           ],
         ),
-        if (hasActiveStream)
+        if (!wide && hasActiveStream)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: BottomStrip(onTapSource: (s) => _openNowPlaying(context, s)),
+            child: BottomStrip(
+              onTapSource: (s) => openSource(context, ref, s.id),
+            ),
           ),
       ],
-    );
-  }
-
-  void _openNowPlaying(BuildContext context, Source s) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => NowPlayingScreen(groupId: s.id)),
     );
   }
 }
