@@ -15,7 +15,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.6.0 | released | **UI: foundation + Home + Now Playing** — theming, source-model state architecture, adaptive shell, persistence |
 | v0.6.1 | released | **UI: room management** — group editor + room detail |
 | v0.6.2 | released | **UI: settings + states** - settings plus a Home presentation state model |
-| v0.6.3 | planned | **UI: responsive** — tablet master-detail, desktop three-pane |
+| v0.6.3 | released | **UI: responsive** - tablet master-detail, desktop three-pane |
 | v0.7.0 | planned | **Hardening + polish** — SSDP hardening, cleanup TODOs, dogfooding finds |
 | v1.0   | future | Stable — externally tested, packaged |
 
@@ -92,7 +92,7 @@ Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0
   read-only devices list) plus a Home presentation state model for loading,
   empty, discovery-error, and cached-error states, with offline room/device
   presentation.
-- **v0.6.3 — Responsive.** Tablet master-detail + desktop three-pane (Windows is first-class); the bottom strip dissolves into a persistent pane.
+- **v0.6.3 - Responsive (released).** Tablet master-detail + desktop three-pane (Windows first-class): on wide, the room grid keeps its place beside a persistent Now Playing pane (the phone's floating strip, dissolved), desktop adds a nav rail, Settings and the group editor open as dialogs, Room detail folds away (a wide room tap selects its group into the pane), and the Windows window remembers its size/position. Layout keys off one `LayoutTier` helper read from `MediaQuery`. Closes the v0.6 UI milestone.
 
 The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.
 
