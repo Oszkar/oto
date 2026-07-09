@@ -216,6 +216,54 @@ void main() {
     fx.set(_brOnly);
     await _tick();
 
+    expect(container.read(selectedSourceProvider).pinned, isFalse);
+    expect(container.read(resolvedSourceProvider), 'G_BR');
+  });
+
+  test('a pinned idle coordinator clears when it vanishes (active list stable)',
+      () async {
+    // Bedroom playing, Office idle. Pin the idle Office, then remove Office.
+    // Bedroom (the only active source) is untouched, so `sources` stays
+    // value-equal - the reconcile must be driven by the coordinator-set change.
+    final withOffice = Household(
+      rooms: {
+        'BR': const RoomState(
+          id: 'BR',
+          name: 'Bedroom',
+          kind: RoomKind.speaker,
+          groupId: 'G_BR',
+        ),
+        'OF': const RoomState(
+          id: 'OF',
+          name: 'Office',
+          kind: RoomKind.speaker,
+          groupId: 'G_OF',
+        ),
+      },
+      groups: {
+        'G_BR': const GroupState(
+          id: 'G_BR',
+          coordinatorId: 'BR',
+          memberIds: ['BR'],
+          transport: PlaybackState.playing,
+        ),
+        'G_OF': const GroupState(
+          id: 'G_OF',
+          coordinatorId: 'OF',
+          memberIds: ['OF'],
+          transport: PlaybackState.stopped,
+        ),
+      },
+    );
+    final (container, fx) = _live(withOffice);
+    container.read(selectedSourceProvider.notifier).select('G_OF');
+    expect(container.read(resolvedSourceProvider), 'G_OF');
+    expect(container.read(selectedSourceProvider).pinned, isTrue);
+
+    fx.set(_brOnly); // Office gone; Bedroom's active source unchanged.
+    await _tick();
+
+    expect(container.read(selectedSourceProvider).pinned, isFalse);
     expect(container.read(resolvedSourceProvider), 'G_BR');
   });
 

@@ -36,6 +36,19 @@ class SelectedSource extends _$SelectedSource {
     // build() on every source delta and wipe an explicit pick. Seed the initial
     // latch from a one-shot read so build() takes no dependency on it.
     ref.listen(sourcesProvider, (_, next) => _reconcile(next));
+    // Also reconcile when the SET of coordinators changes: an idle pin whose
+    // coordinator vanishes leaves the active-source list value-equal, so the
+    // `sources` listener alone would never fire and the pin would go stale.
+    // Project to a value-equal String so this fires only on topology-shape
+    // changes (regroup, room add/remove), never on per-event playback ticks.
+    ref.listen(
+      householdProvider.select(
+        (h) =>
+            (h.groups.values.map((g) => g.coordinatorId).toList()..sort())
+                .join(','),
+      ),
+      (_, _) => _reconcile(ref.read(sourcesProvider)),
+    );
     return (coord: _firstActive(ref.read(sourcesProvider)), pinned: false);
   }
 

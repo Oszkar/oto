@@ -50,7 +50,7 @@ final class SelectedSourceProvider
   }
 }
 
-String _$selectedSourceHash() => r'55ff87171e62d55262e6ac0ed0253b2076f64379';
+String _$selectedSourceHash() => r'81c523e34c28a7fb569f40a8529e7a1c329a6567';
 
 /// Tracks the coordinator the wide detail pane shows, reconciling on every
 /// active-source change (finding: a plain "first active source" default jumps
