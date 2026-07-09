@@ -127,28 +127,27 @@ void main() {
     expect(slider.onChanged, isNull);
   });
 
-  testWidgets('progress bar shows --:-- and zero fill when duration is unknown',
-      (t) async {
-    // 30 s elapsed, no duration known.
-    final h = _wrapWithProgress(
-      const NowPlayingScreen(groupId: 'G_OF'),
-      household: nowPlayingHousehold(),
-      groupId: 'G_OF',
-      progress: NowPlayingProgress(
-        const Duration(seconds: 30),
-        null,
-      ),
-    );
-    await t.pumpWidget(h);
+  testWidgets(
+    'progress bar shows --:-- and zero fill when duration is unknown',
+    (t) async {
+      // 30 s elapsed, no duration known.
+      final h = _wrapWithProgress(
+        const NowPlayingScreen(groupId: 'G_OF'),
+        household: nowPlayingHousehold(),
+        groupId: 'G_OF',
+        progress: NowPlayingProgress(const Duration(seconds: 30), null),
+      );
+      await t.pumpWidget(h);
 
-    expect(find.text('0:30'), findsOneWidget);
-    expect(find.text('--:--'), findsOneWidget);
-    final slider = t.widget<OtoSlider>(
-      find.byKey(const Key('np-progress-G_OF')),
-    );
-    expect(slider.value, 0.0);
-    expect(slider.onChanged, isNull);
-  });
+      expect(find.text('0:30'), findsOneWidget);
+      expect(find.text('--:--'), findsOneWidget);
+      final slider = t.widget<OtoSlider>(
+        find.byKey(const Key('np-progress-G_OF')),
+      );
+      expect(slider.value, 0.0);
+      expect(slider.onChanged, isNull);
+    },
+  );
 }
 
 /// Builds the widget under test with a fixed [NowPlayingProgress] pinned to
@@ -163,12 +162,8 @@ Widget _wrapWithProgress(
   return ProviderScope(
     overrides: [
       householdProvider.overrideWith(() => FixtureHousehold(household)),
-      playbackControllerProvider.overrideWith(
-        (ref) => SpyPlayback(ref),
-      ),
-      groupingControllerProvider.overrideWith(
-        (ref) => SpyGrouping(ref),
-      ),
+      playbackControllerProvider.overrideWith((ref) => SpyPlayback(ref)),
+      groupingControllerProvider.overrideWith((ref) => SpyGrouping(ref)),
       positionApiProvider.overrideWithValue(const StubPositionApi()),
       nowPlayingPositionProvider(groupId).overrideWithValue(progress),
     ],

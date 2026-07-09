@@ -188,6 +188,9 @@ class _SourceRow extends ConsumerWidget {
               const SizedBox(width: Space.md8),
               IconButton(
                 key: Key('strip-play-${source.id}'),
+                tooltip: playing
+                    ? 'Pause ${source.label}'
+                    : 'Play ${source.label}',
                 onPressed: coordinatorOnline
                     ? () => ref
                           .read(playbackControllerProvider)

@@ -148,124 +148,136 @@ void main() {
     expect(container.read(resolvedSourceProvider), isNull);
   });
 
-  test('an explicit pick survives a regroup (group id churns, coord stable)',
-      () async {
-    final (container, fx) = _live(_pair(lrActive: true, brActive: false));
-    container.read(selectedSourceProvider.notifier).select('G_LR');
-    expect(container.read(resolvedSourceProvider), 'G_LR');
+  test(
+    'an explicit pick survives a regroup (group id churns, coord stable)',
+    () async {
+      final (container, fx) = _live(_pair(lrActive: true, brActive: false));
+      container.read(selectedSourceProvider.notifier).select('G_LR');
+      expect(container.read(resolvedSourceProvider), 'G_LR');
 
-    // Same coordinator, brand-new group id (as a real regroup produces).
-    fx.set(_pair(lrActive: true, brActive: false, lrGroupId: 'G_LR2'));
-    await _tick();
+      // Same coordinator, brand-new group id (as a real regroup produces).
+      fx.set(_pair(lrActive: true, brActive: false, lrGroupId: 'G_LR2'));
+      await _tick();
 
-    expect(container.read(selectedSourceProvider).coord, 'LR');
-    expect(container.read(resolvedSourceProvider), 'G_LR2');
-  });
+      expect(container.read(selectedSourceProvider).coord, 'LR');
+      expect(container.read(resolvedSourceProvider), 'G_LR2');
+    },
+  );
 
-  test('auto default is sticky: a later first-sorting source does not steal it',
-      () async {
-    final (container, fx) = _live(_pair(lrActive: true, brActive: false));
-    // Living Room is the only active source; the pane latches onto it.
-    expect(container.read(resolvedSourceProvider), 'G_LR');
+  test(
+    'auto default is sticky: a later first-sorting source does not steal it',
+    () async {
+      final (container, fx) = _live(_pair(lrActive: true, brActive: false));
+      // Living Room is the only active source; the pane latches onto it.
+      expect(container.read(resolvedSourceProvider), 'G_LR');
 
-    // Bedroom (sorts before "Living Room") starts playing.
-    fx.set(_pair(lrActive: true, brActive: true));
-    await _tick();
+      // Bedroom (sorts before "Living Room") starts playing.
+      fx.set(_pair(lrActive: true, brActive: true));
+      await _tick();
 
-    // The pane stays on Living Room instead of jumping to the now-first Bedroom.
-    expect(container.read(resolvedSourceProvider), 'G_LR');
-  });
+      // The pane stays on Living Room instead of jumping to the now-first Bedroom.
+      expect(container.read(resolvedSourceProvider), 'G_LR');
+    },
+  );
 
-  test('auto default moves to the next active source when the current stops',
-      () async {
-    final (container, fx) = _live(_pair(lrActive: true, brActive: true));
-    // Both active; "Bedroom" sorts first, so the auto latch lands there.
-    expect(container.read(resolvedSourceProvider), 'G_BR');
+  test(
+    'auto default moves to the next active source when the current stops',
+    () async {
+      final (container, fx) = _live(_pair(lrActive: true, brActive: true));
+      // Both active; "Bedroom" sorts first, so the auto latch lands there.
+      expect(container.read(resolvedSourceProvider), 'G_BR');
 
-    fx.set(_pair(lrActive: false, brActive: true)); // Bedroom keeps playing
-    await _tick();
-    // Still on Bedroom (its own source is active) - nothing to move to.
-    expect(container.read(resolvedSourceProvider), 'G_BR');
+      fx.set(_pair(lrActive: false, brActive: true)); // Bedroom keeps playing
+      await _tick();
+      // Still on Bedroom (its own source is active) - nothing to move to.
+      expect(container.read(resolvedSourceProvider), 'G_BR');
 
-    fx.set(_pair(lrActive: true, brActive: false)); // Bedroom stops, LR plays
-    await _tick();
-    expect(container.read(resolvedSourceProvider), 'G_LR');
-  });
+      fx.set(_pair(lrActive: true, brActive: false)); // Bedroom stops, LR plays
+      await _tick();
+      expect(container.read(resolvedSourceProvider), 'G_LR');
+    },
+  );
 
-  test('an explicit pin stays put when its source goes idle (unlike auto)',
-      () async {
-    final (container, fx) = _live(_pair(lrActive: true, brActive: true));
-    container.read(selectedSourceProvider.notifier).select('G_LR');
-    expect(container.read(resolvedSourceProvider), 'G_LR');
+  test(
+    'an explicit pin stays put when its source goes idle (unlike auto)',
+    () async {
+      final (container, fx) = _live(_pair(lrActive: true, brActive: true));
+      container.read(selectedSourceProvider.notifier).select('G_LR');
+      expect(container.read(resolvedSourceProvider), 'G_LR');
 
-    // Living Room stops; Bedroom still plays. A pin holds; auto would move off.
-    fx.set(_pair(lrActive: false, brActive: true));
-    await _tick();
+      // Living Room stops; Bedroom still plays. A pin holds; auto would move off.
+      fx.set(_pair(lrActive: false, brActive: true));
+      await _tick();
 
-    expect(container.read(selectedSourceProvider).pinned, isTrue);
-    expect(container.read(resolvedSourceProvider), 'G_LR');
-  });
+      expect(container.read(selectedSourceProvider).pinned, isTrue);
+      expect(container.read(resolvedSourceProvider), 'G_LR');
+    },
+  );
 
-  test('an explicit pin falls back to default when its coordinator vanishes',
-      () async {
-    final (container, fx) = _live(_pair(lrActive: true, brActive: true));
-    container.read(selectedSourceProvider.notifier).select('G_LR');
-    expect(container.read(resolvedSourceProvider), 'G_LR');
+  test(
+    'an explicit pin falls back to default when its coordinator vanishes',
+    () async {
+      final (container, fx) = _live(_pair(lrActive: true, brActive: true));
+      container.read(selectedSourceProvider.notifier).select('G_LR');
+      expect(container.read(resolvedSourceProvider), 'G_LR');
 
-    // Living Room disappears entirely; only Bedroom remains.
-    fx.set(_brOnly);
-    await _tick();
+      // Living Room disappears entirely; only Bedroom remains.
+      fx.set(_brOnly);
+      await _tick();
 
-    expect(container.read(selectedSourceProvider).pinned, isFalse);
-    expect(container.read(resolvedSourceProvider), 'G_BR');
-  });
+      expect(container.read(selectedSourceProvider).pinned, isFalse);
+      expect(container.read(resolvedSourceProvider), 'G_BR');
+    },
+  );
 
-  test('a pinned idle coordinator clears when it vanishes (active list stable)',
-      () async {
-    // Bedroom playing, Office idle. Pin the idle Office, then remove Office.
-    // Bedroom (the only active source) is untouched, so `sources` stays
-    // value-equal - the reconcile must be driven by the coordinator-set change.
-    final withOffice = Household(
-      rooms: {
-        'BR': const RoomState(
-          id: 'BR',
-          name: 'Bedroom',
-          kind: RoomKind.speaker,
-          groupId: 'G_BR',
-        ),
-        'OF': const RoomState(
-          id: 'OF',
-          name: 'Office',
-          kind: RoomKind.speaker,
-          groupId: 'G_OF',
-        ),
-      },
-      groups: {
-        'G_BR': const GroupState(
-          id: 'G_BR',
-          coordinatorId: 'BR',
-          memberIds: ['BR'],
-          transport: PlaybackState.playing,
-        ),
-        'G_OF': const GroupState(
-          id: 'G_OF',
-          coordinatorId: 'OF',
-          memberIds: ['OF'],
-          transport: PlaybackState.stopped,
-        ),
-      },
-    );
-    final (container, fx) = _live(withOffice);
-    container.read(selectedSourceProvider.notifier).select('G_OF');
-    expect(container.read(resolvedSourceProvider), 'G_OF');
-    expect(container.read(selectedSourceProvider).pinned, isTrue);
+  test(
+    'a pinned idle coordinator clears when it vanishes (active list stable)',
+    () async {
+      // Bedroom playing, Office idle. Pin the idle Office, then remove Office.
+      // Bedroom (the only active source) is untouched, so `sources` stays
+      // value-equal - the reconcile must be driven by the coordinator-set change.
+      final withOffice = Household(
+        rooms: {
+          'BR': const RoomState(
+            id: 'BR',
+            name: 'Bedroom',
+            kind: RoomKind.speaker,
+            groupId: 'G_BR',
+          ),
+          'OF': const RoomState(
+            id: 'OF',
+            name: 'Office',
+            kind: RoomKind.speaker,
+            groupId: 'G_OF',
+          ),
+        },
+        groups: {
+          'G_BR': const GroupState(
+            id: 'G_BR',
+            coordinatorId: 'BR',
+            memberIds: ['BR'],
+            transport: PlaybackState.playing,
+          ),
+          'G_OF': const GroupState(
+            id: 'G_OF',
+            coordinatorId: 'OF',
+            memberIds: ['OF'],
+            transport: PlaybackState.stopped,
+          ),
+        },
+      );
+      final (container, fx) = _live(withOffice);
+      container.read(selectedSourceProvider.notifier).select('G_OF');
+      expect(container.read(resolvedSourceProvider), 'G_OF');
+      expect(container.read(selectedSourceProvider).pinned, isTrue);
 
-    fx.set(_brOnly); // Office gone; Bedroom's active source unchanged.
-    await _tick();
+      fx.set(_brOnly); // Office gone; Bedroom's active source unchanged.
+      await _tick();
 
-    expect(container.read(selectedSourceProvider).pinned, isFalse);
-    expect(container.read(resolvedSourceProvider), 'G_BR');
-  });
+      expect(container.read(selectedSourceProvider).pinned, isFalse);
+      expect(container.read(resolvedSourceProvider), 'G_BR');
+    },
+  );
 
   test('clear() returns an explicit pin to auto-follow', () async {
     final (container, fx) = _live(_pair(lrActive: true, brActive: true));

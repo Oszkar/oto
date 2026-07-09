@@ -191,7 +191,8 @@ void main() {
         expect(
           state,
           isA<HomeInitialLoading>(),
-          reason: 'must not flash an empty HomeReady before the household seeds',
+          reason:
+              'must not flash an empty HomeReady before the household seeds',
         );
       },
     );
@@ -329,10 +330,7 @@ void main() {
 
     test('failure states compare by their fields', () {
       final err = rust_api.DiscoveryError.noDevicesFound();
-      expect(
-        HomeDiscoveryFailedNoCache(err),
-        HomeDiscoveryFailedNoCache(err),
-      );
+      expect(HomeDiscoveryFailedNoCache(err), HomeDiscoveryFailedNoCache(err));
       expect(
         HomeDiscoveryFailedWithCache(_cachedHousehold, err),
         HomeDiscoveryFailedWithCache(_cachedHousehold, err),

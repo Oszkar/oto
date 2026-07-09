@@ -58,6 +58,32 @@ class SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oto = context.oto;
+    final labelBlock = Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyles.titleCard.copyWith(color: oto.ink)),
+          if (subtitle != null) ...[
+            const SizedBox(height: Space.xs4),
+            Text(
+              subtitle!,
+              style: TextStyles.caption.copyWith(color: oto.inkMute),
+            ),
+          ],
+        ],
+      ),
+    );
+    final iconBox = Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: oto.fill,
+        borderRadius: BorderRadius.circular(Radius_.control7),
+      ),
+      alignment: Alignment.center,
+      child: OtoIcon(icon, size: 16, color: oto.ink2),
+    );
+
     return Container(
       decoration: BoxDecoration(
         border: last ? null : Border(bottom: BorderSide(color: oto.line)),
@@ -66,42 +92,43 @@ class SettingsRow extends StatelessWidget {
         horizontal: Space.gutter12,
         vertical: Space.lg10,
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: oto.fill,
-              borderRadius: BorderRadius.circular(Radius_.control7),
-            ),
-            alignment: Alignment.center,
-            child: OtoIcon(icon, size: 16, color: oto.ink2),
-          ),
-          const SizedBox(width: Space.gutter12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stackTrailing = trailing != null && constraints.maxWidth < 360;
+          if (stackTrailing) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  label,
-                  style: TextStyles.titleCard.copyWith(color: oto.ink),
+                Row(
+                  children: [
+                    iconBox,
+                    const SizedBox(width: Space.gutter12),
+                    labelBlock,
+                  ],
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: Space.xs4),
-                  Text(
-                    subtitle!,
-                    style: TextStyles.caption.copyWith(color: oto.inkMute),
+                const SizedBox(height: Space.gutter12),
+                Padding(
+                  padding: const EdgeInsets.only(left: 46),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: trailing,
                   ),
-                ],
+                ),
               ],
-            ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: Space.gutter12),
-            trailing!,
-          ],
-        ],
+            );
+          }
+          return Row(
+            children: [
+              iconBox,
+              const SizedBox(width: Space.gutter12),
+              labelBlock,
+              if (trailing != null) ...[
+                const SizedBox(width: Space.gutter12),
+                trailing!,
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -112,12 +139,14 @@ class SettingsSegment<T> {
     required this.value,
     required this.key,
     this.label,
+    this.semanticLabel,
     this.icon,
   }) : assert(label != null || icon != null);
 
   final T value;
   final Key key;
   final String? label;
+  final String? semanticLabel;
   final String? icon;
 }
 
@@ -129,7 +158,7 @@ class SettingsSegmentedControl<T> extends StatelessWidget {
     required this.onChanged,
     this.segmentWidth,
     this.segmentMinWidth = 52,
-    this.segmentHeight = 34,
+    this.segmentHeight = 40,
   });
 
   final T value;
@@ -142,29 +171,51 @@ class SettingsSegmentedControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oto = context.oto;
-    return Container(
-      padding: const EdgeInsets.all(Space.xs4),
-      decoration: BoxDecoration(
-        color: oto.fillStrong,
-        borderRadius: BorderRadius.circular(Radius_.input9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final segment in segments) ...[
-            _SegmentButton<T>(
-              key: segment.key,
-              active: segment.value == value,
-              segment: segment,
-              onChanged: onChanged,
-              width: segmentWidth,
-              minWidth: segmentMinWidth,
-              height: segmentHeight,
-            ),
-            if (segment != segments.last) const SizedBox(width: 2),
-          ],
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fillWidth =
+            segmentWidth == null &&
+            constraints.hasBoundedWidth &&
+            constraints.maxWidth.isFinite;
+        return Container(
+          width: fillWidth ? double.infinity : null,
+          padding: const EdgeInsets.all(Space.xs4),
+          decoration: BoxDecoration(
+            color: oto.fillStrong,
+            borderRadius: BorderRadius.circular(Radius_.input9),
+          ),
+          child: Row(
+            mainAxisSize: fillWidth ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              for (final segment in segments) ...[
+                if (fillWidth)
+                  Expanded(
+                    child: _SegmentButton<T>(
+                      key: segment.key,
+                      active: segment.value == value,
+                      segment: segment,
+                      onChanged: onChanged,
+                      width: null,
+                      minWidth: 0,
+                      height: segmentHeight,
+                    ),
+                  )
+                else
+                  _SegmentButton<T>(
+                    key: segment.key,
+                    active: segment.value == value,
+                    segment: segment,
+                    onChanged: onChanged,
+                    width: segmentWidth,
+                    minWidth: segmentMinWidth,
+                    height: segmentHeight,
+                  ),
+                if (segment != segments.last) const SizedBox(width: 2),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -190,57 +241,61 @@ class _SegmentButton<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oto = context.oto;
+    final label = segment.semanticLabel ?? segment.label ?? segment.icon;
     return Semantics(
-      label: segment.label ?? segment.icon,
+      label: label,
       button: true,
       selected: active,
       focusable: true,
       onTap: () => onChanged(segment.value),
       excludeSemantics: true,
-      child: FocusableActionDetector(
-        shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: {
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              onChanged(segment.value);
-              return null;
-            },
-          ),
-        },
-        mouseCursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => onChanged(segment.value),
-          child: Container(
-            width: width,
-            height: height,
-            constraints: width == null
-                ? BoxConstraints(minWidth: minWidth)
-                : null,
-            padding: width == null
-                ? const EdgeInsets.symmetric(horizontal: Space.lg10)
-                : EdgeInsets.zero,
-            decoration: BoxDecoration(
-              color: active ? oto.surface : Colors.transparent,
-              borderRadius: BorderRadius.circular(Radius_.control7),
-              boxShadow: active ? Elevation.card : null,
+      child: Tooltip(
+        message: label ?? '',
+        child: FocusableActionDetector(
+          shortcuts: const {
+            SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+            SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+          },
+          actions: {
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (_) {
+                onChanged(segment.value);
+                return null;
+              },
             ),
-            alignment: Alignment.center,
-            child: segment.icon == null
-                ? Text(
-                    segment.label!,
-                    style: TextStyles.label.copyWith(
+          },
+          mouseCursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onChanged(segment.value),
+            child: Container(
+              width: width,
+              height: height,
+              constraints: width == null
+                  ? BoxConstraints(minWidth: minWidth)
+                  : null,
+              padding: width == null
+                  ? const EdgeInsets.symmetric(horizontal: Space.lg10)
+                  : EdgeInsets.zero,
+              decoration: BoxDecoration(
+                color: active ? oto.surface : Colors.transparent,
+                borderRadius: BorderRadius.circular(Radius_.control7),
+                boxShadow: active ? Elevation.card : null,
+              ),
+              alignment: Alignment.center,
+              child: segment.icon == null
+                  ? Text(
+                      segment.label ?? label ?? '',
+                      style: TextStyles.label.copyWith(
+                        color: active ? oto.ink : oto.inkMute,
+                      ),
+                    )
+                  : OtoIcon(
+                      segment.icon!,
+                      size: 14,
                       color: active ? oto.ink : oto.inkMute,
                     ),
-                  )
-                : OtoIcon(
-                    segment.icon!,
-                    size: 14,
-                    color: active ? oto.ink : oto.inkMute,
-                  ),
+            ),
           ),
         ),
       ),

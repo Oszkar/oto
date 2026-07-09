@@ -43,9 +43,8 @@ class SelectedSource extends _$SelectedSource {
     // changes (regroup, room add/remove), never on per-event playback ticks.
     ref.listen(
       householdProvider.select(
-        (h) =>
-            (h.groups.values.map((g) => g.coordinatorId).toList()..sort())
-                .join(','),
+        (h) => (h.groups.values.map((g) => g.coordinatorId).toList()..sort())
+            .join(','),
       ),
       (_, _) => _reconcile(ref.read(sourcesProvider)),
     );

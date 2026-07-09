@@ -79,44 +79,56 @@ class RoomRow extends ConsumerWidget {
     final offline = !room.online;
     return Row(
       children: [
-        OtoIcon(
-          room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
-          size: 18,
-          color: oto.ink2,
-        ),
-        const SizedBox(width: Space.gutter12),
         Expanded(
-          child: GestureDetector(
+          child: InkWell(
             key: Key('room-open-$speakerId'),
-            behavior: HitTestBehavior.opaque,
             onTap: offline
                 ? null
                 : () => openRoom(
-                      context,
-                      ref,
-                      speakerId: speakerId,
-                      groupId: room.groupId,
-                    ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+                    context,
+                    ref,
+                    speakerId: speakerId,
+                    groupId: room.groupId,
+                  ),
+            borderRadius: BorderRadius.circular(Radius_.card16 - 1),
+            child: Row(
               children: [
-                Text(
-                  room.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyles.titleCard,
+                OtoIcon(
+                  room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
+                  size: 18,
+                  color: oto.ink2,
                 ),
-                const SizedBox(height: 1),
-                Text(
-                  _subtitle(room, group, offline),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyles.caption.copyWith(
-                    fontSize: 11,
-                    color: oto.inkMute,
+                const SizedBox(width: Space.gutter12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        room.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.titleCard,
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        _subtitle(room, group, offline),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.caption.copyWith(color: oto.inkMute),
+                      ),
+                    ],
                   ),
                 ),
+                if (!offline)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.md8),
+                    child: OtoIcon(
+                      'chevronRight',
+                      size: 12,
+                      color: oto.inkFaint,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -125,6 +137,7 @@ class RoomRow extends ConsumerWidget {
         if (canResume)
           IconButton(
             key: Key('room-play-$speakerId'),
+            tooltip: playing ? 'Pause ${room.name}' : 'Play ${room.name}',
             onPressed: () => ref
                 .read(playbackControllerProvider)
                 .togglePlay(group!.id, group.transport ?? PlaybackState.paused),
@@ -143,11 +156,6 @@ class RoomRow extends ConsumerWidget {
                 color: oto.ink,
               ),
             ),
-          ),
-        if (!offline)
-          Padding(
-            padding: const EdgeInsets.only(left: Space.md8),
-            child: OtoIcon('chevronRight', size: 12, color: oto.inkFaint),
           ),
       ],
     );
@@ -195,7 +203,6 @@ class RoomRow extends ConsumerWidget {
               textAlign: TextAlign.right,
               style: TextStyles.caption.copyWith(
                 fontFamily: Fonts.mono,
-                fontSize: 11,
                 color: oto.inkMute,
               ),
             ),

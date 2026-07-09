@@ -299,7 +299,11 @@ class _PreviewFrame extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(28),
               boxShadow: const [
-                BoxShadow(color: Color(0x55000000), blurRadius: 24, spreadRadius: 2),
+                BoxShadow(
+                  color: Color(0x55000000),
+                  blurRadius: 24,
+                  spreadRadius: 2,
+                ),
               ],
             ),
             clipBehavior: Clip.antiAlias,

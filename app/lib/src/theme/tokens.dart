@@ -41,6 +41,13 @@ abstract final class Radius_ {
   static const double pill999 = 999;
 }
 
+/// Minimum interactive hit-target sizes.
+abstract final class Sizes {
+  /// The a11y minimum tap-target dimension for small controls (icon buttons,
+  /// swatches) that would otherwise render smaller than this.
+  static const double touchTarget44 = 44;
+}
+
 /// The oto type scale, as ready-to-use [TextStyle]s on the Geist family.
 ///
 /// Tracking is converted from `em` to logical px (`size * em`) because Flutter's
@@ -49,87 +56,103 @@ abstract final class TextStyles {
   /// Now Playing title.
   static const TextStyle displayLg = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 34,
+    fontSize: 36,
     fontWeight: FontWeight.w700,
-    letterSpacing: 34 * -0.025,
-    height: 1.05,
+    letterSpacing: 36 * -0.015,
+    height: 1.10,
   );
 
   /// Screen header - e.g. "Speakers".
   static const TextStyle titleScreen = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: FontWeight.w700,
-    letterSpacing: 26 * -0.025,
-    height: 1.05,
+    letterSpacing: 28 * -0.015,
+    height: 1.15,
   );
 
   /// Section / room-detail title, empty-state heads.
   static const TextStyle titleSection = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: FontWeight.w700,
-    letterSpacing: 22 * -0.02,
+    letterSpacing: 24 * -0.01,
+    height: 1.20,
+  );
+
+  /// Compact detail header - e.g. a room name in Room detail.
+  static const TextStyle titleDetail = TextStyle(
+    fontFamily: Fonts.sans,
+    fontSize: 20,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 20 * -0.01,
+    height: 1.20,
   );
 
   /// Card / row / group title.
   static const TextStyle titleCard = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 14.5,
+    fontSize: 16,
     fontWeight: FontWeight.w600,
-    letterSpacing: 14.5 * -0.005,
+    height: 1.25,
   );
 
   /// Default body.
   static const TextStyle body = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: FontWeight.w400,
-    letterSpacing: 14 * -0.005,
+    height: 1.45,
   );
 
   /// Empty-state copy, secondary body.
   static const TextStyle bodySm = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: FontWeight.w400,
+    height: 1.45,
   );
 
   /// Buttons, field labels, now-playing meta.
   static const TextStyle label = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: FontWeight.w600,
+    height: 1.25,
   );
 
   /// Row subtitle, status line.
   static const TextStyle caption = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: FontWeight.w400,
+    height: 1.35,
   );
 
   /// Pills, small meta.
   static const TextStyle micro = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: FontWeight.w600,
+    height: 1.25,
   );
 
   /// Section eyebrows - "GROUP VOLUME", "ROOM LEVELS". Render uppercase at the
   /// call site (`text.toUpperCase()`); the style only carries the tracking.
   static const TextStyle overline = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: FontWeight.w700,
-    letterSpacing: 10.5 * 0.06,
+    letterSpacing: 12 * 0.06,
+    height: 1.25,
   );
 
   /// Group count badge.
   static const TextStyle badge = TextStyle(
     fontFamily: Fonts.sans,
-    fontSize: 9.5,
+    fontSize: 12,
     fontWeight: FontWeight.w700,
+    height: 1.0,
   );
 }
 

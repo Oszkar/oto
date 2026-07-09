@@ -40,31 +40,32 @@ class GroupCard extends ConsumerWidget {
 
     final canResume = group.hasActiveStream;
     final playing = group.transport == PlaybackState.playing;
-    // On wide the card body is a select-in-place target for the detail pane, and
-    // the selected group is accent-bordered. On phone the body is not tappable
-    // (the inner transport/menu buttons keep their own hits either way).
+    // On wide the header is a select-in-place target for the detail pane, and
+    // the selected group is accent-bordered. On phone it opens Now Playing.
+    // Only the header is tappable - the volume section below keeps its own
+    // slider hit targets, matching RoomCard/RoomRow's tap scoping.
     final wide = context.isWide;
     final selected = wide && ref.watch(resolvedSourceProvider) == groupId;
 
-    return GestureDetector(
-      onTap: wide
-          ? () => ref.read(selectedSourceProvider.notifier).select(groupId)
-          : null,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        decoration: BoxDecoration(
-          color: oto.surface,
-          border: Border.all(color: selected ? oto.accent : oto.line),
-          borderRadius: BorderRadius.circular(Radius_.card16),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(context, ref, group, canResume, playing),
-            _volumeSection(context, ref, group),
-          ],
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: oto.surface,
+        border: Border.all(color: selected ? oto.accent : oto.line),
+        borderRadius: BorderRadius.circular(Radius_.card16),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => openSource(context, ref, groupId),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(Radius_.card16 - 1),
+            ),
+            child: _header(context, ref, group, canResume, playing),
+          ),
+          _volumeSection(context, ref, group),
+        ],
       ),
     );
   }
@@ -124,6 +125,7 @@ class GroupCard extends ConsumerWidget {
           if (canResume)
             IconButton(
               key: Key('group-play-$groupId'),
+              tooltip: playing ? 'Pause group' : 'Play group',
               onPressed: () => ref
                   .read(playbackControllerProvider)
                   .togglePlay(
@@ -152,6 +154,7 @@ class GroupCard extends ConsumerWidget {
           // editor and could never be ungrouped.
           IconButton(
             key: Key('group-open-$groupId'),
+            tooltip: 'Group options',
             onPressed: () => openGroupEditor(context, group.coordinatorId),
             icon: OtoIcon('more', size: 18, color: oto.ink2),
           ),
@@ -213,11 +216,7 @@ class GroupCard extends ConsumerWidget {
           const SizedBox(height: Space.gutter12),
           Text(
             'ROOM LEVELS',
-            style: TextStyles.overline.copyWith(
-              fontSize: 9.5,
-              letterSpacing: 9.5 * 0.07,
-              color: oto.inkMute,
-            ),
+            style: TextStyles.overline.copyWith(color: oto.inkMute),
           ),
           for (final id in visible) ...[
             const SizedBox(height: 9),
@@ -303,7 +302,7 @@ class GroupCard extends ConsumerWidget {
             room.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyles.caption.copyWith(fontSize: 12, color: oto.ink2),
+            style: TextStyles.caption.copyWith(color: oto.ink2),
           ),
         ),
         const SizedBox(width: Space.lg10),
@@ -326,7 +325,6 @@ class GroupCard extends ConsumerWidget {
             textAlign: TextAlign.right,
             style: TextStyles.caption.copyWith(
               fontFamily: Fonts.mono,
-              fontSize: 11,
               color: oto.inkMute,
             ),
           ),
@@ -348,8 +346,9 @@ class GroupCard extends ConsumerWidget {
       child: InkWell(
         key: Key('group-more-$groupId'),
         onTap: () => openGroupEditor(context, coordinatorId),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.xs4),
+        child: Container(
+          height: Sizes.touchTarget44,
+          alignment: Alignment.centerLeft,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

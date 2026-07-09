@@ -24,8 +24,9 @@ void main() {
     test('exposes AsyncValue.data on success', () {
       final container = ProviderContainer(
         overrides: [
-          speakerStateProvider(speakerId)
-              .overrideWithValue(const AsyncValue.data(fakeState)),
+          speakerStateProvider(
+            speakerId,
+          ).overrideWithValue(const AsyncValue.data(fakeState)),
         ],
       );
       addTearDown(container.dispose);
@@ -39,8 +40,9 @@ void main() {
       final error = rust_api.CommandError.notFound(speakerId);
       final container = ProviderContainer(
         overrides: [
-          speakerStateProvider(speakerId)
-              .overrideWithValue(AsyncValue.error(error, StackTrace.empty)),
+          speakerStateProvider(
+            speakerId,
+          ).overrideWithValue(AsyncValue.error(error, StackTrace.empty)),
         ],
       );
       addTearDown(container.dispose);

@@ -36,6 +36,7 @@ class OtoNavRail extends StatelessWidget {
             const Spacer(),
             IconButton(
               key: const Key('rail-settings'),
+              tooltip: 'Open settings',
               onPressed: () => openSettings(context),
               icon: OtoIcon('settings', size: 20, color: oto.ink2),
             ),

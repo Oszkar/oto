@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
+import '../shell/responsive_pop.dart';
 import '../widgets/pane_dismiss.dart';
 import 'about_section.dart';
 import 'appearance_settings.dart';
@@ -11,10 +12,26 @@ import 'device_list.dart';
 /// wraps this for the phone route, and on wide layouts the same body renders
 /// inside a centered dialog. The header dismiss control is a [PaneDismiss]
 /// driven by [onDismiss].
-class SettingsBody extends StatelessWidget {
+class SettingsBody extends StatefulWidget {
   const SettingsBody({super.key, this.onDismiss});
 
   final VoidCallback? onDismiss;
+
+  @override
+  State<SettingsBody> createState() => _SettingsBodyState();
+}
+
+class _SettingsBodyState extends State<SettingsBody> {
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane) for the app-wide
+  // PrimaryScrollController - see responsive_pop.dart's sibling fix.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,8 +48,9 @@ class SettingsBody extends StatelessWidget {
           child: Row(
             children: [
               PaneDismiss(
-                onDismiss: onDismiss,
+                onDismiss: widget.onDismiss,
                 icon: 'chevronLeft',
+                tooltip: 'Back',
                 iconSize: 20, // preserve the pre-split OtoIcon default size
                 buttonKey: const Key('settings-back'),
               ),
@@ -41,23 +59,27 @@ class SettingsBody extends StatelessWidget {
             ],
           ),
         ),
-        const Expanded(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              Space.screen18,
-              0,
-              Space.screen18,
-              Space.section22,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppearanceSettings(),
-                SizedBox(height: Space.section22),
-                DeviceList(),
-                SizedBox(height: Space.section22),
-                AboutSection(),
-              ],
+        Expanded(
+          child: Scrollbar(
+            controller: _scrollController,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(
+                Space.screen18,
+                0,
+                Space.screen18,
+                Space.section22,
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppearanceSettings(),
+                  SizedBox(height: Space.section22),
+                  DeviceList(),
+                  SizedBox(height: Space.section22),
+                  AboutSection(),
+                ],
+              ),
             ),
           ),
         ),
@@ -72,7 +94,10 @@ class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => OtoScaffold(
-    body: SettingsBody(onDismiss: () => Navigator.of(context).maybePop()),
-  );
+  Widget build(BuildContext context) {
+    if (context.checkResponsivePop()) return const SizedBox.shrink();
+    return OtoScaffold(
+      body: SettingsBody(onDismiss: () => Navigator.of(context).maybePop()),
+    );
+  }
 }

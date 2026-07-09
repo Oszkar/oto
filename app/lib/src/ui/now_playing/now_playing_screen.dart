@@ -8,6 +8,7 @@ import '../../state/now_playing.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
+import '../shell/responsive_pop.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
@@ -26,48 +27,70 @@ import '../widgets/pane_dismiss.dart';
 /// controls. It is fed by [nowPlayingPositionProvider], which reads
 /// `track_position` (GetPositionInfo SOAP) for the real mid-track position and
 /// duration, then ticks locally at ~500 ms. No seek - there is no seek backend.
-class NowPlayingBody extends ConsumerWidget {
+class NowPlayingBody extends ConsumerStatefulWidget {
   const NowPlayingBody({super.key, required this.groupId, this.onDismiss});
 
   final String groupId;
   final VoidCallback? onDismiss;
 
+  @override
+  ConsumerState<NowPlayingBody> createState() => _NowPlayingBodyState();
+}
+
+class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
   /// Upper bound on the album-art side, so it stays a comfortable square on
   /// wide panes and doesn't balloon on large windows.
   static const double _artMax = 320;
 
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane sitting alongside Home's own
+  // list) for the app-wide PrimaryScrollController - see responsive_pop.dart's
+  // sibling fix.
+  final _scrollController = ScrollController();
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupId = widget.groupId;
     final group = ref.watch(householdProvider.select((h) => h.groups[groupId]));
     if (group == null) {
       return _Header(
         groupId: groupId,
-        onDismiss: onDismiss,
+        onDismiss: widget.onDismiss,
         child: const SizedBox.shrink(),
       );
     }
 
     return _Header(
       groupId: groupId,
-      onDismiss: onDismiss,
+      onDismiss: widget.onDismiss,
       child: Expanded(
-        child: SingleChildScrollView(
-          child: Padding(
-            // JSX content inset `12px 24px 16px`.
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _art(context, group),
-                const SizedBox(height: Space.screen18),
-                _trackInfo(context, group),
-                const SizedBox(height: Space.screen18),
-                _progress(context, ref),
-                const SizedBox(height: Space.screen18),
-                _transport(context, ref, group),
-                const SizedBox(height: Space.screen18),
-                _volumeSection(context, ref, group),
-              ],
+        child: Scrollbar(
+          controller: _scrollController,
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            child: Padding(
+              // JSX content inset `12px 24px 16px`.
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _art(context, group),
+                  const SizedBox(height: Space.screen18),
+                  _trackInfo(context, group),
+                  const SizedBox(height: Space.screen18),
+                  _progress(context, ref, groupId),
+                  const SizedBox(height: Space.screen18),
+                  _transport(context, ref, group, groupId),
+                  const SizedBox(height: Space.screen18),
+                  _volumeSection(context, ref, group, groupId),
+                ],
+              ),
             ),
           ),
         ),
@@ -117,7 +140,7 @@ class NowPlayingBody extends ConsumerWidget {
     );
   }
 
-  Widget _progress(BuildContext context, WidgetRef ref) {
+  Widget _progress(BuildContext context, WidgetRef ref, String groupId) {
     final oto = context.oto;
     final p = ref.watch(nowPlayingPositionProvider(groupId));
     final dur = p.duration;
@@ -136,12 +159,20 @@ class NowPlayingBody extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(_fmt(p.position),
-                style: TextStyles.caption.copyWith(
-                    fontFamily: Fonts.mono, color: oto.inkMute)),
-            Text(dur == null ? '--:--' : _fmt(dur),
-                style: TextStyles.caption.copyWith(
-                    fontFamily: Fonts.mono, color: oto.inkMute)),
+            Text(
+              _fmt(p.position),
+              style: TextStyles.caption.copyWith(
+                fontFamily: Fonts.mono,
+                color: oto.inkMute,
+              ),
+            ),
+            Text(
+              dur == null ? '--:--' : _fmt(dur),
+              style: TextStyles.caption.copyWith(
+                fontFamily: Fonts.mono,
+                color: oto.inkMute,
+              ),
+            ),
           ],
         ),
       ],
@@ -158,7 +189,12 @@ class NowPlayingBody extends ConsumerWidget {
   }
 
   /// prev / play-pause / next. No shuffle or repeat (backend-true: §7).
-  Widget _transport(BuildContext context, WidgetRef ref, GroupState group) {
+  Widget _transport(
+    BuildContext context,
+    WidgetRef ref,
+    GroupState group,
+    String groupId,
+  ) {
     final oto = context.oto;
     final playing = group.transport == PlaybackState.playing;
     final ctrl = ref.read(playbackControllerProvider);
@@ -168,21 +204,22 @@ class NowPlayingBody extends ConsumerWidget {
       children: [
         IconButton(
           key: Key('np-prev-$groupId'),
+          tooltip: 'Previous track',
           onPressed: () => ctrl.previous(group.id),
           icon: OtoIcon('prev', size: 30, color: oto.ink),
         ),
         // Center play/pause: the filled ink disc from the JSX.
         IconButton(
           key: Key('np-play-$groupId'),
-          onPressed: () =>
-              ctrl.togglePlay(group.id, group.transport ?? PlaybackState.paused),
+          tooltip: playing ? 'Pause' : 'Play',
+          onPressed: () => ctrl.togglePlay(
+            group.id,
+            group.transport ?? PlaybackState.paused,
+          ),
           icon: Container(
             width: 60,
             height: 60,
-            decoration: BoxDecoration(
-              color: oto.ink,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: oto.ink, shape: BoxShape.circle),
             alignment: Alignment.center,
             child: OtoIcon(
               playing ? 'pause' : 'play',
@@ -193,6 +230,7 @@ class NowPlayingBody extends ConsumerWidget {
         ),
         IconButton(
           key: Key('np-next-$groupId'),
+          tooltip: 'Next track',
           onPressed: () => ctrl.next(group.id),
           icon: OtoIcon('next', size: 30, color: oto.ink),
         ),
@@ -202,7 +240,12 @@ class NowPlayingBody extends ConsumerWidget {
 
   /// Group-master volume slider plus per-room READ-OUTS (the JSX shows level
   /// labels "Living Room · 42", not per-room sliders, so these are read-only).
-  Widget _volumeSection(BuildContext context, WidgetRef ref, GroupState group) {
+  Widget _volumeSection(
+    BuildContext context,
+    WidgetRef ref,
+    GroupState group,
+    String groupId,
+  ) {
     final oto = context.oto;
     final hasVolume = group.groupVolume != null;
     final value = (group.groupVolume ?? 0) / 100;
@@ -310,7 +353,11 @@ class NowPlayingBody extends ConsumerWidget {
 /// Kept as a small private widget so the unknown-group fallback reuses the
 /// same chrome.
 class _Header extends ConsumerWidget {
-  const _Header({required this.groupId, required this.onDismiss, required this.child});
+  const _Header({
+    required this.groupId,
+    required this.onDismiss,
+    required this.child,
+  });
 
   final String groupId;
   final VoidCallback? onDismiss;
@@ -345,6 +392,7 @@ class _Header extends ConsumerWidget {
               PaneDismiss(
                 onDismiss: onDismiss,
                 icon: 'chevronDown',
+                tooltip: 'Dismiss Now Playing',
                 buttonKey: Key('np-dismiss-$groupId'),
               ),
               Expanded(
@@ -353,10 +401,7 @@ class _Header extends ConsumerWidget {
                   children: [
                     Text(
                       'PLAYING ON',
-                      style: TextStyles.overline.copyWith(
-                        fontSize: 10.5,
-                        color: oto.inkMute,
-                      ),
+                      style: TextStyles.overline.copyWith(color: oto.inkMute),
                     ),
                     const SizedBox(height: 2),
                     Row(
@@ -399,10 +444,13 @@ class NowPlayingScreen extends StatelessWidget {
   final String groupId;
 
   @override
-  Widget build(BuildContext context) => OtoScaffold(
-    body: NowPlayingBody(
-      groupId: groupId,
-      onDismiss: () => Navigator.of(context).maybePop(),
-    ),
-  );
+  Widget build(BuildContext context) {
+    if (context.checkResponsivePop()) return const SizedBox.shrink();
+    return OtoScaffold(
+      body: NowPlayingBody(
+        groupId: groupId,
+        onDismiss: () => Navigator.of(context).maybePop(),
+      ),
+    );
+  }
 }

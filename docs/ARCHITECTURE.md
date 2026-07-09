@@ -204,6 +204,7 @@ The Flutter shell is responsive over the same providers (no backend change). Lay
 
 - **`OtoScaffold`** carries optional `detail` + `rail` slots. Compact renders the phone body unchanged; wide renders the room grid beside a persistent Now Playing pane; desktop adds a leading nav rail (a three-pane layout).
 - **Selection.** `selectedSourceProvider` (the explicit pick) + `resolvedSourceProvider` (default = first active source, self-healing when a regroup drops the chosen id) drive the pane. On wide, tapping a room/group selects it in place; on phone the existing route pushes are kept. A single tier-aware `nav.dart` helper makes that choice per width.
+- **Routing architecture decision.** Imperative routing (`Navigator.of(context).push`) is used for phone detail screens. Using `go_router` was deliberately decided against due to refactoring complexity, YAGNI (no deep linking or web browser history requirements), and to keep the codebase simple. Dynamically popped routes handle dynamic window resizing instead.
 - **`*Body` / `*Screen` split.** Detail screens split into a chrome-free `*Body` (embeddable in the pane or a dialog) and a thin `*Screen` route wrapper for phone. On wide, Now Playing renders in the pane, Settings and the group editor open as dialogs, and Room detail is folded away - a wide room tap selects its group into the pane, so the room screen is unreachable there.
 - **Window bounds.** On desktop the window's size/position persists across launches via `window_manager` (best-effort, desktop-guarded; a no-op on Android).
 

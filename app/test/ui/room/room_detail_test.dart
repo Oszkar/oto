@@ -33,7 +33,9 @@ void main() {
     expect(h.calls, contains('previous(G_OF)'));
   });
 
-  testWidgets('idle room: play still routes to the group (starts it)', (t) async {
+  testWidgets('idle room: play still routes to the group (starts it)', (
+    t,
+  ) async {
     // BR is in a stopped solo group G_BR; tapping play must target the group
     // with the current (stopped) transport so togglePlay starts it.
     final h = wrap(
@@ -262,7 +264,9 @@ void main() {
     await t.pumpWidget(h.widget);
 
     expect(
-      t.widget<IconButton>(find.byKey(const Key('room-detail-play-PT'))).onPressed,
+      t
+          .widget<IconButton>(find.byKey(const Key('room-detail-play-PT')))
+          .onPressed,
       isNull,
     );
     expect(

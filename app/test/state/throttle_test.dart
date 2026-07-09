@@ -11,7 +11,9 @@ void main() {
         t.run(() => sent.add(v));
       }
       async.elapse(const Duration(milliseconds: 150));
-      expect(sent, [5], reason: 'only the latest of a burst is sent on the trailing edge');
+      expect(sent, [
+        5,
+      ], reason: 'only the latest of a burst is sent on the trailing edge');
     });
   });
 

@@ -231,32 +231,38 @@ class NowPlayingPosition extends _$NowPlayingPosition {
   void _readAnchor(String groupId) {
     final generation = ++_readGeneration;
     final clock = ref.read(clockProvider);
-    ref.read(positionApiProvider).trackPosition(groupId).then((p) {
-      // Guard: the provider may have been disposed before this async callback
-      // fires (e.g. test teardown, navigation away). Setting state after
-      // dispose throws in Riverpod. ref.mounted is false once disposed.
-      if (!ref.mounted) return;
-      if (generation != _readGeneration) return; // a newer read superseded this one
-      final pos = p.positionSecs;
-      final dur = p.durationSecs;
-      _max = dur == null ? null : Duration(seconds: dur.toInt());
-      if (pos != null) {
-        _anchorPosition = Duration(seconds: pos.toInt());
-        // NOTE: anchorTime is the read-RESPONSE time, not the request-issue
-        // time - so there is a sub-tick (~half RTT, 10-50ms) systematic offset;
-        // negligible at the 500ms tick resolution.
-        _anchorTime = clock();
-      }
-      state = NowPlayingProgress(
-        positionAt(
-          clock(),
-          anchorTime: _anchorTime,
-          anchorPosition: _anchorPosition,
-          state: _lastTransport ?? PlaybackState.stopped,
-          max: _max,
-        ),
-        _max,
-      );
-    }).catchError((_) {});
+    ref
+        .read(positionApiProvider)
+        .trackPosition(groupId)
+        .then((p) {
+          // Guard: the provider may have been disposed before this async callback
+          // fires (e.g. test teardown, navigation away). Setting state after
+          // dispose throws in Riverpod. ref.mounted is false once disposed.
+          if (!ref.mounted) return;
+          if (generation != _readGeneration) {
+            return; // a newer read superseded this one
+          }
+          final pos = p.positionSecs;
+          final dur = p.durationSecs;
+          _max = dur == null ? null : Duration(seconds: dur.toInt());
+          if (pos != null) {
+            _anchorPosition = Duration(seconds: pos.toInt());
+            // NOTE: anchorTime is the read-RESPONSE time, not the request-issue
+            // time - so there is a sub-tick (~half RTT, 10-50ms) systematic offset;
+            // negligible at the 500ms tick resolution.
+            _anchorTime = clock();
+          }
+          state = NowPlayingProgress(
+            positionAt(
+              clock(),
+              anchorTime: _anchorTime,
+              anchorPosition: _anchorPosition,
+              state: _lastTransport ?? PlaybackState.stopped,
+              max: _max,
+            ),
+            _max,
+          );
+        })
+        .catchError((_) {});
   }
 }
