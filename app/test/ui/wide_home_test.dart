@@ -187,7 +187,10 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(HomeScreen)),
     );
-    expect(container.read(selectedSourceProvider), 'G_LR');
+    // The pin keys off the stable coordinator; the pane resolves it to the
+    // current group id.
+    expect(container.read(selectedSourceProvider).coord, 'LR');
+    expect(container.read(selectedSourceProvider).pinned, isTrue);
     expect(container.read(resolvedSourceProvider), 'G_LR');
   });
 

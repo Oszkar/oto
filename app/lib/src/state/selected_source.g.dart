@@ -8,18 +8,21 @@ part of 'selected_source.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// The user's explicit pick of which source (group id) the wide detail pane
-/// shows. Null means "auto" - resolve to the first active source.
+/// Tracks the coordinator the wide detail pane shows, reconciling on every
+/// active-source change (finding: a plain "first active source" default jumps
+/// whenever another room starts/stops).
 
 @ProviderFor(SelectedSource)
 final selectedSourceProvider = SelectedSourceProvider._();
 
-/// The user's explicit pick of which source (group id) the wide detail pane
-/// shows. Null means "auto" - resolve to the first active source.
+/// Tracks the coordinator the wide detail pane shows, reconciling on every
+/// active-source change (finding: a plain "first active source" default jumps
+/// whenever another room starts/stops).
 final class SelectedSourceProvider
-    extends $NotifierProvider<SelectedSource, String?> {
-  /// The user's explicit pick of which source (group id) the wide detail pane
-  /// shows. Null means "auto" - resolve to the first active source.
+    extends $NotifierProvider<SelectedSource, PaneSource> {
+  /// Tracks the coordinator the wide detail pane shows, reconciling on every
+  /// active-source change (finding: a plain "first active source" default jumps
+  /// whenever another room starts/stops).
   SelectedSourceProvider._()
     : super(
         from: null,
@@ -39,30 +42,31 @@ final class SelectedSourceProvider
   SelectedSource create() => SelectedSource();
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(String? value) {
+  Override overrideWithValue(PaneSource value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<String?>(value),
+      providerOverride: $SyncValueProvider<PaneSource>(value),
     );
   }
 }
 
-String _$selectedSourceHash() => r'c0a77b7a78c4244197c5cd0989f0fc60ad44c2df';
+String _$selectedSourceHash() => r'81c523e34c28a7fb569f40a8529e7a1c329a6567';
 
-/// The user's explicit pick of which source (group id) the wide detail pane
-/// shows. Null means "auto" - resolve to the first active source.
+/// Tracks the coordinator the wide detail pane shows, reconciling on every
+/// active-source change (finding: a plain "first active source" default jumps
+/// whenever another room starts/stops).
 
-abstract class _$SelectedSource extends $Notifier<String?> {
-  String? build();
+abstract class _$SelectedSource extends $Notifier<PaneSource> {
+  PaneSource build();
   @$mustCallSuper
   @override
   void runBuild() {
-    final ref = this.ref as $Ref<String?, String?>;
+    final ref = this.ref as $Ref<PaneSource, PaneSource>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<String?, String?>,
-              String?,
+              AnyNotifier<PaneSource, PaneSource>,
+              PaneSource,
               Object?,
               Object?
             >;
@@ -70,26 +74,35 @@ abstract class _$SelectedSource extends $Notifier<String?> {
   }
 }
 
-/// The group id the detail pane should render, applying default + fallback:
-/// the explicit selection if that group still exists; else the first active
-/// source; else null (empty pane). Watching `household.groups` makes the
-/// selection self-heal after a regroup drops the chosen id.
+/// The group id the detail pane should render: the tracked coordinator mapped
+/// to its CURRENT group (active or idle, so a regroup or an idle explicit pin
+/// still resolves), else the first active source, else null (empty pane).
+///
+/// The coordinator -> group-id mapping is done inside a `select` so this only
+/// recomputes when that id (or the active-source list) actually changes, not on
+/// every unrelated group event that rebuilds the `groups` map.
 
 @ProviderFor(resolvedSource)
 final resolvedSourceProvider = ResolvedSourceProvider._();
 
-/// The group id the detail pane should render, applying default + fallback:
-/// the explicit selection if that group still exists; else the first active
-/// source; else null (empty pane). Watching `household.groups` makes the
-/// selection self-heal after a regroup drops the chosen id.
+/// The group id the detail pane should render: the tracked coordinator mapped
+/// to its CURRENT group (active or idle, so a regroup or an idle explicit pin
+/// still resolves), else the first active source, else null (empty pane).
+///
+/// The coordinator -> group-id mapping is done inside a `select` so this only
+/// recomputes when that id (or the active-source list) actually changes, not on
+/// every unrelated group event that rebuilds the `groups` map.
 
 final class ResolvedSourceProvider
     extends $FunctionalProvider<String?, String?, String?>
     with $Provider<String?> {
-  /// The group id the detail pane should render, applying default + fallback:
-  /// the explicit selection if that group still exists; else the first active
-  /// source; else null (empty pane). Watching `household.groups` makes the
-  /// selection self-heal after a regroup drops the chosen id.
+  /// The group id the detail pane should render: the tracked coordinator mapped
+  /// to its CURRENT group (active or idle, so a regroup or an idle explicit pin
+  /// still resolves), else the first active source, else null (empty pane).
+  ///
+  /// The coordinator -> group-id mapping is done inside a `select` so this only
+  /// recomputes when that id (or the active-source list) actually changes, not on
+  /// every unrelated group event that rebuilds the `groups` map.
   ResolvedSourceProvider._()
     : super(
         from: null,
@@ -123,4 +136,4 @@ final class ResolvedSourceProvider
   }
 }
 
-String _$resolvedSourceHash() => r'e4adbfb943ed5378f622113baf77646b1de3428b';
+String _$resolvedSourceHash() => r'8f43156a56a5d77c040398c9e003de47c6db90e7';
