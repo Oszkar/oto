@@ -98,18 +98,20 @@ class _HomeContent extends ConsumerWidget {
             const HomeHeader(),
             ?banner,
             Expanded(
-              child: SingleChildScrollView(
-                // Bottom padding leaves room for the floating strip so the
-                // last card never hides behind it (phone only).
-                padding: EdgeInsets.fromLTRB(
-                  Space.gutter12,
-                  0,
-                  Space.gutter12,
-                  (!wide && hasActiveStream) ? 96 : Space.gutter12,
+              child: Scrollbar(
+                child: SingleChildScrollView(
+                  // Bottom padding leaves room for the floating strip so the
+                  // last card never hides behind it (phone only).
+                  padding: EdgeInsets.fromLTRB(
+                    Space.gutter12,
+                    0,
+                    Space.gutter12,
+                    (!wide && hasActiveStream) ? 96 : Space.gutter12,
+                  ),
+                  child: layout == HomeLayout.cards
+                      ? _CardsBody(groups: groups)
+                      : _StackBody(groups: groups),
                 ),
-                child: layout == HomeLayout.cards
-                    ? _CardsBody(groups: groups)
-                    : _StackBody(groups: groups),
               ),
             ),
           ],

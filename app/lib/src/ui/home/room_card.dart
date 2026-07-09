@@ -52,28 +52,33 @@ class RoomCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            key: Key('room-open-$speakerId'),
-            behavior: HitTestBehavior.opaque,
-            onTap: offline
-                ? null
-                : () => openRoom(
-                    context,
-                    ref,
-                    speakerId: speakerId,
-                    groupId: room.groupId,
-                  ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _titleRow(context, room, offline),
-                const SizedBox(height: Space.lg10),
-                if (canResume)
-                  _nowPlaying(context, ref, room, group!, playing)
-                else
-                  _idleRow(context, offline),
-              ],
+          MouseRegion(
+            cursor: offline
+                ? SystemMouseCursors.basic
+                : SystemMouseCursors.click,
+            child: GestureDetector(
+              key: Key('room-open-$speakerId'),
+              behavior: HitTestBehavior.opaque,
+              onTap: offline
+                  ? null
+                  : () => openRoom(
+                      context,
+                      ref,
+                      speakerId: speakerId,
+                      groupId: room.groupId,
+                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _titleRow(context, room, offline),
+                  const SizedBox(height: Space.lg10),
+                  if (canResume)
+                    _nowPlaying(context, ref, room, group!, playing)
+                  else
+                    _idleRow(context, offline),
+                ],
+              ),
             ),
           ),
           if (!offline) ...[

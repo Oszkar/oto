@@ -42,23 +42,25 @@ class SettingsBody extends StatelessWidget {
             ],
           ),
         ),
-        const Expanded(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              Space.screen18,
-              0,
-              Space.screen18,
-              Space.section22,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppearanceSettings(),
-                SizedBox(height: Space.section22),
-                DeviceList(),
-                SizedBox(height: Space.section22),
-                AboutSection(),
-              ],
+        Expanded(
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                Space.screen18,
+                0,
+                Space.screen18,
+                Space.section22,
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppearanceSettings(),
+                  SizedBox(height: Space.section22),
+                  DeviceList(),
+                  SizedBox(height: Space.section22),
+                  AboutSection(),
+                ],
+              ),
             ),
           ),
         ),
