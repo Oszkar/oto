@@ -9,6 +9,7 @@ import '../../state/model/room_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
+import '../shell/responsive_pop.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/pane_dismiss.dart';
 
@@ -157,12 +158,15 @@ class GroupEditorScreen extends StatelessWidget {
   final String hostId;
 
   @override
-  Widget build(BuildContext context) => OtoScaffold(
-    body: GroupEditorBody(
-      hostId: hostId,
-      onDismiss: () => Navigator.of(context).maybePop(),
-    ),
-  );
+  Widget build(BuildContext context) {
+    if (context.checkResponsivePop()) return const SizedBox.shrink();
+    return OtoScaffold(
+      body: GroupEditorBody(
+        hostId: hostId,
+        onDismiss: () => Navigator.of(context).maybePop(),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

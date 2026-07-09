@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/tokens.dart';
 import '../shell/oto_scaffold.dart';
+import '../shell/responsive_pop.dart';
 import '../widgets/pane_dismiss.dart';
 import 'about_section.dart';
 import 'appearance_settings.dart';
@@ -75,7 +76,10 @@ class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => OtoScaffold(
-    body: SettingsBody(onDismiss: () => Navigator.of(context).maybePop()),
-  );
+  Widget build(BuildContext context) {
+    if (context.checkResponsivePop()) return const SizedBox.shrink();
+    return OtoScaffold(
+      body: SettingsBody(onDismiss: () => Navigator.of(context).maybePop()),
+    );
+  }
 }

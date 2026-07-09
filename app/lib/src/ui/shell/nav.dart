@@ -11,9 +11,8 @@ import '../settings/settings_screen.dart';
 /// Open a group's Now Playing. Wide: select it into the detail pane. Phone:
 /// push the full-screen route (today's behavior).
 void openSource(BuildContext context, WidgetRef ref, String groupId) {
-  if (context.isWide) {
-    ref.read(selectedSourceProvider.notifier).select(groupId);
-  } else {
+  ref.read(selectedSourceProvider.notifier).select(groupId);
+  if (!context.isWide) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => NowPlayingScreen(groupId: groupId),
@@ -30,10 +29,10 @@ void openRoom(
   required String speakerId,
   required String? groupId,
 }) {
-  if (context.isWide) {
-    if (groupId != null)
-      ref.read(selectedSourceProvider.notifier).select(groupId);
-  } else {
+  if (groupId != null) {
+    ref.read(selectedSourceProvider.notifier).select(groupId);
+  }
+  if (!context.isWide) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => RoomDetailScreen(speakerId: speakerId),

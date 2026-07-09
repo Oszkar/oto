@@ -239,8 +239,9 @@ class NowPlayingPosition extends _$NowPlayingPosition {
           // fires (e.g. test teardown, navigation away). Setting state after
           // dispose throws in Riverpod. ref.mounted is false once disposed.
           if (!ref.mounted) return;
-          if (generation != _readGeneration)
+          if (generation != _readGeneration) {
             return; // a newer read superseded this one
+          }
           final pos = p.positionSecs;
           final dur = p.durationSecs;
           _max = dur == null ? null : Duration(seconds: dur.toInt());

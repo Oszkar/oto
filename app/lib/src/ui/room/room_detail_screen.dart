@@ -8,6 +8,7 @@ import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/nav.dart';
 import '../shell/oto_scaffold.dart';
+import '../shell/responsive_pop.dart';
 import '../widgets/album_art.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
@@ -24,6 +25,7 @@ class RoomDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (context.checkResponsivePop()) return const SizedBox.shrink();
     final room = ref.watch(householdProvider.select((h) => h.rooms[speakerId]));
 
     if (room == null) {
