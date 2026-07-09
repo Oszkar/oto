@@ -21,10 +21,12 @@ class _PopProbeScreen extends StatelessWidget {
 
 void main() {
   Future<void> pumpWide(WidgetTester tester, {required Size size}) async {
-    await tester.binding.setSurfaceSize(size);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
   }
 
   testWidgets('pops the probe screen when the tier goes wide', (tester) async {

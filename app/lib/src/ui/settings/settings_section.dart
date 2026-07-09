@@ -250,7 +250,7 @@ class _SegmentButton<T> extends StatelessWidget {
       onTap: () => onChanged(segment.value),
       excludeSemantics: true,
       child: Tooltip(
-        message: label!,
+        message: label ?? '',
         child: FocusableActionDetector(
           shortcuts: const {
             SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
@@ -285,7 +285,7 @@ class _SegmentButton<T> extends StatelessWidget {
               alignment: Alignment.center,
               child: segment.icon == null
                   ? Text(
-                      segment.label!,
+                      segment.label ?? label ?? '',
                       style: TextStyles.label.copyWith(
                         color: active ? oto.ink : oto.inkMute,
                       ),
