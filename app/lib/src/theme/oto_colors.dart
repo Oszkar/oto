@@ -8,7 +8,7 @@ import 'accent.dart';
 /// hairlines, status colors, and the resolved accent pair).
 ///
 /// The four inks (`ink`/`ink2`/`inkMute`/`inkFaint`) are derived from ONE base
-/// color at descending alpha — white for dark, near-black for light — so text
+/// color at descending alpha - white for dark, near-black for light - so text
 /// hierarchy is a single hue at four opacities, not four hand-picked hexes.
 ///
 /// Read it from a widget via the [OtoColorsX] extension: `context.oto.ink`.
@@ -44,7 +44,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
   /// Recessed surface (one step back from [surface]).
   final Color surface2;
 
-  /// Raised surface (one step forward — popovers, floating bars).
+  /// Raised surface (one step forward - popovers, floating bars).
   final Color elevated;
 
   /// Hairline divider.
@@ -62,7 +62,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
   /// Meta, captions (AA-passing).
   final Color inkMute;
 
-  /// Decorative only — never use for load-bearing text. This is the lowest-alpha
+  /// Decorative only - never use for load-bearing text. This is the lowest-alpha
   /// ink, below the AA contrast floor; reserve it for ornamental fills, faint
   /// separators, and disabled glyphs where legibility is not required.
   final Color inkFaint;
@@ -82,13 +82,13 @@ class OtoColors extends ThemeExtension<OtoColors> {
   /// Destructive (ungroup, clear, offline).
   final Color danger;
 
-  /// Spotify Connect brand dot — branded exception, do not reuse.
+  /// Spotify Connect brand dot - branded exception, do not reuse.
   final Color spotify;
 
   /// Resolved accent swatch for the current brightness.
   final Color accent;
 
-  /// Soft (low-alpha) accent — badges, pills.
+  /// Soft (low-alpha) accent - badges, pills.
   final Color accentSoft;
 
   /// Light-theme roles. Inks derive from a near-black base at descending alpha.

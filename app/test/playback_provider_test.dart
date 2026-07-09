@@ -2,7 +2,7 @@
 /// asserts the terminal `AsyncValue.data` / `AsyncValue.error` states the
 /// `speakerStateProvider` exposes when its result is injected via
 /// `overrideWithValue`, and exercises the `overrideWithValue` seam for
-/// the command facade (no logic of its own to assert today — real
+/// the command facade (no logic of its own to assert today - real
 /// command-layer behaviour is v0.5). These do *not* observe a real
 /// loading→data/error transition; the async-throwing override that would
 /// yield one races autoDispose on Riverpod 3.0.3.
@@ -54,7 +54,7 @@ void main() {
   group('playbackCommandsProvider', () {
     test('overrideWithValue exposes a test seam for v0.5', () {
       // The provider returns a `const PlaybackCommands()` facade whose
-      // methods are bare pass-throughs to the FRB bindings — no logic
+      // methods are bare pass-throughs to the FRB bindings - no logic
       // to assert today. This proves the override seam works so a v0.5
       // command-layer implementation can be swapped in for tests.
       final container = ProviderContainer(

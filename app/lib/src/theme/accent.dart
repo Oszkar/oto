@@ -19,9 +19,9 @@ enum Accent {
   /// Resolved swatch for the dark theme.
   final Color dark;
 
-  /// Soft (low-alpha) variant for the light theme — badges, pills.
+  /// Soft (low-alpha) variant for the light theme - badges, pills.
   final Color softLight;
 
-  /// Soft (low-alpha) variant for the dark theme — badges, pills.
+  /// Soft (low-alpha) variant for the dark theme - badges, pills.
   final Color softDark;
 }

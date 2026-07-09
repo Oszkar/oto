@@ -3,13 +3,13 @@
 //!
 //! For every usable IPv4 NIC it sends the ZonePlayer M-SEARCH twice and
 //! counts the distinct SSDP responders each socket hears back:
-//!   - **no-pin:** bound to the NIC, but WITHOUT `IP_MULTICAST_IF` — this
+//!   - **no-pin:** bound to the NIC, but WITHOUT `IP_MULTICAST_IF` - this
 //!     is the pre-fix production behavior (the OS picks the egress NIC).
-//!   - **pin-egress:** bound to the NIC AND `set_multicast_if_v4(nic)` —
+//!   - **pin-egress:** bound to the NIC AND `set_multicast_if_v4(nic)` -
 //!     the fix now in `ssdp.rs::bind_multicast_sender`.
 //!
 //! If any NIC reaches more responders under `pin-egress`, the M-SEARCH was
-//! leaving the wrong interface without the pin — #76 confirmed on this
+//! leaving the wrong interface without the pin - #76 confirmed on this
 //! host. On a host where the Sonos household sits on the OS default
 //! multicast interface, both columns match (the fix is still correct; the
 //! bug just isn't triggered in that topology).
@@ -18,7 +18,7 @@
 //! cargo run -p oto-wire --example ssdp_multicast_if_probe
 //! ```
 //!
-//! Diagnostic only — NOT part of the product surface.
+//! Diagnostic only - NOT part of the product surface.
 //!
 //! [`tatimblin/sonos-sdk#76`]: https://github.com/tatimblin/sonos-sdk/issues/76
 
@@ -47,7 +47,7 @@ fn usable_ipv4() -> Vec<Ipv4Addr> {
 }
 
 /// Non-blocking IPv4 UDP socket bound to `ip:0`. When `pin_egress`, also
-/// pin the outgoing multicast interface to `ip` — mirroring the two
+/// pin the outgoing multicast interface to `ip` - mirroring the two
 /// behaviors the probe compares.
 fn sender(ip: Ipv4Addr, pin_egress: bool) -> std::io::Result<UdpSocket> {
     let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
@@ -68,7 +68,7 @@ fn main() {
     let target: SocketAddr = SSDP_TARGET.parse().expect("literal SSDP target");
     let nics = usable_ipv4();
     if nics.is_empty() {
-        eprintln!("no usable IPv4 NIC — nothing to probe");
+        eprintln!("no usable IPv4 NIC - nothing to probe");
         std::process::exit(1);
     }
     println!(
@@ -109,7 +109,7 @@ fn main() {
         for probe in probes.iter_mut() {
             // A recv error is the steady state here: WouldBlock when idle,
             // or a per-socket hard error (e.g. Windows WSAECONNRESET from an
-            // ICMP port-unreachable to our M-SEARCH) — both benign for a
+            // ICMP port-unreachable to our M-SEARCH) - both benign for a
             // diagnostic, so we ignore the Err arm and keep polling the rest.
             if let Ok((n, from)) = probe.sock.recv_from(&mut buf)
                 && is_ssdp_reply(&buf[..n])
@@ -147,12 +147,12 @@ fn main() {
     println!();
     if fix_helped {
         println!(
-            "RESULT: at least one NIC needed IP_MULTICAST_IF to reach Sonos — #76 \
+            "RESULT: at least one NIC needed IP_MULTICAST_IF to reach Sonos - #76 \
              confirmed on this host; the ssdp.rs fix is load-bearing here."
         );
     } else {
         println!(
-            "RESULT: both modes matched on every NIC — Sonos is reachable via the OS \
+            "RESULT: both modes matched on every NIC - Sonos is reachable via the OS \
              default multicast interface on this host, so the bug isn't triggered \
              here. The fix is still correct (it makes egress deterministic per NIC)."
         );

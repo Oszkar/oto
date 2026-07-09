@@ -1,7 +1,7 @@
 //! v0.1 acceptance: discovery proven end-to-end without a LAN.
 //!
 //! Drives oto-app's `discover_with` seam with the deterministic `MockWire`,
-//! then crosses the **FRB DTO boundary** via `oto_native::map` — the exact
+//! then crosses the **FRB DTO boundary** via `oto_native::map` - the exact
 //! representational map `api::discover()` applies (snapshot → `Topology`,
 //! `WireError` → `DiscoveryError`). This realises plan deviation D2 in full:
 //! the e2e asserts the snapshot *and* the `oto_native` DTO mapping with zero

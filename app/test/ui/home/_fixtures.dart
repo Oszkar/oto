@@ -102,7 +102,7 @@ class SpyGrouping extends GroupingController {
   }
 }
 
-/// A playing solo room `OF` (Office) — its group `G_OF` has a track + playing
+/// A playing solo room `OF` (Office) - its group `G_OF` has a track + playing
 /// transport, so `hasActiveStream` is true.
 Household playingHousehold() {
   return const Household(
@@ -129,7 +129,7 @@ Household playingHousehold() {
   );
 }
 
-/// An idle solo room `BR` (Bedroom) — its group `G_BR` has no track and a
+/// An idle solo room `BR` (Bedroom) - its group `G_BR` has no track and a
 /// stopped transport, so `hasActiveStream` is false.
 Household idleHousehold() {
   return const Household(

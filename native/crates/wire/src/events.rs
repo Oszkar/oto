@@ -9,10 +9,10 @@
 //!   - One thread total (not per-speaker).
 //!   - AVTransport NOTIFYs filtered to coordinator-only; emitted with
 //!     `GroupId` addressing via the wire's discover-built map.
-//!   - `Position` is NOT watched (spike finding #7 — polling-derived).
+//!   - `Position` is NOT watched (spike finding #7 - polling-derived).
 //!
 //! Per `docs/sonos-notes.md` § Event model (spike finding "Bare
-//! `StateManager::new()` is an ergonomic footgun") — we use
+//! `StateManager::new()` is an ergonomic footgun") - we use
 //! `watch_property_with_subscription::<P>(&sid)` only after attaching a
 //! `SonosEventManager` via the builder. The bare `::new()` path
 //! registers watches silently with no UPnP SUBSCRIBE.
@@ -34,7 +34,7 @@ use oto_core::{ChangeEvent, GroupId, SpeakerId, WireError};
 /// How often the pump thread checks the `stop` flag while waiting for an
 /// upstream event. Doubles as the worst-case latency for `EventPump::Drop`
 /// to join the pump thread. 250 ms is well under any human-perceptible
-/// shutdown wait and well over typical event arrival cadence — the timeout
+/// shutdown wait and well over typical event arrival cadence - the timeout
 /// rarely fires on a busy LAN.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -44,7 +44,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// a first-ever `GroupMembership` arriving LATER than this is a genuine
 /// regroup whose seed was dropped or delayed (e.g. a speaker asleep at
 /// subscribe time), so it must be emitted, not mistaken for a seed. Bounding
-/// the seed-vs-real ambiguity in time — not by ordinal position — closes the
+/// the seed-vs-real ambiguity in time - not by ordinal position - closes the
 /// missed-seed hole without re-opening the seed → rediscover → seed loop (a
 /// fresh pump still swallows its own in-window seed burst). 5 s gives generous
 /// margin over the observed ~1 s seed latency.
@@ -134,7 +134,7 @@ impl EventPump {
             .map_err(|e| WireError::Backend(format!("StateManager build failed: {e}")))?;
 
         // Register every discovered speaker with the SDK. The SDK uses
-        // `sonos_discovery::Device` records (string IP + port) — we
+        // `sonos_discovery::Device` records (string IP + port) - we
         // reconstruct from our own discover snapshot rather than running
         // the SDK's own broken-on-multi-NIC SSDP (sonos-notes § "own SSDP"
         // + tatimblin/sonos-sdk#76).
@@ -165,7 +165,7 @@ impl EventPump {
 
         // Install topology BEFORE registering watches. Without this,
         // the SDK's `resolve_subscription_target` for AVTransport
-        // can't route subscriptions to coordinators — the watch is
+        // can't route subscriptions to coordinators - the watch is
         // registered but no UPnP SUBSCRIBE is sent, no NOTIFYs
         // arrive, no `PlaybackState` / `CurrentTrack` events ever
         // fire (RenderingControl works without topology because it's
@@ -184,7 +184,7 @@ impl EventPump {
         //
         // We do NOT attempt to surface per-speaker subscription
         // failures here. The SDK at `=0.5.2` does not expose the
-        // information — see `register_watches` for the full citation.
+        // information - see `register_watches` for the full citation.
         // This is a known shortfall of the spec's "in-band per-speaker
         // failure surfacing" contract; tracked as v0.5 follow-up.
         register_watches(&manager, &inputs);
@@ -195,7 +195,7 @@ impl EventPump {
         // `Arc<SonosEventManager>` refcount, and the SDK's event
         // worker shuts down naturally via its own `Drop` impl. The
         // local `em` Arc above also goes out of scope at the end of
-        // this function — that's fine; the manager kept its own clone
+        // this function - that's fine; the manager kept its own clone
         // via `with_event_manager`.
         let coord_to_group = inputs.coord_to_group.clone();
         let speaker_to_coord = inputs.speaker_to_coord.clone();
@@ -228,7 +228,7 @@ impl Drop for EventPump {
         // (≤ POLL_INTERVAL). Then join.
         //
         // We do NOT try to wake the pump faster by calling
-        // `event_manager().shutdown()` — the EventManager is owned by
+        // `event_manager().shutdown()` - the EventManager is owned by
         // the StateManager, which is owned by the pump thread. The
         // 250 ms worst-case join is well within any acceptable
         // shutdown latency for a desktop discover() cycle, and not
@@ -244,7 +244,7 @@ impl Drop for EventPump {
         // wouldn't: the pump thread's own clone kept the channel
         // open, and the thread would block on `iter.recv()` forever,
         // self-deadlocking on its own sender clone. The atomic-stop +
-        // recv_timeout polling avoids the trap entirely — the pump
+        // recv_timeout polling avoids the trap entirely - the pump
         // thread is no longer waiting on its own sender.
         self.stop.store(true, Ordering::Release);
         if let Some(handle) = self.handle.take() {
@@ -259,7 +259,7 @@ impl Drop for EventPump {
 /// then routes AVTransport subscriptions to coordinators correctly.
 ///
 /// We reconstruct from `PumpInputs` rather than threading the raw
-/// `DiscoverySnapshot` into events.rs — that would couple this module
+/// `DiscoverySnapshot` into events.rs - that would couple this module
 /// to the wire's discovery internals. The maps in `PumpInputs` carry
 /// everything needed: `speaker_ips` (id + ip), `speaker_names`
 /// (display name; falls back to id), `coord_to_group` (groups), and
@@ -267,7 +267,7 @@ impl Drop for EventPump {
 ///
 /// Defaults for fields not exposed via `PumpInputs`: `port = 1400`
 /// (Sonos's hardcoded UPnP port), `model_name = ""` (unknown
-/// pre-discovery — Sonos ZGT doesn't carry it; `oto-core` has the
+/// pre-discovery - Sonos ZGT doesn't carry it; `oto-core` has the
 /// same gap, tracked as v0.5 model-repopulate work), `software_version
 /// = "unknown"` (mirrors the SDK's own default in event_worker.rs:437),
 /// `boot_seq = 0` (group-management seqs are v0.5 territory),
@@ -354,7 +354,7 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
 /// unreachable. They're gone. Honoring the spec's "in-band per-speaker
 /// failure surfacing" contract requires either (a) an SDK feature we
 /// don't have, or (b) a wire-side timeout-driven sweep we haven't
-/// designed yet — tracked as v0.5 follow-up; until then a silent
+/// designed yet - tracked as v0.5 follow-up; until then a silent
 /// failure manifests as the speaker's Volume/Mute/Playback events
 /// simply never arriving (and the UI shows the last-known value).
 fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
@@ -368,7 +368,7 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
         let sdk_sid = sdk_id(sid);
 
         // RenderingControl-scoped: Volume + Mute. Both share one UPnP
-        // subscription — registering both watches keeps the SDK
+        // subscription - registering both watches keeps the SDK
         // dispatch wired for each property key.
         let _ = manager.watch_property_with_subscription::<Volume>(&sdk_sid);
         let _ = manager.watch_property_with_subscription::<Mute>(&sdk_sid);
@@ -383,14 +383,14 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
             let _ = manager.watch_property_with_subscription::<CurrentTrack>(&sdk_sid);
             // v0.5.1: GroupRenderingControl group master volume/mute are
             // `Scope::Group`, coordinator-routed (sonos-notes § Group
-            // operations) — watch on coordinators only, same gate as
+            // operations) - watch on coordinators only, same gate as
             // AVTransport above.
             let _ = manager.watch_property_with_subscription::<GroupVolume>(&sdk_sid);
             let _ = manager.watch_property_with_subscription::<GroupMute>(&sdk_sid);
         }
 
         // v0.5: ZoneGroupTopology / GroupMembership is `Scope::Speaker`
-        // (sonos-notes § "Topology change events") — watch it on EVERY
+        // (sonos-notes § "Topology change events") - watch it on EVERY
         // speaker, not just coordinators. A single regroup fires
         // `group_membership` on each affected speaker; the downstream
         // Dart `TopologyController` debounces + re-pulls once.
@@ -413,7 +413,7 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
 ///   - the downstream consumer drops `rx`, so our `tx.send` returns Err.
 ///
 /// We deliberately do NOT rely on `iter.recv()` returning `None` to
-/// drive shutdown — `StateManager::Clone` fans out independent
+/// drive shutdown - `StateManager::Clone` fans out independent
 /// `mpsc::Sender`s and this thread holds one transitively (via its
 /// `manager` argument). Blocking-recv would self-deadlock on our own
 /// sender clone. See `EventPump::drop` for the longer explanation.
@@ -428,7 +428,7 @@ fn pump_loop(
     let mut topology = TopologyFilter::new();
     while !stop.load(Ordering::Acquire) {
         let Some(upstream) = iter.recv_timeout(POLL_INTERVAL) else {
-            // Timeout fired — no event this poll cycle. The
+            // Timeout fired - no event this poll cycle. The
             // "disconnect" case (all SDK senders dropped → channel
             // closed → recv_timeout returns None) is structurally
             // unreachable from inside this loop: the pump thread owns
@@ -454,7 +454,7 @@ fn pump_loop(
             continue;
         };
         if tx.send(event).is_err() {
-            // Receiver gone — wire was dropped before us. Bail.
+            // Receiver gone - wire was dropped before us. Bail.
             return;
         }
     }
@@ -467,12 +467,12 @@ fn pump_loop(
 /// 1. **Seed suppression (#1).** A fresh `GroupMembership` subscription emits
 ///    one startup *seed* NOTIFY per speaker, before any user action. Each
 ///    would map to `TopologyChanged`. The Dart controller reacts to
-///    `TopologyChanged` with a full re-discover — which spawns a new pump,
+///    `TopologyChanged` with a full re-discover - which spawns a new pump,
 ///    which emits new seeds, which trigger another re-discover: an infinite
 ///    loop. So we drop the FIRST `group_membership` per speaker **while it
 ///    arrives inside the seed window** (the burst right after SUBSCRIBE) and
 ///    only emit on the 2nd+, or on any first event arriving after the window
-///    (a real regroup whose seed never landed — see [`SEED_WINDOW`]).
+///    (a real regroup whose seed never landed - see [`SEED_WINDOW`]).
 ///
 /// 2. **Post-regroup group-event drop (#4).** The pump's `coord_to_group` /
 ///    `speaker_to_coord` maps are captured by value at spawn and frozen.
@@ -517,7 +517,7 @@ impl TopologyFilter {
         match &event {
             ChangeEvent::TopologyChanged => {
                 // The FIRST `group_membership` per speaker is the subscribe
-                // seed — but ONLY while still inside the seed window. A
+                // seed - but ONLY while still inside the seed window. A
                 // first-ever event arriving after the window is a real
                 // regroup whose seed was dropped/delayed (e.g. a speaker
                 // asleep at subscribe time); emit it rather than swallowing
@@ -532,8 +532,8 @@ impl TopologyFilter {
                 Some(event)
             }
             // Group-addressed events carry a GroupId routed via the frozen
-            // maps; after a regroup that routing is stale — drop until rebuild.
-            // GroupVolume/GroupMute (v0.5.1) are group-addressed too — same drop.
+            // maps; after a regroup that routing is stale - drop until rebuild.
+            // GroupVolume/GroupMute (v0.5.1) are group-addressed too - same drop.
             ChangeEvent::Playback { .. }
             | ChangeEvent::Track { .. }
             | ChangeEvent::GroupVolume { .. }
@@ -543,7 +543,7 @@ impl TopologyFilter {
                 None
             }
             // Volume/Mute (per-speaker) and the surface events are
-            // grouping-independent — always forward.
+            // grouping-independent - always forward.
             _ => Some(event),
         }
     }
@@ -555,7 +555,7 @@ impl TopologyFilter {
 ///   - the property value isn't in the cache yet (cold-start race;
 ///     next NOTIFY will resend)
 ///   - AVTransport event from a non-coordinator (coordinator-only
-///     filter — see `av_transport_group_id`)
+///     filter - see `av_transport_group_id`)
 fn map_upstream_event(
     manager: &sonos_state::StateManager,
     upstream: &sonos_state::ChangeEvent,
@@ -595,14 +595,14 @@ fn map_upstream_event(
             })
         }
         // v0.5.1: GroupRenderingControl group volume/mute. Group-scoped,
-        // coordinator-routed — same coordinator-only filter as AVTransport
+        // coordinator-routed - same coordinator-only filter as AVTransport
         // (events arrive stamped with the coordinator's speaker_id;
         // sonos-notes § Group operations). No dedup: a volume drag fires
         // ~23 distinct events and the StateManager cache is last-wins,
         // exactly like per-speaker `volume`.
         "group_volume" => {
             let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            // GroupRenderingControl values are `Scope::Group` — the SDK stores
+            // GroupRenderingControl values are `Scope::Group` - the SDK stores
             // them in `group_props` keyed by GroupId, NOT in the coordinator's
             // `speaker_props` (sonos-sdk-state state.rs:182-187). `get_property`
             // reads speaker_props and would return None here, silently dropping
@@ -619,9 +619,9 @@ fn map_upstream_event(
         }
         // v0.5: ZoneGroupTopology change. The SDK emits one
         // `group_membership` event per affected speaker on a regroup
-        // (see sonos-notes § "Topology change events"). No usable payload —
+        // (see sonos-notes § "Topology change events"). No usable payload -
         // the authoritative topology is re-pulled via `refresh_topology`
-        // SOAP downstream — so this maps to the payload-less
+        // SOAP downstream - so this maps to the payload-less
         // `TopologyChanged`. Emitted from EVERY speaker (not
         // coordinator-filtered like AVTransport): the per-speaker fan-out
         // is deduped by the Dart `TopologyController`'s debounce.
@@ -633,7 +633,7 @@ fn map_upstream_event(
     }
 }
 
-/// AVTransport coordinator-only filter — drop the event if `speaker`
+/// AVTransport coordinator-only filter - drop the event if `speaker`
 /// is not its group's coordinator. Returns the `GroupId` to use as
 /// the event's address when the event passes the filter.
 ///
@@ -647,7 +647,7 @@ fn av_transport_group_id(
 ) -> Option<GroupId> {
     let coord = speaker_to_coord.get(speaker)?;
     if coord != speaker {
-        // Not a coordinator — drop the AVTransport event.
+        // Not a coordinator - drop the AVTransport event.
         return None;
     }
     coord_to_group.get(coord).cloned()
@@ -667,7 +667,7 @@ fn map_playback_state(s: sonos_state::PlaybackState) -> oto_core::PlaybackState 
 /// SDK `CurrentTrack` → `oto_core::Track`. The SDK shape is a strict
 /// subset of ours: title/artist/album/album_art_uri/uri. The rest
 /// (`id`, `track_number`, `duration`) the SDK doesn't carry on this
-/// property — leave them `None`; the UI tolerates partial Tracks.
+/// property - leave them `None`; the UI tolerates partial Tracks.
 fn map_current_track(t: sonos_state::CurrentTrack) -> oto_core::Track {
     oto_core::Track {
         id: None,
@@ -774,7 +774,7 @@ mod tests {
     fn coordinator_with_no_group_mapping_dropped() {
         // Edge case: speaker_to_coord says "you are your own
         // coordinator" but coord_to_group is missing the entry. Without
-        // the GroupId we can't address the event — drop it. Can happen
+        // the GroupId we can't address the event - drop it. Can happen
         // if discover() raced with a topology change.
         let solo = sid("RINCON_SOLO");
         let mut s2c = HashMap::new();
@@ -835,7 +835,7 @@ mod tests {
     #[test]
     fn first_topology_event_after_seed_window_is_a_real_regroup() {
         // A speaker whose seed NOTIFY never arrived inside the window: its
-        // first group_membership is a genuine regroup, not a seed — it must be
+        // first group_membership is a genuine regroup, not a seed - it must be
         // emitted (and mark the pump dirty), not swallowed forever. Regression
         // for the positional-seed hole (a first-ever event was always treated
         // as the seed regardless of timing).
@@ -885,7 +885,7 @@ mod tests {
     }
 
     /// The loop-prevention invariant: a burst of seed-only events (one per
-    /// speaker, as a fresh subscription emits) yields ZERO TopologyChanged —
+    /// speaker, as a fresh subscription emits) yields ZERO TopologyChanged -
     /// so the Dart controller never triggers a re-discover off the seeds, so
     /// the seed → rediscover → seed loop cannot start.
     #[test]
@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn group_volume_and_mute_dropped_while_dirty_but_volume_passes() {
         // v0.5.1: GroupVolume/GroupMute are group-addressed via the frozen
-        // maps — they must be dropped after a regroup (stale routing), like
+        // maps - they must be dropped after a regroup (stale routing), like
         // Playback/Track. Per-speaker Volume/Mute keep flowing.
         let mut f = TopologyFilter::new();
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
@@ -1022,7 +1022,7 @@ mod tests {
         assert_eq!(m.album.as_deref(), Some("Snivilisation"));
         assert_eq!(m.art_uri.as_deref(), Some("http://example/art.jpg"));
         assert_eq!(m.uri.as_deref(), Some("x-file-cifs://nas/halcyon.flac"));
-        // SDK doesn't carry these on CurrentTrack — must stay None.
+        // SDK doesn't carry these on CurrentTrack - must stay None.
         assert!(m.id.is_none());
         assert!(m.track_number.is_none());
         assert!(m.duration.is_none());
@@ -1114,7 +1114,7 @@ mod tests {
     #[test]
     fn group_volume_event_clamps_out_of_range_value() {
         // Bypass GroupVolume::new (which itself clamps) via the public tuple
-        // field, so the value reaching group_volume_event is genuinely > 100 —
+        // field, so the value reaching group_volume_event is genuinely > 100 -
         // this exercises oto's belt-and-braces Volume::clamped guard, not the
         // SDK's own clamp.
         let g = gid("RINCON_K:1");
@@ -1173,7 +1173,7 @@ mod tests {
     //
     // These tests use the REAL SDK with fake IPs. SUBSCRIBE attempts
     // will fail in the SDK's async worker (no real Sonos at the IP);
-    // that's fine — we only assert that construct + drop terminates
+    // that's fine - we only assert that construct + drop terminates
     // promptly, NOT that any events arrive. No network is required;
     // the SDK only binds its local callback-server port (default range
     // 3400-3500).
@@ -1202,7 +1202,7 @@ mod tests {
     }
 
     /// Run `op` on a worker thread and assert it finishes within
-    /// `budget`. On timeout, panic with a clear "hung" message — that
+    /// `budget`. On timeout, panic with a clear "hung" message - that
     /// would have been the symptom of a deadlock in the
     /// previous design.
     fn run_with_deadline<F>(label: &str, budget: std::time::Duration, op: F)

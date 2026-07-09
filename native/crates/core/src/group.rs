@@ -1,4 +1,4 @@
-//! A Sonos zone group — the unit of playback.
+//! A Sonos zone group - the unit of playback.
 //!
 //! A group is one or more speakers playing the same audio in sync. Solo
 //! speakers form a group of one. Transport state lives here (not on
@@ -16,7 +16,7 @@ use crate::{
 pub struct Group {
     pub id: GroupId,
     pub coordinator: SpeakerId,
-    /// All speakers in the group, with the coordinator at index 0 — matches
+    /// All speakers in the group, with the coordinator at index 0 - matches
     /// Sonos's `ZoneGroupTopology` event ordering.
     pub members: Vec<SpeakerId>,
     pub transport: TransportState,

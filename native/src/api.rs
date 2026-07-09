@@ -43,7 +43,7 @@ pub struct SpeakerStateDto {
 /// v0.6.1: point-in-time SOAP read of a group's current track position +
 /// duration. Both fields are independently optional: a stream source may
 /// report a position with no duration, and a stopped group may report
-/// neither. `Duration` narrowed to whole `u64` seconds (lossless — Sonos
+/// neither. `Duration` narrowed to whole `u64` seconds (lossless - Sonos
 /// SOAP time fields carry no sub-second component).
 pub struct TrackPositionDto {
     pub position_secs: Option<u64>,
@@ -103,12 +103,12 @@ pub enum ChangeEventDto {
         group_id: String,
         track: TrackDto,
     },
-    /// v0.5.1 — group master volume changed (per-group, coordinator-routed).
+    /// v0.5.1 - group master volume changed (per-group, coordinator-routed).
     GroupVolume {
         group_id: String,
         volume: u32,
     },
-    /// v0.5.1 — group master mute changed (per-group, coordinator-routed).
+    /// v0.5.1 - group master mute changed (per-group, coordinator-routed).
     GroupMute {
         group_id: String,
         muted: bool,
@@ -130,14 +130,14 @@ pub enum ChangeEventDto {
 // ── Discovery ─────────────────────────────────────────────────────────────────
 
 // Android release discovery holds a WifiManager.MulticastLock around this
-// SSDP window — acquired/released on the Dart side (discoveryProvider) via
+// SSDP window - acquired/released on the Dart side (discoveryProvider) via
 // the `me.oszkar.oto/multicast_lock` MethodChannel. Without it Android
 // drops the inbound SSDP multicast replies.
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
-/// topology — speaker identities (id / room / model / ip) plus the
+/// topology - speaker identities (id / room / model / ip) plus the
 /// group identities they belong to, with the coordinator at
-/// `members[0]` (D3) — but no live state: volume, mute, and transport
+/// `members[0]` (D3) - but no live state: volume, mute, and transport
 /// are read separately via `speaker_state`. Live state moved to an
 /// event-fed cache in v0.4.
 pub fn discover() -> Result<Topology, DiscoveryError> {
@@ -152,7 +152,7 @@ pub fn discover() -> Result<Topology, DiscoveryError> {
 /// installs a fresh wire seeded from the reachable speaker IPs, through the same
 /// wire-replacement lifecycle as `discover()` (gen bump → Dart re-subscribes).
 /// Called by the Dart `Discovery.refreshTopology` on a debounced
-/// `TopologyChanged`. Glue only — delegates inward, then the `crate::map`
+/// `TopologyChanged`. Glue only - delegates inward, then the `crate::map`
 /// representational map, mirroring `discover()` exactly. Blocking SOAP
 /// round-trip; FRB surfaces this as a Dart `Future`.
 pub fn refresh_topology() -> Result<Topology, DiscoveryError> {
@@ -190,7 +190,7 @@ pub fn previous(group_id: String) -> Result<(), CommandError> {
 /// Set `speaker_id`'s volume, clamped to `0..=100` by `oto_core::Volume`.
 /// The param is **signed** so a negative Dart `int` reaches Rust and
 /// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
-/// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
+/// could clamp). A Dart `int` outside `i32` is rejected at the bridge -
 /// unreachable for a volume; the v0.6 UI bounds the slider regardless.
 /// Blocking SOAP round-trip; Dart `Future`.
 pub fn set_volume(speaker_id: String, volume: i32) -> Result<(), CommandError> {
@@ -209,7 +209,7 @@ pub fn set_mute(speaker_id: String, muted: bool) -> Result<(), CommandError> {
 /// v0.5.1: set `group_id`'s master volume, clamped to `0..=100` by
 /// `oto_core::Volume`. Coordinator-routed (group-scoped). The param is
 /// **signed** so a negative Dart `int` clamps to 0 in Rust rather than
-/// throwing at the FRB encoder — exactly like `set_volume`; clamping before
+/// throwing at the FRB encoder - exactly like `set_volume`; clamping before
 /// the SOAP call also avoids the SDK's `.build()` RangeError on > 100.
 /// Blocking SOAP round-trip; Dart `Future`. Unknown group → `NotFound`.
 pub fn set_group_volume(group_id: String, volume: i32) -> Result<(), CommandError> {
@@ -243,7 +243,7 @@ pub fn leave_group(speaker_id: String) -> Result<(), CommandError> {
 }
 
 /// One-shot read of `speaker_id`'s current volume/mute/transport
-/// snapshot. **Not a SOAP round-trip** — reads the event-fed
+/// snapshot. **Not a SOAP round-trip** - reads the event-fed
 /// `StateManager` cache in `oto-app` (v0.4); fields are
 /// honest-partial (`None` until that property's first event lands).
 /// Surfaced as a Dart `Future` like the other commands.
@@ -274,7 +274,7 @@ pub fn track_position(group_id: String) -> Result<TrackPositionDto, CommandError
 //
 // Trust boundary: the FRB
 // fn symbols (`dev_discover_mock`, `dev_push_subscription_error_on_mock`)
-// must exist unconditionally — FRB v2's generated `frb_generated.rs`
+// must exist unconditionally - FRB v2's generated `frb_generated.rs`
 // references every exposed `pub fn` and a cfg gate at the symbol level
 // breaks the release cdylib link. But the BODIES are `cfg(debug_assertions)`
 // gated: in release builds they return an error, so a release-built Dart
@@ -292,7 +292,7 @@ use oto_mock::MockWire;
 /// Side-channel handle to the MockWire created by `dev_discover_mock`.
 /// `dev_push_subscription_error_on_mock` reaches in here because
 /// `MockWire::push_event` is an inherent method (not on the `Wire`
-/// trait — adversarial pushes are a test-only affordance), so the
+/// trait - adversarial pushes are a test-only affordance), so the
 /// regular `oto_app::slot()` path can't surface it.
 #[cfg(debug_assertions)]
 fn dev_mock_handle() -> &'static std::sync::Mutex<Option<Arc<MockWire>>> {
@@ -301,7 +301,7 @@ fn dev_mock_handle() -> &'static std::sync::Mutex<Option<Arc<MockWire>>> {
 }
 
 /// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
-/// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
+/// builds the body is a no-op that returns `DiscoveryError::Sdk` - the
 /// symbol is preserved so FRB-generated bindings still link, but the
 /// production wire cannot be replaced from a release-built Dart client.
 pub fn dev_discover_mock() -> Result<Topology, DiscoveryError> {
@@ -357,8 +357,8 @@ pub fn dev_push_subscription_error_on_mock(
 }
 
 /// DEV-ONLY: push a `TopologyChanged` event into the held MockWire's
-/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock`
-/// — the integration test uses it to drive the v0.5 topology-event path
+/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock` -
+/// the integration test uses it to drive the v0.5 topology-event path
 /// (FRB stream delivery of `ChangeEventDto::TopologyChanged`) without a LAN.
 /// Returns an error if `dev_discover_mock` hasn't run yet. In release builds
 /// the body is a no-op that returns `CommandError::Sonos`.
@@ -474,12 +474,12 @@ impl oto_core::Wire for MockWireArc {
 /// Subscribe to the unified v0.4 change-event stream. One call per app
 /// instance; the Dart `changeEventsProvider` is the consumer.
 /// Stream completes (`onDone` fires) when `discover()` replaces the
-/// wire — the Dart provider depends on `discoveryProvider` and
+/// wire - the Dart provider depends on `discoveryProvider` and
 /// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`
 /// (FRB pre-check § 3).
 pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // Body runs on the FRB worker thread (pre-check § 2). Blocking
-    // `recv()` here is fine — it blocks the worker, not the UI.
+    // `recv()` here is fine - it blocks the worker, not the UI.
     //
     // Take the receiver and the generation it applies at as ONE atomic
     // pair (under a single slot lock). A concurrent `discover_with` bumps
@@ -490,7 +490,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // NEW wire's freshly-seeded cache with leftover events from the OLD
     // wire's channel. The `sink.add(...)` path still surfaces these events
     // to the Dart subscriber on the OLD stream until the rx Sender is
-    // dropped and `recv()` returns Err — correct, because the OLD
+    // dropped and `recv()` returns Err - correct, because the OLD
     // subscriber is the one listening on this sink.
     let Some((generation, rx)) = oto_app::take_event_stream_with_generation() else {
         // No wire installed yet, or stream already taken. The Dart
@@ -536,13 +536,13 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
             return;
         }
         // Drain TWO sources onto the one FRB stream (v0.5):
-        //   1. oto-app's sibling bus — SubscriptionError/Recovered emitted
+        //   1. oto-app's sibling bus - SubscriptionError/Recovered emitted
         //      on command-dispatch health transitions,
-        //   2. the wire's v0.4 channel (`rx`) — property events from the
+        //   2. the wire's v0.4 channel (`rx`) - property events from the
         //      pump; its `Disconnected` is the teardown signal (wire
         //      replaced on discover() → stream completes → Dart rebuilds).
         //
-        // Drain the app bus FIRST, fully, every iteration — otherwise a
+        // Drain the app bus FIRST, fully, every iteration - otherwise a
         // busy wire channel could starve app events indefinitely (review
         // #65). Drain at OUR generation so a stale event from an old wire
         // is dropped, not forwarded onto this stream (review #67-followup
@@ -558,7 +558,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         // Then block on the wire channel with a coarse poll so an idle
         // stream doesn't busy-wake (review #67-followup #6: a 10 ms poll
         // span at 100 Hz when nothing's happening). 250 ms bounds both the
-        // app-bus re-drain cadence and teardown-detection latency — fine,
+        // app-bus re-drain cadence and teardown-detection latency - fine,
         // app events are degraded-state flags, not real-time, and teardown
         // is not latency-critical. When events flow the inner drains + the
         // Ok arm keep the loop hot regardless.
@@ -569,7 +569,7 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-            // Wire's Sender dropped — wire was replaced (discover() ran).
+            // Wire's Sender dropped - wire was replaced (discover() ran).
             // Return cleanly; FRB stream completes; Dart rebuilds.
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
         }

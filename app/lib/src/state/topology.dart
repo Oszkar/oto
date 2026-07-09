@@ -12,11 +12,11 @@
 /// household settles.
 ///
 /// **Fast re-discover (no SSDP).** The debounce body calls
-/// `Discovery.refreshTopology()` — a re-pull that SKIPS SSDP (~tens of ms vs the
+/// `Discovery.refreshTopology()` - a re-pull that SKIPS SSDP (~tens of ms vs the
 /// ~3–5 s of a full `discover()`), then installs a fresh seeded wire through
 /// the same wire-replacement lifecycle. `refreshTopology()` re-keys the event
 /// stream itself (it bumps the wire-install signal that `wireGenerationProvider`
-/// watches — see `Discovery._publishInstalledWire`), so the new wire's fresh
+/// watches - see `Discovery._publishInstalledWire`), so the new wire's fresh
 /// pump (clean `TopologyFilter`) is picked up even when the new `Topology` is
 /// value-equal to the old (a no-op `TopologyChanged`) and `discoveryProvider`
 /// does not transition. If the fast re-pull throws (e.g. every cached speaker is
@@ -65,7 +65,7 @@ void topologyController(Ref ref) {
           // cached speaker is now unreachable) fall back to a full
           // re-discover, which re-runs SSDP.
           try {
-            // refreshTopology() re-keys the event stream itself — it bumps the
+            // refreshTopology() re-keys the event stream itself - it bumps the
             // wire-install signal so changeEventsProvider re-subscribes against
             // the new wire even on a value-equal re-pull that does not transition
             // discoveryProvider (see Discovery._publishInstalledWire). Nothing to

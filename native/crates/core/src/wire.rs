@@ -1,4 +1,4 @@
-//! The `Wire` seam — the trait `oto-app` depends on instead of
+//! The `Wire` seam - the trait `oto-app` depends on instead of
 //! `sonos-sdk` (or any direct Sonos library). v0.2: discovery + playback
 //! commands + a one-shot state read. v0.3: real ZoneGroupTopology grouping;
 //! signatures unchanged as designed.
@@ -18,7 +18,7 @@ use crate::{
 ///
 /// Addressing: playback is per-coordinator, so play/pause/next/previous take
 /// a `GroupId`; the impl resolves group → coordinator → IP from the
-/// ZoneGroupTopology cache (v0.1/v0.2 used group-of-one — each speaker was
+/// ZoneGroupTopology cache (v0.1/v0.2 used group-of-one - each speaker was
 /// its own group; v0.3 uses real ZoneGroupTopology without changing these
 /// signatures). `speaker_state` reads volume/mute per-speaker and transport
 /// at the group coordinator (D2). volume/mute/state are per-`SpeakerId`.
@@ -34,7 +34,7 @@ pub trait Wire {
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError>;
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError>;
 
-    /// v0.5.1 — group volume/mute (GroupRenderingControl). Group-scoped, so
+    /// v0.5.1 - group volume/mute (GroupRenderingControl). Group-scoped, so
     /// addressed by `GroupId` and routed to the group's coordinator (exactly
     /// like AVTransport `play`/`pause`). The impl resolves `group` →
     /// coordinator → IP from the topology cache; an unknown/stale `group` →
@@ -43,7 +43,7 @@ pub trait Wire {
     fn set_group_volume(&self, group: &GroupId, volume: Volume) -> Result<(), WireError>;
     fn set_group_mute(&self, group: &GroupId, muted: bool) -> Result<(), WireError>;
 
-    /// v0.5.1 — group form/break (additive). Both are addressed per-speaker
+    /// v0.5.1 - group form/break (additive). Both are addressed per-speaker
     /// and mutate household topology; the settled result surfaces via the
     /// debounced `GroupMembership` topology-event path (a regroup fires the
     /// same NOTIFYs as a Sonos-app regroup), NOT a self-triggered re-poll.
@@ -55,7 +55,7 @@ pub trait Wire {
     fn join_group(&self, speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError>;
 
     /// Make `speaker` a standalone (single-member) group, leaving whatever
-    /// group it was in. Uniform — the impl does NOT branch on whether
+    /// group it was in. Uniform - the impl does NOT branch on whether
     /// `speaker` coordinates a group; the Sonos firmware handles
     /// re-election. Unknown `speaker` → `WireError::NotFound`.
     fn leave_group(&self, speaker: &SpeakerId) -> Result<(), WireError>;
@@ -85,7 +85,7 @@ pub trait Wire {
     /// `ChangeEvent::SubscriptionError` / `SubscriptionRecovered`
     /// variants are emitted instead by `oto-app` from **command-observed
     /// reachability** (v0.5: a `WireError::Network` on a user command
-    /// flips the speaker to `Errored`; a later `Ok` recovers it) — they
+    /// flips the speaker to `Errored`; a later `Ok` recovers it) - they
     /// reflect command reachability, NOT the health of the subscription
     /// pipeline this call sets up.
     fn subscribe_speakers(&self) -> Result<(), WireError>;
@@ -95,7 +95,7 @@ pub trait Wire {
     /// `ChangeEvent::TopologyChanged` on the unified stream when the
     /// household is regrouped.
     ///
-    /// **Ordering — must be called BEFORE `subscribe_speakers`.** The
+    /// **Ordering - must be called BEFORE `subscribe_speakers`.** The
     /// topology watch is registered when `subscribe_speakers` spawns the
     /// event pump, so this call only records intent; calling it after the
     /// pump is running is too late. `discover_with` enforces the ordering
@@ -106,11 +106,11 @@ pub trait Wire {
     /// running: repeated pre-`subscribe_speakers` calls return `Ok`. Once
     /// the pump is running it returns `Ok` if topology was already
     /// requested (the watch is active), but `AlreadySubscribed` if it was
-    /// not — failing fast on the misuse rather than silently no-op'ing.
+    /// not - failing fast on the misuse rather than silently no-op'ing.
     fn subscribe_topology(&self) -> Result<(), WireError>;
 
     /// Re-fetch the current topology via `GetZoneGroupState` SOAP
-    /// against a cached speaker IP — no SSDP. Returns a fresh
+    /// against a cached speaker IP - no SSDP. Returns a fresh
     /// `DiscoverySnapshot`. Network errors leave all existing caches
     /// unchanged.
     ///

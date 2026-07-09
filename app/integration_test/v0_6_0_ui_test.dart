@@ -47,7 +47,7 @@ const _seedVolume = 30;
 /// MockWire as the held Rust wire, so the unified change-event stream
 /// (`changeEventsProvider`) subscribes against it and the seed + mutation
 /// events flow through the REAL bridge into the accumulating `householdProvider`
-/// — the whole point of this end-to-end test.
+/// - the whole point of this end-to-end test.
 ///
 /// `refreshTopology()` is left as the base implementation: it calls
 /// `rust_api.refreshTopology()`, which the MockWire honours (re-pull snapshot +

@@ -14,9 +14,9 @@ part 'api.freezed.dart';
 
 /// Deferred warm-up. Blocking ~3–5 s; FRB runs it off the UI isolate.
 /// NOT on the #[frb(init)] path. The returned snapshot carries the
-/// topology — speaker identities (id / room / model / ip) plus the
+/// topology - speaker identities (id / room / model / ip) plus the
 /// group identities they belong to, with the coordinator at
-/// `members[0]` (D3) — but no live state: volume, mute, and transport
+/// `members[0]` (D3) - but no live state: volume, mute, and transport
 /// are read separately via `speaker_state`. Live state moved to an
 /// event-fed cache in v0.4.
 Future<Topology> discover() => RustLib.instance.api.crateApiDiscover();
@@ -26,7 +26,7 @@ Future<Topology> discover() => RustLib.instance.api.crateApiDiscover();
 /// installs a fresh wire seeded from the reachable speaker IPs, through the same
 /// wire-replacement lifecycle as `discover()` (gen bump → Dart re-subscribes).
 /// Called by the Dart `Discovery.refreshTopology` on a debounced
-/// `TopologyChanged`. Glue only — delegates inward, then the `crate::map`
+/// `TopologyChanged`. Glue only - delegates inward, then the `crate::map`
 /// representational map, mirroring `discover()` exactly. Blocking SOAP
 /// round-trip; FRB surfaces this as a Dart `Future`.
 Future<Topology> refreshTopology() =>
@@ -52,7 +52,7 @@ Future<void> previous({required String groupId}) =>
 /// Set `speaker_id`'s volume, clamped to `0..=100` by `oto_core::Volume`.
 /// The param is **signed** so a negative Dart `int` reaches Rust and
 /// clamps to 0 (a `u32` param would throw at FRB's encoder before Rust
-/// could clamp). A Dart `int` outside `i32` is rejected at the bridge —
+/// could clamp). A Dart `int` outside `i32` is rejected at the bridge -
 /// unreachable for a volume; the v0.6 UI bounds the slider regardless.
 /// Blocking SOAP round-trip; Dart `Future`.
 Future<void> setVolume({required String speakerId, required int volume}) =>
@@ -68,7 +68,7 @@ Future<void> setMute({required String speakerId, required bool muted}) =>
 /// v0.5.1: set `group_id`'s master volume, clamped to `0..=100` by
 /// `oto_core::Volume`. Coordinator-routed (group-scoped). The param is
 /// **signed** so a negative Dart `int` clamps to 0 in Rust rather than
-/// throwing at the FRB encoder — exactly like `set_volume`; clamping before
+/// throwing at the FRB encoder - exactly like `set_volume`; clamping before
 /// the SOAP call also avoids the SDK's `.build()` RangeError on > 100.
 /// Blocking SOAP round-trip; Dart `Future`. Unknown group → `NotFound`.
 Future<void> setGroupVolume({required String groupId, required int volume}) =>
@@ -100,7 +100,7 @@ Future<void> leaveGroup({required String speakerId}) =>
     RustLib.instance.api.crateApiLeaveGroup(speakerId: speakerId);
 
 /// One-shot read of `speaker_id`'s current volume/mute/transport
-/// snapshot. **Not a SOAP round-trip** — reads the event-fed
+/// snapshot. **Not a SOAP round-trip** - reads the event-fed
 /// `StateManager` cache in `oto-app` (v0.4); fields are
 /// honest-partial (`None` until that property's first event lands).
 /// Surfaced as a Dart `Future` like the other commands.
@@ -117,7 +117,7 @@ Future<TrackPositionDto> trackPosition({required String groupId}) =>
     RustLib.instance.api.crateApiTrackPosition(groupId: groupId);
 
 /// DEV-ONLY: drive discovery via MockWire (debug builds only). In release
-/// builds the body is a no-op that returns `DiscoveryError::Sdk` — the
+/// builds the body is a no-op that returns `DiscoveryError::Sdk` - the
 /// symbol is preserved so FRB-generated bindings still link, but the
 /// production wire cannot be replaced from a release-built Dart client.
 Future<Topology> devDiscoverMock() =>
@@ -136,8 +136,8 @@ Future<void> devPushSubscriptionErrorOnMock({
 );
 
 /// DEV-ONLY: push a `TopologyChanged` event into the held MockWire's
-/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock`
-/// — the integration test uses it to drive the v0.5 topology-event path
+/// channel (debug builds only). Mirrors `dev_push_subscription_error_on_mock` -
+/// the integration test uses it to drive the v0.5 topology-event path
 /// (FRB stream delivery of `ChangeEventDto::TopologyChanged`) without a LAN.
 /// Returns an error if `dev_discover_mock` hasn't run yet. In release builds
 /// the body is a no-op that returns `CommandError::Sonos`.
@@ -147,7 +147,7 @@ Future<void> devPushTopologyChangeOnMock() =>
 /// Subscribe to the unified v0.4 change-event stream. One call per app
 /// instance; the Dart `changeEventsProvider` is the consumer.
 /// Stream completes (`onDone` fires) when `discover()` replaces the
-/// wire — the Dart provider depends on `discoveryProvider` and
+/// wire - the Dart provider depends on `discoveryProvider` and
 /// auto-rebuilds. Cancel detection via `sink.add(...).is_err()`
 /// (FRB pre-check § 3).
 Stream<ChangeEventDto> subscribeChangeEvents() =>
@@ -188,13 +188,13 @@ sealed class ChangeEventDto with _$ChangeEventDto {
     required TrackDto track,
   }) = ChangeEventDto_Track;
 
-  /// v0.5.1 — group master volume changed (per-group, coordinator-routed).
+  /// v0.5.1 - group master volume changed (per-group, coordinator-routed).
   const factory ChangeEventDto.groupVolume({
     required String groupId,
     required int volume,
   }) = ChangeEventDto_GroupVolume;
 
-  /// v0.5.1 — group master mute changed (per-group, coordinator-routed).
+  /// v0.5.1 - group master mute changed (per-group, coordinator-routed).
   const factory ChangeEventDto.groupMute({
     required String groupId,
     required bool muted,
@@ -375,7 +375,7 @@ class TrackDto {
 /// v0.6.1: point-in-time SOAP read of a group's current track position +
 /// duration. Both fields are independently optional: a stream source may
 /// report a position with no duration, and a stopped group may report
-/// neither. `Duration` narrowed to whole `u64` seconds (lossless — Sonos
+/// neither. `Duration` narrowed to whole `u64` seconds (lossless - Sonos
 /// SOAP time fields carry no sub-second component).
 class TrackPositionDto {
   final BigInt? positionSecs;

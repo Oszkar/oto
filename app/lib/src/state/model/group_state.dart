@@ -18,7 +18,7 @@ enum PlaybackState { stopped, playing, paused, transitioning }
 /// `memberIds` is a collection field, so equality compares it with
 /// [listEquals] and the hash folds it with [Object.hashAll]. A bare
 /// `Object.hash(memberIds)` would hash by identity and silently break
-/// Riverpod `select` — the #1 bug this design guards against.
+/// Riverpod `select` - the #1 bug this design guards against.
 class GroupState {
   final String id;
   final String coordinatorId;
@@ -41,14 +41,14 @@ class GroupState {
   /// Whether this group is currently a "source": something is playing here, or
   /// a real track is loaded and paused/transitioning. Idle/stopped groups, and
   /// groups carrying only a stale/empty track (Sonos emits an EMPTY track on
-  /// stop, which the reducer can't null out — see [Track.hasContent]), are NOT
+  /// stop, which the reducer can't null out - see [Track.hasContent]), are NOT
   /// sources.
   ///
   /// - `playing` is always a source (true even before track metadata lands).
   /// - otherwise a content-bearing track that isn't stopped (paused /
   ///   transitioning) is a resumable source.
   /// A non-stopped transport with no real track (a cleared/empty track or a
-  /// bare paused state) is NOT a source — that was the phantom-"Playing" bug.
+  /// bare paused state) is NOT a source - that was the phantom-"Playing" bug.
   bool get hasActiveStream =>
       transport == PlaybackState.playing ||
       (track != null &&

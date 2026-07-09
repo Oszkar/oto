@@ -2,13 +2,13 @@
 ///
 /// Commands update local household state **instantly** (optimistic), then fire
 /// the SOAP command and let the authoritative event reconcile. Volume drags are
-/// throttled (≤1 SOAP / 150 ms, trailing) plus one final send on release — the
+/// throttled (≤1 SOAP / 150 ms, trailing) plus one final send on release - the
 /// LAN-politeness non-negotiable: never one command per slider pixel.
 ///
 /// Reconciliation (shared via [_Reconciling]): a `CommandError_NotFound` means a
 /// stale identifier, so we re-discover; any other error rolls the optimistic
 /// value back. A *successful* no-op set emits no echo (Sonos suppresses
-/// unchanged values), so a standing optimistic value is correct — we **never**
+/// unchanged values), so a standing optimistic value is correct - we **never**
 /// revert for lack of an echo, only on a thrown error.
 library;
 
@@ -58,10 +58,10 @@ mixin _Reconciling {
     } on CommandError catch (e) {
       // Any thrown error means the optimistic guess didn't take, so undo it. A
       // *successful* no-op set emits no echo, so a standing optimistic value is
-      // correct — we roll back only on a thrown error, never for a missing echo.
+      // correct - we roll back only on a thrown error, never for a missing echo.
       rollback?.call();
       if (e is CommandError_NotFound) {
-        // Stale identifier — also re-discover so the id is refreshed (sonos-notes
+        // Stale identifier - also re-discover so the id is refreshed (sonos-notes
         // § Identifiers). Rolling back first means the view shows the last-known
         // value until the fresh topology re-seeds it via events, rather than a
         // wrong optimistic guess carried across re-discovery by coordinator.
@@ -213,7 +213,7 @@ class PlaybackController with _Reconciling {
 }
 
 /// Group form/break + group volume/mute commands. Form/break do NOT mutate
-/// membership optimistically — the topology event path (GroupMembership NOTIFY
+/// membership optimistically - the topology event path (GroupMembership NOTIFY
 /// → debounced topology re-pull) drives that update.
 class GroupingController with _Reconciling {
   GroupingController(this.ref, this.api) {

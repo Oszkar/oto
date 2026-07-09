@@ -1,4 +1,4 @@
-/// The accumulating household provider — the central state spine of the UI.
+/// The accumulating household provider - the central state spine of the UI.
 ///
 /// A keep-alive Notifier that seeds its skeleton from [discoveryProvider]
 /// (identity: rooms, groups, membership, coordinator) and folds the live
@@ -86,7 +86,7 @@ class HouseholdNotifier extends _$HouseholdNotifier {
   //
   // Unlike the optimistic setters above (which mirror a non-null event), these
   // restore a field to its PRE-gesture value, which may be `null` at cold-start
-  // — before any event has landed. The optimistic-event path can't express a
+  // - before any event has landed. The optimistic-event path can't express a
   // `null` (a `ChangeEventDto` always carries a concrete value), so rollback
   // folds through `copyWith` directly, whose sentinel form clears to `null`.
   // Without this a failed command on a never-yet-observed field would leave a

@@ -1,4 +1,4 @@
-//! v0.4 dogfood binary — subscribes to GENA property events on the
+//! v0.4 dogfood binary - subscribes to GENA property events on the
 //! current LAN and prints each to stdout as it arrives. Not a
 //! user-facing CLI; this is the long-running harness behind
 //! spec § 8.7–§ 8.9 (≥ 30 min idle, ≥ 30 min active, renewal cycle).
@@ -16,8 +16,8 @@
 //!   [<elapsed_s>] <Variant> <id> → <value>
 //!
 //! Streams:
-//!   - **stdout** — Volume / Mute / Playback / Track events.
-//!   - **stderr** — SubscriptionError / SubscriptionRecovered events
+//!   - **stdout** - Volume / Mute / Playback / Track events.
+//!   - **stderr** - SubscriptionError / SubscriptionRecovered events
 //!     (failure-flavored, routed to stderr so they're visible even
 //!     when stdout is redirected to a file) AND diagnostic startup /
 //!     idle messages. Event lines on either stream share the same
@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let start = Instant::now();
     loop {
-        // 60 s idle ping cadence — lets a long-running session show
+        // 60 s idle ping cadence - lets a long-running session show
         // "we're still alive" without spamming the log, and any
         // renewal-cycle anomaly (subscriptions silently dropping) shows
         // up as a sustained gap with no idle pings or events.
@@ -71,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[event-tail] {}s idle …", start.elapsed().as_secs());
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                eprintln!("[event-tail] sender dropped — exiting");
+                eprintln!("[event-tail] sender dropped - exiting");
                 break;
             }
         }

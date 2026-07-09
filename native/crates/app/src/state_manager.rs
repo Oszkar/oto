@@ -3,7 +3,7 @@
 //! `subscribe_change_events`. Read by `oto_app::speaker_state` (which
 //! bypasses `Wire::speaker_state` and reads directly from this cache).
 //!
-//! v0.5-readiness — per spec § 5.4 (lock-granularity audit at v0.4
+//! v0.5-readiness - per spec § 5.4 (lock-granularity audit at v0.4
 //! end): each cache is its own `RwLock<HashMap<…>>`. Write holds are
 //! short (one variant-dispatch in `apply_event`); reads are not
 //! contended with `SLOT` (commands go via `with_wire`, not via this
@@ -44,9 +44,9 @@ pub(crate) struct GroupCache {
 
 /// Per-group cached GroupRenderingControl values (v0.5.1). Distinct from the
 /// per-speaker `Volume`/`Mute` on `SpeakerCache` and from the transport/track
-/// on `GroupCache` — group volume/mute are their own evented properties. Kept
+/// on `GroupCache` - group volume/mute are their own evented properties. Kept
 /// in a separate cache (its own `RwLock`) so a group-volume drag's ~23 events
-/// don't contend with transport writes. Last-wins (no dedup — see the `apply`
+/// don't contend with transport writes. Last-wins (no dedup - see the `apply`
 /// arms): each event overwrites the prior value, matching per-speaker `Volume`.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GroupRenderCache {
@@ -93,12 +93,12 @@ pub struct StateManager {
     group_render: RwLock<HashMap<GroupId, GroupRenderCache>>,
     /// Speaker→group resolution used by the cache-backed
     /// `speaker_state`. Refreshed by `bump_clear_and_install` on every
-    /// successful `discover_with` — atomically with the generation bump +
+    /// successful `discover_with` - atomically with the generation bump +
     /// cache clear, so it is never momentarily empty while a wire is
     /// installed (which would surface as a spurious `speaker_state`
     /// NotFound; see that method).
     topology: RwLock<TopologyMaps>,
-    /// Generation counter — bumped by `discover_with` on every wire
+    /// Generation counter - bumped by `discover_with` on every wire
     /// replacement so the previous consumer loop (still draining the
     /// OLD wire's `Receiver`) can no-op its `apply_event_at_generation`
     /// writes after the bump. Monotonically increasing; starts at 0.
@@ -123,7 +123,7 @@ impl StateManager {
     }
 
     /// Generation-aware apply. No-op if `generation` doesn't match the
-    /// current generation — used by `subscribe_change_events` to drop
+    /// current generation - used by `subscribe_change_events` to drop
     /// in-flight writes from an old wire's consumer loop after a
     /// `discover_with` replacement.
     ///
@@ -187,7 +187,7 @@ impl StateManager {
                 let entry = guard.entry(group.clone()).or_default();
                 entry.track = Some(track.clone());
                 // Keep cached transport.current_track coherent with
-                // the dedicated `track` field — otherwise a
+                // the dedicated `track` field - otherwise a
                 // `speaker_state` read could surface a stale title
                 // on the transport while the freshest Track event
                 // sat in `entry.track`.
@@ -218,7 +218,7 @@ impl StateManager {
                 guard.entry(group.clone()).or_default().muted = Some(*muted);
             }
             // SubscriptionError / SubscriptionRecovered / TopologyChanged
-            // have no cache effect here — they're surface events. The Dart
+            // have no cache effect here - they're surface events. The Dart
             // TopologyController reacts to TopologyChanged by re-pulling
             // topology (v0.5: a debounced full re-discover, which
             // rebuilds this cache from scratch); nothing to apply here.
@@ -228,7 +228,7 @@ impl StateManager {
         }
     }
 
-    /// Apply a `ChangeEvent` to the cache unconditionally. Test-only —
+    /// Apply a `ChangeEvent` to the cache unconditionally. Test-only -
     /// pre-generation tests exercise the dispatch logic without
     /// threading a generation through every call. Production paths
     /// MUST use `apply_event_at_generation`.
@@ -270,7 +270,7 @@ impl StateManager {
     }
 
     /// Read a group's cached current track (None if no Track event
-    /// seen yet — distinct from `transport.current_track` so the
+    /// seen yet - distinct from `transport.current_track` so the
     /// reader can prefer the freshest source).
     pub fn track_of(&self, group: &GroupId) -> Option<Track> {
         self.groups
@@ -336,7 +336,7 @@ impl StateManager {
             .cloned()
     }
 
-    /// Read the cached state for `speaker`. Honest partial — fields
+    /// Read the cached state for `speaker`. Honest partial - fields
     /// for which no event has arrived yet (cold-start window, or the
     /// property never changed since subscribe) are `None`. Transport
     /// resolves via speaker → group lookup using the topology installed
@@ -374,7 +374,7 @@ impl StateManager {
         }
     }
 
-    /// Current generation counter — captured by
+    /// Current generation counter - captured by
     /// `subscribe_change_events` once per consumer loop. Reads use
     /// `Acquire` to pair with the `Release` store in `bump_and_clear`.
     pub fn current_generation(&self) -> u64 {
@@ -413,7 +413,7 @@ impl StateManager {
     pub fn bump_and_clear(&self) {
         // Order: bump first (Release), then clear. The Acquire-load
         // in `apply_event_at_generation` will see the bumped value
-        // first, fail its gen check, and skip the write entirely —
+        // first, fail its gen check, and skip the write entirely -
         // so it can't observe the half-cleared map mid-clear. Topology
         // is wiped along with the caches so a `discover_with` that
         // gets as far as bump_and_clear but doesn't reach the
@@ -437,13 +437,13 @@ impl StateManager {
     }
 
     /// Bump the generation, clear both property caches, AND install the
-    /// new topology — in one call — returning the generation this bumped
+    /// new topology - in one call - returning the generation this bumped
     /// to. This is the production wire-replacement path (`discover_with`).
     ///
     /// **Why fold the install into the bump** (vs. `bump_and_clear` then
     /// a separate `install_topology`): the two-step path left a window
     /// where the generation had bumped and topology was cleared to
-    /// *empty* but the new topology wasn't installed yet — while the OLD
+    /// *empty* but the new topology wasn't installed yet - while the OLD
     /// wire was still in the slot. A `speaker_state` landing in that
     /// window saw a present wire with empty topology and returned a
     /// spurious `NotFound` for a speaker that exists in both the old and
@@ -473,7 +473,7 @@ impl StateManager {
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
-        // Install the NEW topology directly — do NOT clear to empty
+        // Install the NEW topology directly - do NOT clear to empty
         // first, so a racing `speaker_state` never sees topology empty
         // while a wire is present.
         *self.topology.write().unwrap_or_else(|p| p.into_inner()) = build_topology_maps(snapshot);
@@ -481,7 +481,7 @@ impl StateManager {
     }
 
     /// Clear both caches AND topology WITHOUT bumping the generation.
-    /// Test-only affordance for `clear_slot()` — production code paths
+    /// Test-only affordance for `clear_slot()` - production code paths
     /// must use `bump_and_clear`.
     #[cfg(test)]
     pub(crate) fn clear(&self) {
@@ -808,7 +808,7 @@ mod tests {
 
         // OLD consumer captures its generation on entry.
         let old_gen = sm.current_generation();
-        // OLD consumer drains one event from the OLD wire — applies fine.
+        // OLD consumer drains one event from the OLD wire - applies fine.
         sm.apply_event_at_generation(
             old_gen,
             &ChangeEvent::Volume {
@@ -820,11 +820,11 @@ mod tests {
 
         // A new discover_with runs: bump + clear (per the new path).
         sm.bump_and_clear();
-        // NEW wire has not seeded yet — cache is empty.
+        // NEW wire has not seeded yet - cache is empty.
         assert!(sm.volume_of(&k).is_none());
 
         // OLD consumer's loop is still alive (Sender hasn't been
-        // dropped yet — slot replacement is the next step), so it
+        // dropped yet - slot replacement is the next step), so it
         // pulls one more leftover event from the OLD channel and
         // calls apply_event_at_generation with its CAPTURED old_gen.
         sm.apply_event_at_generation(
@@ -835,7 +835,7 @@ mod tests {
             },
         );
 
-        // The cache must STILL be empty — the stale apply is dropped.
+        // The cache must STILL be empty - the stale apply is dropped.
         assert!(
             sm.volume_of(&k).is_none(),
             "stale OLD-wire event must not repopulate cleared cache"
@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn speaker_state_returns_volume_and_mute_without_topology() {
-        // Per-speaker fields don't need topology — only `transport` does.
+        // Per-speaker fields don't need topology - only `transport` does.
         let sm = StateManager::new();
         let k = SpeakerId::new("RINCON_K");
         sm.apply_event(&ChangeEvent::Volume {
@@ -949,7 +949,7 @@ mod tests {
             Some(PlaybackState::Paused)
         );
 
-        // Dining should resolve to nothing — it's no longer in any group.
+        // Dining should resolve to nothing - it's no longer in any group.
         let st2 = sm.speaker_state(&SpeakerId::new("RINCON_D"));
         assert!(
             st2.transport.is_none(),
@@ -994,7 +994,7 @@ mod tests {
     }
 
     /// L5: `bump_clear_and_install` must bump the generation, clear the
-    /// property caches, AND install the new topology in one call — so a
+    /// property caches, AND install the new topology in one call - so a
     /// speaker present in both the old and new topology is NEVER seen as
     /// unknown (which would make `oto_app::speaker_state` return a
     /// spurious `NotFound`). Topology goes old → new directly; only the
@@ -1025,7 +1025,7 @@ mod tests {
         );
         assert!(
             sm.is_known_speaker(&k),
-            "topology installed in the SAME call — never empty, so no spurious NotFound (L5)"
+            "topology installed in the SAME call - never empty, so no spurious NotFound (L5)"
         );
     }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// The oto brand mark — the nested-rooms glyph.
+/// The oto brand mark - the nested-rooms glyph.
 ///
 /// Renders the bundled brand SVG, picking the black or white variant by the
 /// current [Brightness]. The SVGs are a faithful render of the design-system

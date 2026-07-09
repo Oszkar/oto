@@ -11,7 +11,7 @@ import '../../theme/oto_colors.dart';
 /// touch target clears the >=44px floor.
 ///
 /// [onChanged] fires continuously during a drag; [onChangeEnd] fires once on
-/// release. A null [onChanged] renders a disabled (non-interactive) slider —
+/// release. A null [onChanged] renders a disabled (non-interactive) slider -
 /// the idiomatic Material way to show a read-only/unknown value (e.g. a volume
 /// that hasn't been reported yet), rather than a draggable no-op.
 class OtoSlider extends StatelessWidget {
@@ -35,7 +35,7 @@ class OtoSlider extends StatelessWidget {
   /// Thin visual track height.
   static const double _trackHeight = 4;
 
-  /// Minimum tappable height — clears the 44px touch-target floor.
+  /// Minimum tappable height - clears the 44px touch-target floor.
   static const double _hitHeight = 44;
 
   /// Overlay radius; half of [_hitHeight] so the hit-slop fills the row.

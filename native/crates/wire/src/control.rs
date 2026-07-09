@@ -20,7 +20,7 @@ use sonos_api::{
 // ---------------------------------------------------------------------------
 
 /// Fetch + parse ZoneGroupTopology from one speaker IP. Household-global
-/// (`ServiceScope::PerNetwork`) — any working speaker answers for all.
+/// (`ServiceScope::PerNetwork`) - any working speaker answers for all.
 pub(crate) fn fetch_zone_group_state(
     client: &SonosClient,
     ip: &str,
@@ -258,7 +258,7 @@ pub(crate) fn map_transport_state(s: &str) -> Result<PlaybackState, WireError> {
 }
 
 // ---------------------------------------------------------------------------
-// SOAP command helpers — return () on success, WireError on failure
+// SOAP command helpers - return () on success, WireError on failure
 // ---------------------------------------------------------------------------
 
 pub(crate) fn soap_play(client: &SonosClient, addr: SocketAddr) -> Result<(), WireError> {
@@ -360,7 +360,7 @@ pub(crate) fn soap_speaker_state(
     };
 
     // GetTransportInfo + GetPositionInfo (combined into Option<TransportState>)
-    // Both calls go to the coordinator (transport_addr / tip — oto-core D2).
+    // Both calls go to the coordinator (transport_addr / tip - oto-core D2).
     let transport: Option<TransportState> = {
         let ti_op = av_transport::get_transport_info().build().ok();
         let pi_op = av_transport::get_position_info().build().ok();
@@ -455,7 +455,7 @@ pub(crate) fn soap_track_position(
 }
 
 // ---------------------------------------------------------------------------
-// Unit tests — LAN-free, pure helper coverage
+// Unit tests - LAN-free, pure helper coverage
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -668,7 +668,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // parse_track_didl — EXACT verbatim sample from the findings doc
+    // parse_track_didl - EXACT verbatim sample from the findings doc
     // -----------------------------------------------------------------------
 
     /// Verbatim DIDL-Lite sample captured from the playback spike;

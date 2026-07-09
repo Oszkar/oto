@@ -4,7 +4,7 @@
 //!     --test live_model_populate --run-ignored ignored-only --nocapture
 //!
 //! Verifies v0.5: `discover()` repopulates `SpeakerIdentity.model` from
-//! each speaker's `device_description.xml` (ZGT carries no model — D1).
+//! each speaker's `device_description.xml` (ZGT carries no model - D1).
 //! `refresh_topology()` shares the same path, so it's checked too.
 
 #![cfg(feature = "live-tests")]

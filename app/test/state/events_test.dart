@@ -49,7 +49,7 @@ class _DataDiscovery extends Discovery {
   Future<rust_api.Topology> build() async => _fakeTopology;
 }
 
-/// Discovery that never resolves — stays `AsyncLoading`, so `hasValue` is
+/// Discovery that never resolves - stays `AsyncLoading`, so `hasValue` is
 /// false and no wire is installed.
 class _LoadingDiscovery extends Discovery {
   @override
@@ -164,7 +164,7 @@ void main() {
 
       // Signal fires but the generation did NOT change (e.g. a failed install
       // that did not bump the Rust generation). Re-subscribing here would take
-      // the wire's one-shot receiver twice and strand the stream — so it must
+      // the wire's one-shot receiver twice and strand the stream - so it must
       // stay at one subscription.
       container.read(wireInstallSignalProvider.notifier).bump();
       await pumpEventQueue();

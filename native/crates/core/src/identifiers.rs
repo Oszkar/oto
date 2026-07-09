@@ -2,7 +2,7 @@
 //!
 //! All three IDs wrap a `String` to keep ergonomics close to Sonos's wire
 //! format (UPnP `RINCON_…` UUIDs and similar opaque tokens) while preventing
-//! accidental cross-use at the type level — a [`GroupId`] cannot be passed
+//! accidental cross-use at the type level - a [`GroupId`] cannot be passed
 //! where a [`SpeakerId`] is expected.
 
 use std::fmt;
@@ -52,7 +52,7 @@ opaque_id! {
 }
 
 opaque_id! {
-    /// Identifier for a Sonos zone group — the playback unit; one or more
+    /// Identifier for a Sonos zone group - the playback unit; one or more
     /// speakers playing the same audio in sync.
     GroupId
 }

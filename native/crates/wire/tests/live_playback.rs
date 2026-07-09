@@ -77,11 +77,11 @@ fn live_playback_round_trip() {
     let transport = state_before.transport.as_ref();
     match transport.map(|t| &t.state) {
         Some(oto_core::PlaybackState::Playing) => {
-            println!("transport: Playing — running pause→play round-trip");
+            println!("transport: Playing - running pause→play round-trip");
 
             w.pause(gid).expect("pause must succeed when Playing");
             // Capture post-pause state WITHOUT unwrapping, then restore
-            // immediately. `play` must run whenever `pause` succeeded —
+            // immediately. `play` must run whenever `pause` succeeded -
             // before any assertion or read failure can abort the test and
             // leave the user's speaker paused. Non-destructiveness depends
             // on this ordering (see the module header).
@@ -113,10 +113,10 @@ fn live_playback_round_trip() {
             );
         }
         Some(state) => {
-            println!("transport: {state:?} — skipping transport mutation (only safe when Playing)");
+            println!("transport: {state:?} - skipping transport mutation (only safe when Playing)");
         }
         None => {
-            println!("transport: None — speaker reported no transport state; skipping mutation");
+            println!("transport: None - speaker reported no transport state; skipping mutation");
         }
     }
 }

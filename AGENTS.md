@@ -141,7 +141,7 @@ Before claiming work is done:
 - Push back on security risk, architectural violations, over-engineering.
 - Correct first, agreeable second. No busywork docs/status files unless asked.
 - Persist until done or genuinely blocked; if blocked, say what you tried and what you need.
-- DO NOT use em-dashes (—), use regular hyphens (-) instead including in code, PR descriptions, everywhere.
+- DO NOT use em-dashes (-), use regular hyphens (-) instead including in code, PR descriptions, everywhere.
 - DO NOT use the ellipsis Unicode character at the end of sentences, use three periods (...) instead.
 - Avoid exposing project management jargon, task IDs, etc. into commit messages, PR titles, and publicly facing content (UI, changelog, etc.)
 - Soft wrapping is highly desired in markdown.

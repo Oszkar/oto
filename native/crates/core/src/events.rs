@@ -3,12 +3,12 @@
 //! variant; Mute / Playback / Track added in v0.4;
 //! `TopologyChanged` added in v0.5.
 //!
-//! Addressing — per spec § 4 "Concrete shapes":
+//! Addressing - per spec § 4 "Concrete shapes":
 //!   - `Volume` / `Mute`: per-speaker (`SpeakerId`).
 //!   - `Playback` / `Track`: per-group (`GroupId`).
 //!
 //! `SubscriptionError` / `SubscriptionRecovered` are in-band so the
-//! single FRB stream stays alive across recoverable upstream blips —
+//! single FRB stream stays alive across recoverable upstream blips -
 //! see FRB pre-check § 4.
 
 use crate::{
@@ -20,11 +20,11 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChangeEvent {
-    /// A speaker's volume changed (per-speaker — applies to one device).
+    /// A speaker's volume changed (per-speaker - applies to one device).
     Volume { speaker: SpeakerId, volume: Volume },
-    /// A speaker's mute state changed (per-speaker — applies to one device).
+    /// A speaker's mute state changed (per-speaker - applies to one device).
     Mute { speaker: SpeakerId, muted: bool },
-    /// A group's transport state changed (per-group — applies to all
+    /// A group's transport state changed (per-group - applies to all
     /// coordinator + member speakers in the group; see oto-core D2).
     Playback {
         group: GroupId,
@@ -33,11 +33,11 @@ pub enum ChangeEvent {
     /// A group's current track changed. Carries the full `Track` so the
     /// cache reader gets metadata + URI in one event.
     Track { group: GroupId, track: Track },
-    /// A group's volume changed (per-group — group-scoped, coordinator-routed,
+    /// A group's volume changed (per-group - group-scoped, coordinator-routed,
     /// like `Playback`/`Track`). Distinct from per-speaker `Volume`: this is
     /// the GroupRenderingControl group master level. Added in v0.5.1.
     GroupVolume { group: GroupId, volume: Volume },
-    /// A group's mute state changed (per-group — coordinator-routed). The
+    /// A group's mute state changed (per-group - coordinator-routed). The
     /// GroupRenderingControl group master mute, distinct from per-speaker
     /// `Mute`. Added in v0.5.1.
     GroupMute { group: GroupId, muted: bool },
@@ -46,14 +46,14 @@ pub enum ChangeEvent {
     /// "stale" for that speaker. Reserve `sink.add_error` for fatal
     /// stream termination (FRB pre-check § 4).
     SubscriptionError { speaker: SpeakerId, message: String },
-    /// A previously-erroring speaker is back online — its cache is
+    /// A previously-erroring speaker is back online - its cache is
     /// being refreshed via the next NOTIFY.
     SubscriptionRecovered { speaker: SpeakerId },
     /// The household topology changed (speakers regrouped). Payload-less:
     /// the Dart layer re-pulls authoritative topology on receipt (the
-    /// mechanism is a Dart concern — v0.5 uses a debounced full
+    /// mechanism is a Dart concern - v0.5 uses a debounced full
     /// re-discover; v0.6 may swap in a lighter refresh). The app-layer
-    /// cache applies this as a no-op — the re-pull drives the update.
+    /// cache applies this as a no-op - the re-pull drives the update.
     /// Added in v0.5.
     TopologyChanged,
 }

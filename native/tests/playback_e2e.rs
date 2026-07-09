@@ -1,6 +1,6 @@
 //! v0.2 PR B acceptance: command→state round-trips proven end-to-end without a LAN.
 //!
-//! Drives `oto_app`'s routing fns against the stateful `oto_mock::MockWire` —
+//! Drives `oto_app`'s routing fns against the stateful `oto_mock::MockWire` -
 //! the exact command pathway `api::play/pause/set_volume/…` will use in
 //! production.  Zero network; deterministic fixture; proves the domain layer
 //! (oto-app + oto-core + oto-mock) before the FRB DTO map is wired in.
@@ -23,7 +23,7 @@ use std::time::Duration;
 /// auto-emit).
 const DRAIN_WINDOW: Duration = Duration::from_millis(50);
 
-/// Comprehensive command→state round-trip — the PR B acceptance bar.
+/// Comprehensive command→state round-trip - the PR B acceptance bar.
 ///
 /// A single `#[test]` function that performs all assertions in sequence.
 /// This is intentional: `oto_app` stores its wire in a process-global
@@ -48,7 +48,7 @@ fn playback_command_state_round_trips() {
     assert_eq!(snap.speakers.len(), 3, "fixture must have 3 speakers");
     assert_eq!(snap.groups.len(), 2, "fixture must have 2 groups");
     // Drain subscribe_speakers seeds into the cache so post-discover
-    // reads see state — speaker_state reads the event-fed cache.
+    // reads see state - speaker_state reads the event-fed cache.
     process_pending_events(DRAIN_WINDOW);
 
     // ── (a) set_volume round-trip ─────────────────────────────────────────────
@@ -105,7 +105,7 @@ fn playback_command_state_round_trips() {
 
     // ── (f) unknown id → WireError::NotFound ─────────────────────────────────
     // The topology check inside oto_app::speaker_state preserves
-    // the v0.3 error contract — an unknown id maps to
+    // the v0.3 error contract - an unknown id maps to
     // NotFound, not to a silent all-None SpeakerState.
     let err_f = speaker_state(&ghost).expect_err("(f) unknown id must return Err");
     assert!(
@@ -124,7 +124,7 @@ fn playback_command_state_round_trips() {
         matches!(
             dto_g
                 .transport
-                .expect("(g) transport must be Some — coordinator was played")
+                .expect("(g) transport must be Some - coordinator was played")
                 .state,
             PlaybackStateDto::Playing
         ),

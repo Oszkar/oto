@@ -51,7 +51,7 @@ late _Counters _counters;
 
 /// Fake [Discovery] Notifier: `build()` returns the fixture (counting
 /// re-discovers / fallbacks), and `refreshTopology()` counts the fast-path and
-/// publishes a fresh `AsyncValue.data` — a real `discoveryProvider` transition,
+/// publishes a fresh `AsyncValue.data` - a real `discoveryProvider` transition,
 /// exactly like the production fast path. When `refreshThrows` is set it throws
 /// instead, so the controller's fallback to a full re-discover can be observed.
 class _FakeDiscovery extends Discovery {
@@ -68,7 +68,7 @@ class _FakeDiscovery extends Discovery {
       throw StateError('fast re-pull failed');
     }
     // Publishes a value-EQUAL Topology (the same const every time), so
-    // discoveryProvider does NOT transition — the exact case the fix handles.
+    // discoveryProvider does NOT transition - the exact case the fix handles.
     // Mirror Discovery._publishInstalledWire: bump the install signal so the
     // event stream re-keys against the new wire regardless.
     state = const AsyncValue.data(_fakeTopology);
@@ -81,7 +81,7 @@ class _FakeDiscovery extends Discovery {
 const _pastDebounce = Duration(milliseconds: 400);
 
 /// Per-test ceiling so a regression that hangs fails fast (not the default
-/// 30 s) — the controller's only timing is a 250 ms debounce.
+/// 30 s) - the controller's only timing is a 250 ms debounce.
 const _testTimeout = Timeout(Duration(seconds: 8));
 
 void main() {
@@ -112,7 +112,7 @@ void main() {
     tearDown(() {
       // Dispose the container FIRST so Riverpod cancels its stream
       // subscription + the controller's debounce timer (via onDispose);
-      // then close the (now unlistened) controller without awaiting —
+      // then close the (now unlistened) controller without awaiting -
       // awaiting an actively-subscribed broadcast close can stall.
       container.dispose();
       unawaited(events.close());
@@ -142,7 +142,7 @@ void main() {
       expect(
         _counters.builds,
         1,
-        reason: 'fast path used — no full re-discover (build) on the happy path',
+        reason: 'fast path used - no full re-discover (build) on the happy path',
       );
     }, timeout: _testTimeout);
 

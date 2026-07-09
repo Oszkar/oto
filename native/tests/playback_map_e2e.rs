@@ -2,7 +2,7 @@
 //! without a LAN.
 //!
 //! Drives `oto_app`'s command routing against the stateful `MockWire`, then
-//! crosses the **FRB DTO boundary** via `oto_native::map` — the exact
+//! crosses the **FRB DTO boundary** via `oto_native::map` - the exact
 //! representational map `api::speaker_state()` and `api::{play,pause,…}`
 //! apply (`WireError` → `CommandError`, `SpeakerState` → `SpeakerStateDto`).
 //! This realises plan deviation D2 for the v0.2 command surface: the e2e

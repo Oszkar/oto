@@ -1,4 +1,4 @@
-/// The "source" view-model — the central UI abstraction. A source is one
+/// The "source" view-model - the central UI abstraction. A source is one
 /// group that is currently playing (or has a track). Derived from a
 /// [Household] by [sourcesFromHousehold].
 library;

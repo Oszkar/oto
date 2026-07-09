@@ -13,7 +13,7 @@ import 'package:oto/src/ui/shell/oto_app.dart';
 /// only test that exercises the actual native artefact and its loader path.
 ///
 /// Not gated by CI today (Flutter's `integration_test` needs a display /
-/// device target — neither the `ubuntu-latest` CI runners nor any of the
+/// device target - neither the `ubuntu-latest` CI runners nor any of the
 /// matrix runs in `build.yml` are configured for that). Run manually via
 /// `just test-integration` against a connected device / desktop platform.
 /// Revisit gating when v0.6 lands real UI and the smoke earns its keep.

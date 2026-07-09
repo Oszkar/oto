@@ -1,4 +1,4 @@
-//! Throwaway diagnostic — NOT part of the product.
+//! Throwaway diagnostic - NOT part of the product.
 //!
 //! Confirms the sonos-sdk-discovery root cause: it binds the SSDP socket to
 //! `0.0.0.0`, so on a multi-NIC host the OS may egress the M-SEARCH
@@ -85,6 +85,6 @@ fn main() {
 
     println!("\n== {found} SSDP responder(s) on interface {bind_ip} ==");
     if found == 0 {
-        println!("   (none — wrong interface, or no Sonos reachable here)");
+        println!("   (none - wrong interface, or no Sonos reachable here)");
     }
 }

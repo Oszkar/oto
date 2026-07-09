@@ -12,13 +12,13 @@
 //! `--features live-tests` the binary prints a gating message and exits),
 //! matching the `ssdp_multicast_if_probe` example convention. It's an EXAMPLE (not a
 //! `tests/` integration test) so it can reach the crate's normal
-//! `[dependencies]` — `sonos_state` / `sonos_event_manager` — without any
+//! `[dependencies]` - `sonos_state` / `sonos_event_manager` - without any
 //! Cargo.toml change, and touches no production source. THROWAWAY: delete or
 //! fold once v0.5 topology events are implemented.
 //!
 //! KEY FINDING (read from SDK source 2026-05-30; this probe verifies it on
 //! hardware): the v0.5 plan's original assumption was wrong. There is no
-//! `ZoneGroupTopology` *property* to watch — `ZoneGroupTopology` is a
+//! `ZoneGroupTopology` *property* to watch - `ZoneGroupTopology` is a
 //! `Service`. Topology changes surface via the watchable property
 //! **`GroupMembership`** (`KEY = "group_membership"`,
 //! `SERVICE = ZoneGroupTopology`, `SCOPE = Speaker`). The SDK handles ZGT
@@ -71,7 +71,7 @@ fn main() {
     );
 
     // 2. Build the SDK stack directly (mirrors src/events.rs::spawn). We do
-    //    NOT use SonosWire's pump — it watches Volume/Mute/Playback/Track but
+    //    NOT use SonosWire's pump - it watches Volume/Mute/Playback/Track but
     //    not GroupMembership, which is exactly what this probe must observe.
     let devices: Vec<Device> = snap
         .speakers
@@ -167,7 +167,7 @@ fn main() {
     println!("\n=== probe done: {gm_count} group_membership event(s) observed ===");
     if gm_count == 0 {
         eprintln!(
-            "WARNING: no group_membership events seen — either no regroup happened, \
+            "WARNING: no group_membership events seen - either no regroup happened, \
              or ZGT NOTIFYs are not arriving. See sonos-notes § topology events."
         );
     }

@@ -1,10 +1,10 @@
 //! Own multi-interface SSDP. sonos-sdk's discovery bound 0.0.0.0 and
 //! failed on multi-NIC hosts (spike findings / tatimblin/sonos-sdk#76),
-//! which is why oto-wire runs its own SSDP — we enumerate interfaces,
+//! which is why oto-wire runs its own SSDP - we enumerate interfaces,
 //! bind each explicitly, AND pin each socket's outgoing multicast
 //! interface (`IP_MULTICAST_IF` via `set_multicast_if_v4`). Binding to a
 //! NIC's unicast address alone does NOT select the egress interface for a
-//! multicast datagram — the OS picks that from its multicast routing
+//! multicast datagram - the OS picks that from its multicast routing
 //! table (typically one default NIC), so without the pin every per-NIC
 //! M-SEARCH can leave the same adapter and speakers reachable only via
 //! another NIC never hear the query. The `examples/ssdp_multicast_if_probe`
@@ -13,7 +13,7 @@
 //! Discovery is two-phase: first send an M-SEARCH on *every* usable
 //! interface, then receive across *all* of them inside a single bounded
 //! deadline. Phase-2 multiplexing is done with `mio::Poll` so the wait is
-//! **collective** — a quiet socket cannot consume any of the deadline,
+//! **collective** - a quiet socket cannot consume any of the deadline,
 //! no matter how many quiet sockets sit between us and a responder. The
 //! previous design used per-socket blocking reads with a 250 ms read
 //! timeout, so a host that enumerated 13+ quiet adapters before the
@@ -77,8 +77,8 @@ fn usable_ipv4() -> Result<Vec<Ipv4Addr>, WireError> {
 ///
 /// Pinning the egress interface is the actual multi-NIC fix
 /// ([`tatimblin/sonos-sdk#76`]): binding to a NIC's unicast address does
-/// NOT, on its own, decide which interface a multicast datagram leaves by
-/// — the OS chooses that from its multicast routing table (usually one
+/// NOT, on its own, decide which interface a multicast datagram leaves by -
+/// the OS chooses that from its multicast routing table (usually one
 /// default NIC). Without the pin, every per-NIC M-SEARCH can egress the
 /// same adapter and a speaker reachable only via a different NIC is never
 /// queried. `std::net` exposes no setter for this, hence `socket2`.
@@ -112,7 +112,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
     let mut buf = [0u8; 2048];
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
         // EINTR is benign on platforms where mio doesn't already swallow it
-        // (some BSDs / older platforms) — retry within the bounded window.
+        // (some BSDs / older platforms) - retry within the bounded window.
         // Any other error means the poller itself is wedged (e.g. EBADF
         // after a registration we no longer own); retrying would
         // tight-spin until the deadline and silently mask the failure.
@@ -138,21 +138,21 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
                 match sockets[idx].recv_from(&mut buf) {
                     Ok((n, _)) => {
                         // TODO(v0.7): accepted-risk hardening. We take any
-                        // datagram carrying a LOCATION header — we do NOT
+                        // datagram carrying a LOCATION header - we do NOT
                         // validate the SSDP status line or `ST`, match the
                         // LOCATION host against the responder's source
                         // address (discarded as `_` here), or cap the
                         // candidate count. A hostile device already on the
                         // user's LAN could therefore inject a LOCATION that
                         // points discovery's follow-up GetZoneGroupState
-                        // SOAP at an arbitrary host (port 1400 only — the
+                        // SOAP at an arbitrary host (port 1400 only - the
                         // LOCATION port is ignored downstream). Accepted for
                         // v0.5: LAN-local threat, blast radius is junk SOAP
                         // attempts (a non-Sonos host fails to parse and is
                         // skipped), and `discover()` stops at the first
                         // responder that returns a parseable topology.
                         // Harden in v0.7 (validate 200 + `ST`, require the
-                        // LOCATION host == source IP, cap candidates) —
+                        // LOCATION host == source IP, cap candidates) -
                         // wants a hardware re-validation pass on the LAN.
                         // The candidate cap also bounds an all-fail
                         // amplification: when NO candidate returns a parseable
@@ -178,7 +178,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
 /// Two-phase, so that **every** usable NIC is actually searched within a
 /// single bounded window (the prior per-interface sequential design blocked
 /// the recv loop on the first bindable+sendable socket until the global
-/// deadline, so interfaces #2..N were never searched — defeating multi-NIC
+/// deadline, so interfaces #2..N were never searched - defeating multi-NIC
 /// discovery on a host that enumerates a WSL/Hyper-V/VPN vEthernet first):
 ///
 /// - **Phase 1 (send-all, non-blocking):** bind one non-blocking UDP
@@ -186,7 +186,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
 ///   pinned to that NIC (see `bind_multicast_sender`), register it with
 ///   the shared `Poll`, and send a ZonePlayer M-SEARCH on each. Interfaces
 ///   that cannot be set up or cannot egress multicast are skipped; only
-///   the case where *every* interface fails is fatal — surfaced as
+///   the case where *every* interface fails is fatal - surfaced as
 ///   `WireError::Network` with the last underlying cause so a local
 ///   stack/socket failure is not misreported as `NoDevicesFound`.
 /// - **Phase 2 (recv-all, collective):** wait on all sockets via
@@ -213,13 +213,13 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
     // Distinct from the "no usable IPv4 interface" branch: we DID find
     // interfaces, but each individual bind/send/register may fail (e.g. a
     // virtual adapter with no route to 239.x). Per-interface failure is
-    // non-fatal — we want to try the rest. We retain the last underlying
+    // non-fatal - we want to try the rest. We retain the last underlying
     // error so the all-failed case surfaces it (rather than the caller
     // mapping `Ok(vec![])` to `NoDevicesFound`, which falsely implies the
     // LAN is empty).
     let mut last_err: Option<String> = None;
 
-    // Phase 1 — bind + register + send on ALL usable interfaces.
+    // Phase 1 - bind + register + send on ALL usable interfaces.
     for ip in ifaces {
         let mut sock = match bind_multicast_sender(ip) {
             Ok(s) => s,
@@ -253,7 +253,7 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
         )));
     }
 
-    // Phase 2 — receive across ALL sockets until the single deadline.
+    // Phase 2 - receive across ALL sockets until the single deadline.
     let found = collect_until(&mut poll, &sockets, deadline);
     Ok(found.into_iter().collect())
 }
@@ -320,11 +320,11 @@ mod tests {
     /// the global deadline, so a second interface's reply was never read.
     /// `collect_until` must surface replies from *both* sockets.
     ///
-    /// Localhost only (127.0.0.1) — NOT the Sonos LAN, so allowed in
+    /// Localhost only (127.0.0.1) - NOT the Sonos LAN, so allowed in
     /// sandbox/CI per AGENTS.md §5. The mio recv path returns the
     /// moment either socket has data; the only real latency is the
     /// sender's 50 ms inter-send delay. The test's deadline is its
-    /// effective wall-time cap — 400 ms comfortably covers 50 ms of
+    /// effective wall-time cap - 400 ms comfortably covers 50 ms of
     /// delay plus scheduler jitter while staying well under the 1 s gate.
     #[test]
     fn collect_until_round_robins_across_all_sockets() {
@@ -367,7 +367,7 @@ mod tests {
     /// Regression guard for the "wall time stays O(timeout)" contract: a
     /// socket that only ever times out (nothing is ever sent to it) must
     /// not push `collect_until` meaningfully past its deadline. With the
-    /// mio path the wait is collective — `poll()` returns the moment the
+    /// mio path the wait is collective - `poll()` returns the moment the
     /// deadline elapses with no work to do, so the overshoot is bounded
     /// by scheduler granularity rather than any per-socket timeout.
     #[test]
@@ -404,7 +404,7 @@ mod tests {
     /// timeout. The test uses a 600 ms deadline so a regression to the
     /// old design (which would block for at least 13 × 250 ms = 3.25 s
     /// before reaching the responder) would actually time out the
-    /// assertion. Localhost only — allowed in sandbox/CI per AGENTS.md §5.
+    /// assertion. Localhost only - allowed in sandbox/CI per AGENTS.md §5.
     #[test]
     fn collect_until_handles_many_quiet_sockets() {
         use std::thread;
