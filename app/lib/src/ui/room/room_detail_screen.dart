@@ -68,30 +68,32 @@ class RoomDetailScreen extends ConsumerWidget {
             hostId: editorHost,
           ),
           Expanded(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Space.screen18,
-                  Space.gutter12,
-                  Space.screen18,
-                  Space.section22,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _NowPlayingCard(
-                      speakerId: speakerId,
-                      gid: gid,
-                      group: group,
-                      online: room.online,
-                    ),
-                    const SizedBox(height: Space.screen18),
-                    _VolumeRow(
-                      speakerId: speakerId,
-                      volume: room.volume,
-                      online: room.online,
-                    ),
-                  ],
+            child: Scrollbar(
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Space.screen18,
+                    Space.gutter12,
+                    Space.screen18,
+                    Space.section22,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _NowPlayingCard(
+                        speakerId: speakerId,
+                        gid: gid,
+                        group: group,
+                        online: room.online,
+                      ),
+                      const SizedBox(height: Space.screen18),
+                      _VolumeRow(
+                        speakerId: speakerId,
+                        volume: room.volume,
+                        online: room.online,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -237,7 +239,10 @@ class _NowPlayingCard extends ConsumerWidget {
                 : () => ctrl.previous(gid),
             icon: OtoIcon('prev', size: 18, color: oto.ink),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            constraints: const BoxConstraints(
+              minWidth: Sizes.touchTarget44,
+              minHeight: Sizes.touchTarget44,
+            ),
           ),
           IconButton(
             key: Key('room-detail-play-$speakerId'),
@@ -250,7 +255,10 @@ class _NowPlayingCard extends ConsumerWidget {
                   ),
             icon: OtoIcon(playing ? 'pause' : 'play', size: 22, color: oto.ink),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            constraints: const BoxConstraints(
+              minWidth: Sizes.touchTarget44,
+              minHeight: Sizes.touchTarget44,
+            ),
           ),
           IconButton(
             key: Key('room-detail-next-$speakerId'),
@@ -258,7 +266,10 @@ class _NowPlayingCard extends ConsumerWidget {
             onPressed: (gid == null || !online) ? null : () => ctrl.next(gid),
             icon: OtoIcon('next', size: 18, color: oto.ink),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            constraints: const BoxConstraints(
+              minWidth: Sizes.touchTarget44,
+              minHeight: Sizes.touchTarget44,
+            ),
           ),
         ],
       ),

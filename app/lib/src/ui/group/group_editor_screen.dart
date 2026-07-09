@@ -68,21 +68,23 @@ class GroupEditorBody extends ConsumerWidget {
           onSave: () => _onSave(context, ref, currentMembers),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: roomList.length,
-            itemBuilder: (context, i) {
-              final room = roomList[i];
-              return _RoomRow(
-                room: room,
-                hostId: hostId,
-                hostGroup: hostGroup,
-                selected: selection.contains(room.id),
-                hasConflict: conflicts.contains(room.id),
-                onTap: () => ref
-                    .read(groupEditorSelectionProvider(hostId).notifier)
-                    .toggle(room.id),
-              );
-            },
+          child: Scrollbar(
+            child: ListView.builder(
+              itemCount: roomList.length,
+              itemBuilder: (context, i) {
+                final room = roomList[i];
+                return _RoomRow(
+                  room: room,
+                  hostId: hostId,
+                  hostGroup: hostGroup,
+                  selected: selection.contains(room.id),
+                  hasConflict: conflicts.contains(room.id),
+                  onTap: () => ref
+                      .read(groupEditorSelectionProvider(hostId).notifier)
+                      .toggle(room.id),
+                );
+              },
+            ),
           ),
         ),
         _Footer(
@@ -304,101 +306,104 @@ class _RoomRow extends StatelessWidget {
       }
     }
 
-    return GestureDetector(
-      key: Key('group-row-${room.id}'),
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Space.screen18,
-          Space.xs4,
-          Space.screen18,
-          Space.xs4,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Space.screen18,
+        Space.xs4,
+        Space.screen18,
+        Space.xs4,
+      ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: selected ? oto.accentSoft : oto.surface,
+          border: Border.all(
+            color: selected ? oto.accent : oto.line,
+            width: 1.2,
+          ),
+          borderRadius: BorderRadius.circular(Radius_.card16 - 2),
         ),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.symmetric(
-            horizontal: Space.card14,
-            vertical: Space.gutter12,
-          ),
-          decoration: BoxDecoration(
-            color: selected ? oto.accentSoft : oto.surface,
-            border: Border.all(
-              color: selected ? oto.accent : oto.line,
-              width: 1.2,
+        child: InkWell(
+          key: Key('group-row-${room.id}'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Radius_.card16 - 2),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Space.card14,
+              vertical: Space.gutter12,
             ),
-            borderRadius: BorderRadius.circular(Radius_.card16 - 2),
-          ),
-          child: Row(
-            children: [
-              // Checkbox glyph: accent-filled when selected, outline when not.
-              SizedBox(
-                key: Key('group-check-${room.id}'),
-                width: 20,
-                height: 20,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: selected ? oto.accent : Colors.transparent,
-                    border: Border.all(
-                      color: selected ? oto.accent : oto.lineStrong,
-                      width: 1.5,
+            child: Row(
+              children: [
+                // Checkbox glyph: accent-filled when selected, outline when not.
+                SizedBox(
+                  key: Key('group-check-${room.id}'),
+                  width: 20,
+                  height: 20,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: selected ? oto.accent : Colors.transparent,
+                      border: Border.all(
+                        color: selected ? oto.accent : oto.lineStrong,
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(Radius_.xs4),
                     ),
-                    borderRadius: BorderRadius.circular(Radius_.xs4),
+                    child: selected
+                        ? Center(
+                            child: OtoIcon(
+                              'check',
+                              size: 12,
+                              color: oto.onAccent,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
-                  child: selected
-                      ? Center(
-                          child: OtoIcon(
-                            'check',
-                            size: 12,
-                            color: oto.onAccent,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
                 ),
-              ),
-              const SizedBox(width: Space.gutter12),
-              OtoIcon(
-                room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
-                size: 18,
-                color: oto.ink2,
-              ),
-              const SizedBox(width: Space.gutter12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            room.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyles.titleCard.copyWith(
-                              fontWeight: isHost
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
+                const SizedBox(width: Space.gutter12),
+                OtoIcon(
+                  room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
+                  size: 18,
+                  color: oto.ink2,
+                ),
+                const SizedBox(width: Space.gutter12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              room.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyles.titleCard.copyWith(
+                                fontWeight: isHost
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                        if (isHost) ...[
-                          const SizedBox(width: Space.md8),
-                          _HostBadge(oto: oto),
+                          if (isHost) ...[
+                            const SizedBox(width: Space.md8),
+                            _HostBadge(oto: oto),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyles.caption.copyWith(color: subColor),
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        subText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.caption.copyWith(color: subColor),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -52,23 +52,25 @@ class NowPlayingBody extends ConsumerWidget {
       groupId: groupId,
       onDismiss: onDismiss,
       child: Expanded(
-        child: SingleChildScrollView(
-          child: Padding(
-            // JSX content inset `12px 24px 16px`.
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _art(context, group),
-                const SizedBox(height: Space.screen18),
-                _trackInfo(context, group),
-                const SizedBox(height: Space.screen18),
-                _progress(context, ref),
-                const SizedBox(height: Space.screen18),
-                _transport(context, ref, group),
-                const SizedBox(height: Space.screen18),
-                _volumeSection(context, ref, group),
-              ],
+        child: Scrollbar(
+          child: SingleChildScrollView(
+            child: Padding(
+              // JSX content inset `12px 24px 16px`.
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _art(context, group),
+                  const SizedBox(height: Space.screen18),
+                  _trackInfo(context, group),
+                  const SizedBox(height: Space.screen18),
+                  _progress(context, ref),
+                  const SizedBox(height: Space.screen18),
+                  _transport(context, ref, group),
+                  const SizedBox(height: Space.screen18),
+                  _volumeSection(context, ref, group),
+                ],
+              ),
             ),
           ),
         ),
