@@ -25,14 +25,31 @@ import '../widgets/pane_dismiss.dart';
 /// [MembershipDiff] and fires [GroupingController.joinGroup] /
 /// [GroupingController.leaveGroup] per the diff, then pops. Ungroup-all first
 /// asks for confirmation, then leaves every non-host current member and pops.
-class GroupEditorBody extends ConsumerWidget {
+class GroupEditorBody extends ConsumerStatefulWidget {
   const GroupEditorBody({super.key, required this.hostId, this.onDismiss});
 
   final String hostId;
   final VoidCallback? onDismiss;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GroupEditorBody> createState() => _GroupEditorBodyState();
+}
+
+class _GroupEditorBodyState extends ConsumerState<GroupEditorBody> {
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane) for the app-wide
+  // PrimaryScrollController - see responsive_pop.dart's sibling fix.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hostId = widget.hostId;
     final household = ref.watch(householdProvider);
     final selection = ref.watch(groupEditorSelectionProvider(hostId));
 
@@ -64,12 +81,14 @@ class GroupEditorBody extends ConsumerWidget {
         _Header(
           hostId: hostId,
           selectedCount: selection.length,
-          onDismiss: onDismiss,
-          onSave: () => _onSave(context, ref, currentMembers),
+          onDismiss: widget.onDismiss,
+          onSave: () => _onSave(context, currentMembers),
         ),
         Expanded(
           child: Scrollbar(
+            controller: _scrollController,
             child: ListView.builder(
+              controller: _scrollController,
               itemCount: roomList.length,
               itemBuilder: (context, i) {
                 final room = roomList[i];
@@ -89,17 +108,14 @@ class GroupEditorBody extends ConsumerWidget {
         ),
         _Footer(
           canUngroupAll: currentMembers.any((member) => member != hostId),
-          onUngroupAll: () => _confirmUngroupAll(context, ref, currentMembers),
+          onUngroupAll: () => _confirmUngroupAll(context, currentMembers),
         ),
       ],
     );
   }
 
-  void _onSave(
-    BuildContext context,
-    WidgetRef ref,
-    Set<String> currentMembers,
-  ) {
+  void _onSave(BuildContext context, Set<String> currentMembers) {
+    final hostId = widget.hostId;
     final selection = ref.read(groupEditorSelectionProvider(hostId));
     final diff = diffMembership(
       host: hostId,
@@ -121,11 +137,8 @@ class GroupEditorBody extends ConsumerWidget {
     Navigator.of(context).maybePop();
   }
 
-  void _onUngroupAll(
-    BuildContext context,
-    WidgetRef ref,
-    Set<String> currentMembers,
-  ) {
+  void _onUngroupAll(BuildContext context, Set<String> currentMembers) {
+    final hostId = widget.hostId;
     final grouping = ref.read(groupingControllerProvider);
     for (final member in currentMembers) {
       if (member == hostId) continue;
@@ -136,10 +149,11 @@ class GroupEditorBody extends ConsumerWidget {
 
   Future<void> _confirmUngroupAll(
     BuildContext context,
-    WidgetRef ref,
     Set<String> currentMembers,
   ) async {
-    final roomsToUngroup = currentMembers.where((m) => m != hostId).length;
+    final roomsToUngroup = currentMembers
+        .where((m) => m != widget.hostId)
+        .length;
     if (roomsToUngroup == 0) return;
 
     final confirmed = await showModalBottomSheet<bool>(
@@ -148,7 +162,7 @@ class GroupEditorBody extends ConsumerWidget {
     );
     if (!context.mounted || confirmed != true) return;
 
-    _onUngroupAll(context, ref, currentMembers);
+    _onUngroupAll(context, currentMembers);
   }
 }
 

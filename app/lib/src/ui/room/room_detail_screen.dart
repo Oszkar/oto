@@ -18,14 +18,31 @@ import '../widgets/oto_slider.dart';
 /// kebab that opens the group editor seeded with this room.
 ///
 /// Backend-true: no EQ / TV / System sections.
-class RoomDetailScreen extends ConsumerWidget {
+class RoomDetailScreen extends ConsumerStatefulWidget {
   const RoomDetailScreen({super.key, required this.speakerId});
 
   final String speakerId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RoomDetailScreen> createState() => _RoomDetailScreenState();
+}
+
+class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane) for the app-wide
+  // PrimaryScrollController - see responsive_pop.dart's sibling fix.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (context.checkResponsivePop()) return const SizedBox.shrink();
+    final speakerId = widget.speakerId;
     final room = ref.watch(householdProvider.select((h) => h.rooms[speakerId]));
 
     if (room == null) {
@@ -69,7 +86,9 @@ class RoomDetailScreen extends ConsumerWidget {
           ),
           Expanded(
             child: Scrollbar(
+              controller: _scrollController,
               child: SingleChildScrollView(
+                controller: _scrollController,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
                     Space.screen18,
@@ -153,7 +172,7 @@ class RoomDetailScreen extends ConsumerWidget {
           ),
           if (showMenu)
             _KebabButton(
-              speakerId: speakerId,
+              speakerId: widget.speakerId,
               hostId: hostId,
               memberCount: memberCount,
             ),

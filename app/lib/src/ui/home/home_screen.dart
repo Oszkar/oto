@@ -73,16 +73,32 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _HomeContent extends ConsumerWidget {
+class _HomeContent extends ConsumerStatefulWidget {
   const _HomeContent({required this.household, this.banner});
 
   final Household household;
   final Widget? banner;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends ConsumerState<_HomeContent> {
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane) for the app-wide
+  // PrimaryScrollController - see responsive_pop.dart's sibling fix.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final layout = ref.watch(settingsProvider.select((s) => s.layout));
-    final groups = _sortedGroups(household);
+    final groups = _sortedGroups(widget.household);
     final hasActiveStream = groups.any((g) => g.hasActiveStream);
     // On wide the persistent detail pane replaces the floating strip; only the
     // phone layout keeps the strip (and reserves bottom room for it).
@@ -96,10 +112,12 @@ class _HomeContent extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const HomeHeader(),
-            ?banner,
+            ?widget.banner,
             Expanded(
               child: Scrollbar(
+                controller: _scrollController,
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   // Bottom padding leaves room for the floating strip so the
                   // last card never hides behind it (phone only).
                   padding: EdgeInsets.fromLTRB(

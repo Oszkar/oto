@@ -12,10 +12,26 @@ import 'device_list.dart';
 /// wraps this for the phone route, and on wide layouts the same body renders
 /// inside a centered dialog. The header dismiss control is a [PaneDismiss]
 /// driven by [onDismiss].
-class SettingsBody extends StatelessWidget {
+class SettingsBody extends StatefulWidget {
   const SettingsBody({super.key, this.onDismiss});
 
   final VoidCallback? onDismiss;
+
+  @override
+  State<SettingsBody> createState() => _SettingsBodyState();
+}
+
+class _SettingsBodyState extends State<SettingsBody> {
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane) for the app-wide
+  // PrimaryScrollController - see responsive_pop.dart's sibling fix.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +48,7 @@ class SettingsBody extends StatelessWidget {
           child: Row(
             children: [
               PaneDismiss(
-                onDismiss: onDismiss,
+                onDismiss: widget.onDismiss,
                 icon: 'chevronLeft',
                 tooltip: 'Back',
                 iconSize: 20, // preserve the pre-split OtoIcon default size
@@ -45,7 +61,9 @@ class SettingsBody extends StatelessWidget {
         ),
         Expanded(
           child: Scrollbar(
+            controller: _scrollController,
             child: SingleChildScrollView(
+              controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(
                 Space.screen18,
                 0,

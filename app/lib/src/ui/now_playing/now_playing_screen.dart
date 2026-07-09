@@ -27,33 +27,53 @@ import '../widgets/pane_dismiss.dart';
 /// controls. It is fed by [nowPlayingPositionProvider], which reads
 /// `track_position` (GetPositionInfo SOAP) for the real mid-track position and
 /// duration, then ticks locally at ~500 ms. No seek - there is no seek backend.
-class NowPlayingBody extends ConsumerWidget {
+class NowPlayingBody extends ConsumerStatefulWidget {
   const NowPlayingBody({super.key, required this.groupId, this.onDismiss});
 
   final String groupId;
   final VoidCallback? onDismiss;
 
+  @override
+  ConsumerState<NowPlayingBody> createState() => _NowPlayingBodyState();
+}
+
+class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
   /// Upper bound on the album-art side, so it stays a comfortable square on
   /// wide panes and doesn't balloon on large windows.
   static const double _artMax = 320;
 
+  // Own controller so this scrollable never contends with another primary
+  // scrollable (e.g. the wide NowPlayingPane sitting alongside Home's own
+  // list) for the app-wide PrimaryScrollController - see responsive_pop.dart's
+  // sibling fix.
+  final _scrollController = ScrollController();
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupId = widget.groupId;
     final group = ref.watch(householdProvider.select((h) => h.groups[groupId]));
     if (group == null) {
       return _Header(
         groupId: groupId,
-        onDismiss: onDismiss,
+        onDismiss: widget.onDismiss,
         child: const SizedBox.shrink(),
       );
     }
 
     return _Header(
       groupId: groupId,
-      onDismiss: onDismiss,
+      onDismiss: widget.onDismiss,
       child: Expanded(
         child: Scrollbar(
+          controller: _scrollController,
           child: SingleChildScrollView(
+            controller: _scrollController,
             child: Padding(
               // JSX content inset `12px 24px 16px`.
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
@@ -64,11 +84,11 @@ class NowPlayingBody extends ConsumerWidget {
                   const SizedBox(height: Space.screen18),
                   _trackInfo(context, group),
                   const SizedBox(height: Space.screen18),
-                  _progress(context, ref),
+                  _progress(context, ref, groupId),
                   const SizedBox(height: Space.screen18),
-                  _transport(context, ref, group),
+                  _transport(context, ref, group, groupId),
                   const SizedBox(height: Space.screen18),
-                  _volumeSection(context, ref, group),
+                  _volumeSection(context, ref, group, groupId),
                 ],
               ),
             ),
@@ -120,7 +140,7 @@ class NowPlayingBody extends ConsumerWidget {
     );
   }
 
-  Widget _progress(BuildContext context, WidgetRef ref) {
+  Widget _progress(BuildContext context, WidgetRef ref, String groupId) {
     final oto = context.oto;
     final p = ref.watch(nowPlayingPositionProvider(groupId));
     final dur = p.duration;
@@ -169,7 +189,12 @@ class NowPlayingBody extends ConsumerWidget {
   }
 
   /// prev / play-pause / next. No shuffle or repeat (backend-true: §7).
-  Widget _transport(BuildContext context, WidgetRef ref, GroupState group) {
+  Widget _transport(
+    BuildContext context,
+    WidgetRef ref,
+    GroupState group,
+    String groupId,
+  ) {
     final oto = context.oto;
     final playing = group.transport == PlaybackState.playing;
     final ctrl = ref.read(playbackControllerProvider);
@@ -215,7 +240,12 @@ class NowPlayingBody extends ConsumerWidget {
 
   /// Group-master volume slider plus per-room READ-OUTS (the JSX shows level
   /// labels "Living Room · 42", not per-room sliders, so these are read-only).
-  Widget _volumeSection(BuildContext context, WidgetRef ref, GroupState group) {
+  Widget _volumeSection(
+    BuildContext context,
+    WidgetRef ref,
+    GroupState group,
+    String groupId,
+  ) {
     final oto = context.oto;
     final hasVolume = group.groupVolume != null;
     final value = (group.groupVolume ?? 0) / 100;
