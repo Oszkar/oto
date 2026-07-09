@@ -40,9 +40,10 @@ class GroupCard extends ConsumerWidget {
 
     final canResume = group.hasActiveStream;
     final playing = group.transport == PlaybackState.playing;
-    // On wide the card body is a select-in-place target for the detail pane, and
-    // the selected group is accent-bordered. On phone the body is not tappable
-    // (the inner transport/menu buttons keep their own hits either way).
+    // On wide the header is a select-in-place target for the detail pane, and
+    // the selected group is accent-bordered. On phone it opens Now Playing.
+    // Only the header is tappable - the volume section below keeps its own
+    // slider hit targets, matching RoomCard/RoomRow's tap scoping.
     final wide = context.isWide;
     final selected = wide && ref.watch(resolvedSourceProvider) == groupId;
 
@@ -53,16 +54,18 @@ class GroupCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(Radius_.card16),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => openSource(context, ref, groupId),
-        borderRadius: BorderRadius.circular(Radius_.card16 - 1),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(context, ref, group, canResume, playing),
-            _volumeSection(context, ref, group),
-          ],
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => openSource(context, ref, groupId),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(Radius_.card16 - 1),
+            ),
+            child: _header(context, ref, group, canResume, playing),
+          ),
+          _volumeSection(context, ref, group),
+        ],
       ),
     );
   }
@@ -344,7 +347,7 @@ class GroupCard extends ConsumerWidget {
         key: Key('group-more-$groupId'),
         onTap: () => openGroupEditor(context, coordinatorId),
         child: Container(
-          height: 44,
+          height: Sizes.touchTarget44,
           alignment: Alignment.centerLeft,
           child: Row(
             mainAxisSize: MainAxisSize.min,

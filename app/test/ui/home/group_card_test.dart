@@ -6,6 +6,7 @@ import 'package:oto/src/state/model/room_state.dart';
 import 'package:oto/src/state/model/track.dart';
 import 'package:oto/src/ui/group/group_editor_screen.dart';
 import 'package:oto/src/ui/home/group_card.dart';
+import 'package:oto/src/ui/now_playing/now_playing_screen.dart';
 import 'package:oto/src/ui/widgets/oto_slider.dart';
 
 import '_fixtures.dart';
@@ -253,6 +254,25 @@ void main() {
 
       expect(find.byType(GroupEditorScreen), findsNothing);
       expect(h.calls, contains('togglePlay(G,playing)'));
+    },
+  );
+
+  testWidgets(
+    'tapping the volume section on phone does not navigate to Now Playing',
+    (t) async {
+      // Regression: the header's select/open InkWell must not extend over the
+      // volume section, or a tap meant for a slider (or a miss next to one)
+      // pushes NowPlayingScreen instead of adjusting volume.
+      final h = wrap(
+        const GroupCard(groupId: 'G'),
+        household: groupHousehold(2),
+      );
+      await t.pumpWidget(h.widget);
+
+      await t.tap(find.text('ROOM LEVELS'));
+      await t.pumpAndSettle();
+
+      expect(find.byType(NowPlayingScreen), findsNothing);
     },
   );
 }
