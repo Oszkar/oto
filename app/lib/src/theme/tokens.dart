@@ -41,6 +41,13 @@ abstract final class Radius_ {
   static const double pill999 = 999;
 }
 
+/// Minimum interactive hit-target sizes.
+abstract final class Sizes {
+  /// The a11y minimum tap-target dimension for small controls (icon buttons,
+  /// swatches) that would otherwise render smaller than this.
+  static const double touchTarget44 = 44;
+}
+
 /// The oto type scale, as ready-to-use [TextStyle]s on the Geist family.
 ///
 /// Tracking is converted from `em` to logical px (`size * em`) because Flutter's

@@ -132,8 +132,8 @@ class _AccentSwatch extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Container(
-        width: 44,
-        height: 44,
+        width: Sizes.touchTarget44,
+        height: Sizes.touchTarget44,
         alignment: Alignment.center,
         child: FocusableActionDetector(
           shortcuts: const {
@@ -153,8 +153,8 @@ class _AccentSwatch extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: onTap,
             child: Container(
-              width: 44,
-              height: 44,
+              width: Sizes.touchTarget44,
+              height: Sizes.touchTarget44,
               alignment: Alignment.center,
               child: Container(
                 width: 32,

@@ -157,8 +157,8 @@ class _GearButton extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(Radius_.art10),
           child: Container(
-            width: 44,
-            height: 44,
+            width: Sizes.touchTarget44,
+            height: Sizes.touchTarget44,
             decoration: BoxDecoration(
               border: Border.all(color: oto.line),
               borderRadius: BorderRadius.circular(Radius_.art10),
