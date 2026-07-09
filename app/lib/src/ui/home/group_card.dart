@@ -46,25 +46,22 @@ class GroupCard extends ConsumerWidget {
     final wide = context.isWide;
     final selected = wide && ref.watch(resolvedSourceProvider) == groupId;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+    return Container(
+      decoration: BoxDecoration(
+        color: oto.surface,
+        border: Border.all(color: selected ? oto.accent : oto.line),
+        borderRadius: BorderRadius.circular(Radius_.card16),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: () => openSource(context, ref, groupId),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          decoration: BoxDecoration(
-            color: oto.surface,
-            border: Border.all(color: selected ? oto.accent : oto.line),
-            borderRadius: BorderRadius.circular(Radius_.card16),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _header(context, ref, group, canResume, playing),
-              _volumeSection(context, ref, group),
-            ],
-          ),
+        borderRadius: BorderRadius.circular(Radius_.card16 - 1),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _header(context, ref, group, canResume, playing),
+            _volumeSection(context, ref, group),
+          ],
         ),
       ),
     );

@@ -80,65 +80,56 @@ class RoomRow extends ConsumerWidget {
     return Row(
       children: [
         Expanded(
-          child: MouseRegion(
-            cursor: offline
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.click,
-            child: GestureDetector(
-              key: Key('room-open-$speakerId'),
-              behavior: HitTestBehavior.opaque,
-              onTap: offline
-                  ? null
-                  : () => openRoom(
-                      context,
-                      ref,
-                      speakerId: speakerId,
-                      groupId: room.groupId,
-                    ),
-              child: Row(
-                children: [
-                  OtoIcon(
-                    room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
-                    size: 18,
-                    color: oto.ink2,
+          child: InkWell(
+            key: Key('room-open-$speakerId'),
+            onTap: offline
+                ? null
+                : () => openRoom(
+                    context,
+                    ref,
+                    speakerId: speakerId,
+                    groupId: room.groupId,
                   ),
-                  const SizedBox(width: Space.gutter12),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          room.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyles.titleCard,
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          _subtitle(room, group, offline),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyles.caption.copyWith(
-                            color: oto.inkMute,
-                          ),
-                        ),
-                      ],
+            borderRadius: BorderRadius.circular(Radius_.card16 - 1),
+            child: Row(
+              children: [
+                OtoIcon(
+                  room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
+                  size: 18,
+                  color: oto.ink2,
+                ),
+                const SizedBox(width: Space.gutter12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        room.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.titleCard,
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        _subtitle(room, group, offline),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.caption.copyWith(color: oto.inkMute),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!offline)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.md8),
+                    child: OtoIcon(
+                      'chevronRight',
+                      size: 12,
+                      color: oto.inkFaint,
                     ),
                   ),
-                  if (!offline)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: Space.md8,
-                      ),
-                      child: OtoIcon(
-                        'chevronRight',
-                        size: 12,
-                        color: oto.inkFaint,
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
           ),
         ),
