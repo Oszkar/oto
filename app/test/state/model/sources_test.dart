@@ -81,7 +81,7 @@ void main() {
     expect(s.any((e) => e.label == 'Office'), isTrue);
   });
 
-  group('hasActiveStream — phantom-source guards', () {
+  group('hasActiveStream - phantom-source guards', () {
     // Sonos emits an EMPTY track (all fields null) on stop/clear, and the
     // reducer can't null a track back out, so a stopped group keeps a
     // non-null-but-empty track. None of these may count as a source.
@@ -116,7 +116,7 @@ void main() {
 
     test('playing with no metadata yet IS a source', () {
       // `playing` counts even before the Track event lands (radio / line-in /
-      // the brief pre-metadata window) — exercised by the integration test.
+      // the brief pre-metadata window) - exercised by the integration test.
       const g = GroupState(
         id: 'G',
         coordinatorId: 'LR',

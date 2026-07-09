@@ -11,7 +11,7 @@
 //!      restores it to a standalone group.
 //!
 //! Settle semantics (load-bearing): a regroup is reflected by the household
-//! ASYNCHRONOUSLY, and the settle latency is VARIABLE — the 2026-06-04 spike
+//! ASYNCHRONOUSLY, and the settle latency is VARIABLE - the 2026-06-04 spike
 //! found a single fixed delay is racy, and a first hardware run of this test
 //! caught a not-yet-settled `leave` at 3 s that passed on the retry. So this
 //! test POLLS `refresh_topology()` until the household reaches the expected
@@ -40,7 +40,7 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Serialises the live grouping tests against EACH OTHER. They all mutate the
 /// SAME physical speakers' grouping, so cargo's default parallel test threads
-/// make them collide — concurrent join/leave storms time out the speakers' SOAP
+/// make them collide - concurrent join/leave storms time out the speakers' SOAP
 /// endpoints AND violate the LAN-politeness rule (no command storms; AGENTS §3).
 /// Each test holds this for its whole body, so they run strictly serially even
 /// without `--test-threads=1`.
@@ -55,7 +55,7 @@ fn lan_serial() -> std::sync::MutexGuard<'static, ()> {
 /// Discover, but FIRST split any existing multi-member group so the test starts
 /// from all-standalone zones. A prior test/run (or the Sonos app) may have left
 /// the speakers grouped; without this the "need >= 2 standalone zones" guard
-/// would skip EVERY test — a green-but-did-nothing result that masks whether the
+/// would skip EVERY test - a green-but-did-nothing result that masks whether the
 /// acceptance actually ran. Self-normalizing means the operator no longer has to
 /// manually un-group between runs. Returns the snapshot after normalization.
 /// (Genuinely-single-zone LANs still fall through to the per-test skip guard.)
@@ -84,7 +84,7 @@ fn discover_ungrouped(wire: &SonosWire) -> DiscoverySnapshot {
 /// Drive a GUARANTEED group-volume change and assert a `GroupVolume` event fires
 /// on `rx`. Sonos suppresses the `group_volume` NOTIFY when the value doesn't
 /// change, so a single `set_group_volume(X)` is flaky if the group is already at
-/// X (e.g. a re-run that left it there — observed on hardware). Priming with one
+/// X (e.g. a re-run that left it there - observed on hardware). Priming with one
 /// value, then setting a DIFFERENT one, makes the second a guaranteed change
 /// (the command sets the device value regardless of whether a NOTIFY fires).
 fn assert_group_volume_event(
@@ -115,7 +115,7 @@ fn group_of<'a>(snap: &'a DiscoverySnapshot, speaker: &SpeakerId) -> Option<&'a 
 /// `SETTLE_TIMEOUT` elapses; returns the satisfied value. Tolerates a transient
 /// `refresh_topology` error within the window (retries). Panics with `label`
 /// context on timeout. This is the settle-robust replacement for a single fixed
-/// delay (see the module doc) — Sonos reflects a regroup asynchronously with
+/// delay (see the module doc) - Sonos reflects a regroup asynchronously with
 /// variable latency, so we wait for the expected state rather than a fixed time.
 fn poll_until_settled<T>(
     wire: &SonosWire,
@@ -187,7 +187,7 @@ fn live_join_then_leave_round_trip() {
         .expect("join_group must succeed");
 
     // Poll the SETTLED topology until the joiner is a member of the
-    // coordinator's group (variable settle latency — see module doc).
+    // coordinator's group (variable settle latency - see module doc).
     let joined_into = poll_until_settled(&wire, "join", |snap| {
         group_of(snap, &joiner)
             .filter(|g| g.coordinator == coordinator && g.members.contains(&coordinator))
@@ -226,7 +226,7 @@ fn live_group_volume_command_and_event_round_trip() {
     // structurally-identical check in `live_seeded_fast_rediscover` (the
     // production fresh-wire path) is reliable. THAT seeded test is the group
     // volume command+event coverage to trust; this one is an isolated probe and
-    // is not chased further (PR #74 offramp — see CHANGELOG known-issues if it
+    // is not chased further (PR #74 offramp - see CHANGELOG known-issues if it
     // recurs).
     //
     // Forms a group, then issues `set_group_volume` on the coordinator and
@@ -259,11 +259,11 @@ fn live_group_volume_command_and_event_round_trip() {
     let joiner = joiner_group.coordinator.clone();
 
     // Form the group FIRST, then build the subscription against the SETTLED,
-    // grouped topology — mirroring production, where a regroup triggers a
+    // grouped topology - mirroring production, where a regroup triggers a
     // re-discover that rebuilds the pump with a clean TopologyFilter. Subscribing
     // BEFORE joining (an earlier version did) makes the pump observe the regroup,
     // mark its TopologyFilter dirty, and drop group-addressed events (incl.
-    // GroupVolume) until rebuilt — so the wait below would time out even though
+    // GroupVolume) until rebuilt - so the wait below would time out even though
     // the command succeeded (codex review of PR #73, finding 2).
     wire.join_group(&joiner, &coordinator)
         .expect("join_group must succeed");
@@ -279,12 +279,12 @@ fn live_group_volume_command_and_event_round_trip() {
         coordinator.as_str()
     );
 
-    // Subscribe on a FRESH wire that discovers the settled grouped topology —
+    // Subscribe on a FRESH wire that discovers the settled grouped topology -
     // exactly what a production re-discover installs (and what the Option-D
     // seeded test does). Re-subscribing the SAME `wire` after it has discovered
     // several times (discover_ungrouped + join settle) intermittently failed to
     // deliver group events on hardware; a fresh wire is reliable. Production
-    // never re-subscribes a used wire — it always installs a fresh one via
+    // never re-subscribes a used wire - it always installs a fresh one via
     // discover_with.
     let sub_wire = SonosWire::new();
     sub_wire
@@ -322,7 +322,7 @@ fn live_seeded_fast_rediscover() {
     let _serial = lan_serial();
     // v0.5.1: proves the SSDP-skipped fast re-discover.
     //   (a) `SonosWire::new_seeded(ips).discover()` returns the grouped
-    //       topology WITHOUT running SSDP, and does so FAST (< 2 s — an SSDP
+    //       topology WITHOUT running SSDP, and does so FAST (< 2 s - an SSDP
     //       sweep alone is ~3 s), and
     //   (b) the seeded wire's FRESH pump routes a `GroupVolume` event for the
     //       grouped coordinator (same lifecycle a production refresh installs).
@@ -338,7 +338,7 @@ fn live_seeded_fast_rediscover() {
     );
 
     // Form a real (multi-member) group so the seeded discover has a grouped
-    // topology to return — pick a coordinator + a joiner from a DIFFERENT
+    // topology to return - pick a coordinator + a joiner from a DIFFERENT
     // group, like the other tests.
     let coordinator_group = snap.groups.first().expect("expected >= 1 group on the LAN");
     let coordinator = coordinator_group.coordinator.clone();
@@ -415,7 +415,7 @@ fn live_seeded_fast_rediscover() {
     });
 }
 
-/// Re-pull the settled topology from `wire` and collect every speaker IP —
+/// Re-pull the settled topology from `wire` and collect every speaker IP -
 /// the seed set a production `refresh_topology()` hands to `new_seeded()`.
 fn joined_into_speakers_ips(wire: &SonosWire) -> Vec<IpAddr> {
     let snap = wire
@@ -424,7 +424,7 @@ fn joined_into_speakers_ips(wire: &SonosWire) -> Vec<IpAddr> {
     snap.speakers.iter().map(|s| s.ip).collect()
 }
 
-/// Drain events for up to `budget`, ignoring them — used to flush seeds/settle
+/// Drain events for up to `budget`, ignoring them - used to flush seeds/settle
 /// noise before asserting on a command-caused event.
 fn drain_until_quiet(rx: &std::sync::mpsc::Receiver<ChangeEvent>, budget: Duration) {
     let deadline = Instant::now() + budget;

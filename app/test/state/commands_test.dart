@@ -199,7 +199,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
     expect(spy.calls, ['setVolume(KT,50)'],
-        reason: 'exactly one send — the trailing throttle was canceled, not flushed');
+        reason: 'exactly one send - the trailing throttle was canceled, not flushed');
     expect(container.read(householdProvider).rooms['KT']!.volume, 50);
   });
 
@@ -207,7 +207,7 @@ void main() {
     final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
     final (:container, :discovery) = _container(spy);
     await _seedHousehold(container);
-    // KT has no volume yet (cold-start null) — the anchor will be null.
+    // KT has no volume yet (cold-start null) - the anchor will be null.
     expect(container.read(householdProvider).rooms['KT']!.volume, isNull);
 
     container.read(playbackControllerProvider).setVolumeEnd('KT', 40);
@@ -226,7 +226,7 @@ void main() {
     container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
 
     final c = container.read(playbackControllerProvider);
-    // Gesture 1: end(20) — send in flight (deferred → completer[0]).
+    // Gesture 1: end(20) - send in flight (deferred → completer[0]).
     c.setVolumeEnd('KT', 20);
     expect(spy.volumeCompleters.length, 1);
     // Gesture 2 starts before gesture 1 resolves: end(30) → completer[1].
@@ -238,7 +238,7 @@ void main() {
     spy.volumeCompleters[0].complete();
     await Future<void>.delayed(Duration.zero);
 
-    // Gesture 2 then FAILS — its rollback must still fire (bookkeeping intact),
+    // Gesture 2 then FAILS - its rollback must still fire (bookkeeping intact),
     // restoring the pre-interaction anchor 10.
     spy.volumeCompleters[1].completeError(const CommandError.sonos('late'));
     await Future<void>.delayed(Duration.zero);
@@ -378,7 +378,7 @@ void main() {
       final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
       final (:container, :discovery) = _container(spy);
       await _seedHousehold(container);
-      // Group volume is event-only — null until the first GroupVolume event.
+      // Group volume is event-only - null until the first GroupVolume event.
       expect(container.read(householdProvider).groups['G1']!.groupVolume, isNull);
 
       container.read(groupingControllerProvider).setGroupVolumeEnd('G1', 60);

@@ -27,7 +27,7 @@ class OtoIcon extends StatelessWidget {
   /// Glyph color. Defaults to `context.oto.ink2`.
   final Color? color;
 
-  /// Default glyph size — a sensible inline-icon size; no token fits exactly.
+  /// Default glyph size - a sensible inline-icon size; no token fits exactly.
   static const double _defaultSize = 20;
 
   /// Custom oto glyphs that resolve to bundled SVGs under `assets/icons/`.

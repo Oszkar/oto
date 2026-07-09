@@ -22,7 +22,7 @@ import 'package:oto/src/rust/frb_generated.dart';
 /// + Playback (per group). For the 3-speaker / 2-group fixture that's
 /// 3 + 3 + 2 = 8 events. Pinning the exact count makes the seed-drain
 /// Completer trip when the seed surface grows again (deliberate
-/// brittleness — a silent change to the seed shape should fail this test).
+/// brittleness - a silent change to the seed shape should fail this test).
 const int _expectedSeedCount = 3 + 3 + 2;
 
 /// Subscribe to the unified stream and capture a (subscription,
@@ -164,7 +164,7 @@ void main() {
     // The FRB `subscribe_change_events` stream-loop has no Rust-level CI
     // test (it blocks on recv()); this integration test is the only
     // automated coverage that the loop forwards a variant to Dart. v0.5
-    // adds the payload-less TopologyChanged variant — assert it crosses
+    // adds the payload-less TopologyChanged variant - assert it crosses
     // the bridge unchanged, driven by the dev seam (debug-only).
     await api.devDiscoverMock();
     final h = _subscribeAndCollect();
@@ -208,11 +208,11 @@ void main() {
   });
 
   test(
-    'v0.4: rediscovery — OLD stream completes cleanly and NEW stream emits fresh seed shape',
+    'v0.4: rediscovery - OLD stream completes cleanly and NEW stream emits fresh seed shape',
     () async {
       // This verifies the *stream lifecycle* across a discover_with-
       // induced wire swap. It does NOT directly verify the generation-
-      // token's no-op behavior in `apply_event_at_generation` — that
+      // token's no-op behavior in `apply_event_at_generation` - that
       // invariant is exercised by the Rust unit test
       // `stale_consumer_loop_does_not_pollute_after_bump_and_clear` in
       // `state_manager.rs`. Here we check the surrounding Dart/FRB
@@ -225,7 +225,7 @@ void main() {
       //      sees recv Err and returns; the Dart subscription on the
       //      OLD stream completes (onDone fires).
       //   4. NEW subscribe → drain NEW seeds. Seed shape must match
-      //      the fresh deterministic fixture — Kitchen volume = 30
+      //      the fresh deterministic fixture - Kitchen volume = 30
       //      (SEED_VOLUME), NOT the 88 we wrote on the OLD wire.
       //      The state-manager cache check happens in the Rust unit
       //      test above; this Dart test pins that the mock instance
@@ -244,7 +244,7 @@ void main() {
       var oldStreamDone = false;
       h1.sub.onDone(() => oldStreamDone = true);
 
-      // A normal mutation on the OLD wire — proves the OLD stream is
+      // A normal mutation on the OLD wire - proves the OLD stream is
       // alive right before re-discovery.
       h1.events.clear();
       await api.setVolume(speakerId: 'RINCON_KITCHEN', volume: 88);
@@ -270,7 +270,7 @@ void main() {
 
       // ── NEW subscribe ──────────────────────────────────────────────
       // Captures events from the NEW wire. The seed phase should
-      // produce exactly the same shape as the first discover — the
+      // produce exactly the same shape as the first discover - the
       // mock is deterministic.
       final h2 = _subscribeAndCollect();
       await h2.seedComplete.future.timeout(const Duration(seconds: 5));
@@ -282,7 +282,7 @@ void main() {
         h2.events,
         hasLength(_expectedSeedCount),
         reason:
-            'NEW seed phase must match the deterministic mock seed shape — '
+            'NEW seed phase must match the deterministic mock seed shape - '
             'a stale event leaked from the OLD wire would inflate the count',
       );
 
@@ -301,7 +301,7 @@ void main() {
         newKitchenSeed.volume,
         30,
         reason:
-            'NEW wire must seed Kitchen at SEED_VOLUME (30) — the 88 we '
+            'NEW wire must seed Kitchen at SEED_VOLUME (30) - the 88 we '
             'wrote on the OLD wire belongs to a torn-down wire and must '
             'not survive the generation bump',
       );

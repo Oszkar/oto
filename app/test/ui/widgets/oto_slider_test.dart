@@ -52,7 +52,7 @@ void main() {
       ),
     ));
     // A null onChanged disables the underlying Material Slider (greyed,
-    // non-interactive) — the idiomatic disabled state, not a draggable no-op.
+    // non-interactive) - the idiomatic disabled state, not a draggable no-op.
     final slider = t.widget<Slider>(find.byType(Slider));
     expect(slider.onChanged, isNull);
   });

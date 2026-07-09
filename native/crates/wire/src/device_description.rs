@@ -9,7 +9,7 @@
 //! to an HTTP/1.0 request, which a raw `TcpStream` mis-frames. `ureq`
 //! handles chunked + UTF-8 and bounds connect/read timeouts with a
 //! blocking, runtime-free API. Fetches are best-effort: any failure
-//! (timeout, network, parse) yields `None` for that speaker — discovery
+//! (timeout, network, parse) yields `None` for that speaker - discovery
 //! does NOT fail, the speaker just keeps `model = None`.
 
 use std::collections::HashMap;
@@ -20,14 +20,14 @@ use oto_core::SpeakerId;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
-/// Per-speaker connect timeout. Short — the speaker is on the LAN and was
+/// Per-speaker connect timeout. Short - the speaker is on the LAN and was
 /// just reached for ZGT; a slow connect means it's gone, skip it.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 /// Per-speaker overall read timeout. The document is tiny (a few KB).
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Fetch `device_description.xml` from `ip` and extract `<modelName>`.
-/// `None` on any error (timeout, network, parse) — the caller treats this
+/// `None` on any error (timeout, network, parse) - the caller treats this
 /// as "model unknown for this speaker" and does not fail discovery.
 fn fetch_model(ip: IpAddr) -> Option<String> {
     let url = format!("http://{ip}:1400/xml/device_description.xml");
@@ -63,7 +63,7 @@ fn parse_model_name(xml: &str) -> Option<String> {
 /// Max concurrent fetches. A real household is a handful of speakers (one
 /// chunk = the old "all at once" behaviour, latency ≈ the slowest fetch).
 /// The cap bounds thread creation if a malformed/hostile ZoneGroupTopology
-/// ever yields an absurd member count (codex review #67-followup #7) — no
+/// ever yields an absurd member count (codex review #67-followup #7) - no
 /// silent truncation, just bounded concurrency across sequential chunks.
 const MAX_CONCURRENT_FETCHES: usize = 8;
 
@@ -71,7 +71,7 @@ const MAX_CONCURRENT_FETCHES: usize = 8;
 /// `MAX_CONCURRENT_FETCHES` at a time (scoped threads per chunk). Returns
 /// only the speakers whose fetch succeeded; the rest are absent (caller
 /// leaves their `model = None`). A panicking fetch thread is dropped, not
-/// propagated — one bad speaker can't fail discovery.
+/// propagated - one bad speaker can't fail discovery.
 pub(crate) fn fetch_models_parallel(targets: &[(SpeakerId, IpAddr)]) -> HashMap<SpeakerId, String> {
     let mut out = HashMap::new();
     for chunk in targets.chunks(MAX_CONCURRENT_FETCHES) {

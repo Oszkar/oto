@@ -1,10 +1,10 @@
 // Notifier-level regression tests for the [NowPlayingPosition] re-anchor state
-// machine — the novel, riskiest part of Now Playing (the pure `positionAt` and
+// machine - the novel, riskiest part of Now Playing (the pure `positionAt` and
 // the static widget render are covered elsewhere).
 //
 // Wiring (mirrors `commands_test.dart`): the REAL `householdProvider` is driven
 // off Rust via an overridden `discoveryProvider` (fake topology seed) plus an
-// overridden `changeEventsProvider` (a controllable `StreamController`) — so the
+// overridden `changeEventsProvider` (a controllable `StreamController`) - so the
 // real household reducer folds the events we push. The wall clock is injected
 // via `clockProvider` so transport transitions are evaluated against a fake,
 // monotonic `fakeNow` we advance by hand. No real 500 ms timer is needed:
@@ -220,7 +220,7 @@ void main() {
     h.advance(const Duration(seconds: 30));
     await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 1));
     expect(h.position('G1'), _approx(const Duration(seconds: 10)),
-        reason: 'paused position is frozen — 30s of wall time does not move it');
+        reason: 'paused position is frozen - 30s of wall time does not move it');
 
     // Resume: must re-anchor from the frozen ~10s, NOT snap to 0.
     // The SOAP read fires on resume; the fake reports 10s (matching the real

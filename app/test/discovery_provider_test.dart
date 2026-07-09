@@ -50,7 +50,7 @@ class _ErrorDiscovery extends Discovery {
 }
 
 /// Fake [Discovery] whose `build()` runs [_next] each call (returns a topology
-/// or throws) — lets a test succeed first, then fail on the retry.
+/// or throws) - lets a test succeed first, then fail on the retry.
 class _SequenceDiscovery extends Discovery {
   _SequenceDiscovery(this._next);
   final rust_api.Topology Function() _next;
@@ -65,7 +65,7 @@ void main() {
     // AsyncValue. We assert on the AsyncValue rather than awaiting
     // `provider.future`: a class-Notifier `build()` that throws races
     // autoDispose, so `.future` surfaces a `StateError: disposed during
-    // loading` instead of the real error (this Riverpod) — the AsyncValue is
+    // loading` instead of the real error (this Riverpod) - the AsyncValue is
     // the stable seam the old `overrideWithValue` test relied on.
     Future<AsyncValue<rust_api.Topology>> settledState(
       ProviderContainer container,
@@ -107,7 +107,7 @@ void main() {
     test('a failed rediscover surfaces the error without throwing', () async {
       // (The live event stream surviving a failed retry is handled by
       // `events.dart`'s `wireGeneration`, which reads the Rust generation
-      // directly rather than `discovery.hasValue` — not unit-testable here as it
+      // directly rather than `discovery.hasValue` - not unit-testable here as it
       // calls the FRB FFI. This pins rediscover's own error handling.)
       var buildCount = 0;
       final container = ProviderContainer(

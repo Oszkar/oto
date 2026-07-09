@@ -38,14 +38,14 @@ fn flush_prompt(lines: &[&str]) {
     let _ = out.flush();
 }
 
-/// Test #1 — fully automatic. Subscribing to topology then speakers must
+/// Test #1 - fully automatic. Subscribing to topology then speakers must
 /// activate the SDK `GroupMembership` watch and yield a live event stream
-/// without error. Does NOT require a regroup — just proves the wiring is
+/// without error. Does NOT require a regroup - just proves the wiring is
 /// sound (the watch registers, the pump spawns, the stream is takeable).
 ///
 /// Hardware probing established that `GroupMembership` also seeds on subscribe
 /// (one event per speaker before any user action). We don't assert on the
-/// seed here — speaker-scoped seed timing is non-uniform and can exceed a
+/// seed here - speaker-scoped seed timing is non-uniform and can exceed a
 /// few seconds (sonos-notes § "Per-speaker seed NOTIFY behavior is
 /// non-uniform"); the regroup-driven path is test #2's job.
 #[test]
@@ -69,13 +69,13 @@ fn subscribe_topology_then_speakers_activates_stream() {
     println!("[live_topology] topology watch active; stream takeable");
 }
 
-/// Test #2 — interactive. Prompts the operator to regroup in the Sonos app
+/// Test #2 - interactive. Prompts the operator to regroup in the Sonos app
 /// (form a group, then break it) and asserts at least one
 /// `ChangeEvent::TopologyChanged` arrives during the operator window. Then
 /// calls `refresh_topology` and prints the re-pulled grouping so the
 /// operator can eyeball that it reflects reality.
 ///
-/// **What this verifies:** the full topology event chain on real hardware —
+/// **What this verifies:** the full topology event chain on real hardware -
 /// `GroupMembership` SUBSCRIBE → NOTIFY on regroup → pump maps to
 /// `TopologyChanged` → reaches the consumer; and `refresh_topology` SOAP
 /// returns a fresh snapshot (no SSDP).
@@ -85,7 +85,7 @@ fn subscribe_topology_then_speakers_activates_stream() {
 /// hardware probing measured sub-second; here the wall-clock is mostly
 /// the operator reaching for the app.
 #[test]
-#[ignore = "live-only — manual: regroup speakers in the Sonos app within 30 s"]
+#[ignore = "live-only - manual: regroup speakers in the Sonos app within 30 s"]
 fn operator_regroup_emits_topology_changed() {
     let wire = SonosWire::new();
     let snap = wire.discover().expect("discovery ok");
@@ -115,7 +115,7 @@ fn operator_regroup_emits_topology_changed() {
     // Drain the seed NOTIFYs (~3 s) so we only count regroup-driven events.
     // GroupMembership seeds per speaker on subscribe (see sonos-notes); the
     // probe observed seed latency that can exceed 3 s, so a straggler seed
-    // could slip past — acceptable here: a seed TopologyChanged is
+    // could slip past - acceptable here: a seed TopologyChanged is
     // indistinguishable from a regroup one at this layer, and the operator
     // prompt window is the dominant signal.
     let drain_until = Instant::now() + Duration::from_secs(3);
@@ -125,7 +125,7 @@ fn operator_regroup_emits_topology_changed() {
 
     flush_prompt(&[
         "============================================================",
-        ">>> ACTION REQUIRED — REGROUP SPEAKERS NOW <<<",
+        ">>> ACTION REQUIRED - REGROUP SPEAKERS NOW <<<",
         "    In the SONOS app: add a room to another room's group,",
         "    then (optionally) break the group again.",
         "    Prompt repeats every 5 s through the 30 s window.",
@@ -140,7 +140,7 @@ fn operator_regroup_emits_topology_changed() {
         if Instant::now() >= next_reminder {
             let remaining = deadline.saturating_duration_since(Instant::now()).as_secs();
             flush_prompt(&[&format!(
-                ">>> ACT NOW — {remaining} s remaining — REGROUP in the Sonos app <<<"
+                ">>> ACT NOW - {remaining} s remaining - REGROUP in the Sonos app <<<"
             )]);
             next_reminder = Instant::now() + Duration::from_secs(5);
         }
@@ -156,7 +156,7 @@ fn operator_regroup_emits_topology_changed() {
             Ok(other) => {
                 println!("[live_topology] (ignoring non-topology event: {other:?})");
             }
-            Err(_) => { /* timeout — keep polling */ }
+            Err(_) => { /* timeout - keep polling */ }
         }
     }
 

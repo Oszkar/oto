@@ -1,7 +1,7 @@
 //! `sonos_api` SOAP calls for group form/break (v0.5.1).
 //!
 //! All network I/O lives in this module; `adapter.rs` delegates here after
-//! resolving ids to IP addresses. Shapes are hardware-validated — see
+//! resolving ids to IP addresses. Shapes are hardware-validated - see
 //! `examples/group_ops_probe.rs` (Sections 2 + 3). Error mapping reuses
 //! `control::map_sdk_err` so a SOAP fault / network failure maps to the same
 //! `WireError` variants as the playback commands.
@@ -41,7 +41,7 @@ pub(crate) fn join(
 ///
 /// `BecomeCoordinatorOfStandaloneGroup` (no args) is sent to the LEAVER's IP
 /// (`leaver_addr`). Uniform regardless of whether the speaker coordinates a
-/// group — the firmware re-elects a coordinator for any members left behind
+/// group - the firmware re-elects a coordinator for any members left behind
 /// (hardware-validated, probe Section 3). The structured response body is
 /// ignored; the settled topology surfaces via the topology-event path.
 pub(crate) fn leave(client: &SonosClient, leaver_addr: SocketAddr) -> Result<(), WireError> {
@@ -59,7 +59,7 @@ pub(crate) fn leave(client: &SonosClient, leaver_addr: SocketAddr) -> Result<(),
 /// `SetGroupVolume` is sent to the group COORDINATOR's IP (`coord_addr`).
 /// `volume` is already `0..=100` (`oto_core::Volume`), so the SDK's
 /// `.build()` range-check (rejects > 100, hardware-validated probe Section 4)
-/// can never trip here — the FRB shim clamps a signed `i32` via
+/// can never trip here - the FRB shim clamps a signed `i32` via
 /// `Volume::clamped` before this call, exactly like per-speaker `set_volume`.
 pub(crate) fn set_group_volume(
     client: &SonosClient,

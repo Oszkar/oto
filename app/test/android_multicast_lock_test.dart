@@ -2,7 +2,7 @@
 /// `acquire`/`release` send the expected method names over the
 /// `me.oszkar.oto/multicast_lock` channel. The native handler and the
 /// `Platform.isAndroid`-gated wrapping in `discoveryProvider` are exercised
-/// only on a real Android device (hardware acceptance) — here we pin the
+/// only on a real Android device (hardware acceptance) - here we pin the
 /// Dart→platform contract with a mock channel, which runs on any host.
 library;
 

@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn stopped_can_retain_last_track() {
-        // Sonos retains the last-loaded track when stopped — see design D4.
+        // Sonos retains the last-loaded track when stopped - see design D4.
         let s = TransportState {
             state: PlaybackState::Stopped,
             current_track: Some(track("Last played")),

@@ -1,4 +1,4 @@
-/// View-model household: the whole topology snapshot — rooms and groups,
+/// View-model household: the whole topology snapshot - rooms and groups,
 /// keyed by id. Immutable, value-comparable. Mapped by Task 3's reducer.
 library;
 

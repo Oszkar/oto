@@ -20,7 +20,7 @@ import '../widgets/oto_icon.dart';
 /// - **1 source** -> a single floating mini-player.
 /// - **2+ sources** -> a floating upward stack of rows, ONE per source,
 ///   uncapped (the JSX `+N more · manage all` cap is dropped per the v0.6
-///   spec — every active source gets a row).
+///   spec - every active source gets a row).
 ///
 /// A row tap (the body, not the play button) routes through the injected
 /// [onTapSource] callback. This widget never references the Now Playing
@@ -29,7 +29,7 @@ import '../widgets/oto_icon.dart';
 ///
 /// Backend-true omissions vs the JSX: no prev/next transport (no skip in
 /// scope), and the multi-source collapse header (`N sources playing` +
-/// chevron-down) is dropped — it is an inert affordance with no backend state
+/// chevron-down) is dropped - it is an inert affordance with no backend state
 /// to drive.
 class BottomStrip extends ConsumerWidget {
   const BottomStrip({super.key, required this.onTapSource});
@@ -70,7 +70,7 @@ class BottomStrip extends ConsumerWidget {
       );
     }
 
-    // 2+ sources: the floating bar grows UPWARD into a stack — one row per
+    // 2+ sources: the floating bar grows UPWARD into a stack - one row per
     // active source, uncapped. Radius 16 per JSX.
     return Padding(
       padding: const EdgeInsets.fromLTRB(

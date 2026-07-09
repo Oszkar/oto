@@ -14,7 +14,7 @@ part 'discovery.g.dart';
 /// [Discovery.refreshTopology] alongside the deferred `build()` discover.
 /// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
 /// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged — and a `refreshTopology()` re-pull still surfaces as a
+/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
 /// `discoveryProvider` transition, which is what drives the event stream to
 /// re-subscribe against the new wire (see [Discovery.refreshTopology]).
 ///
@@ -24,14 +24,14 @@ part 'discovery.g.dart';
 /// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// `WifiManager.MulticastLock` - without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
 /// platforms call `discover()` directly (no channel handler exists).
 ///
 /// The lock is **best-effort**: it's an optimization to stop Android dropping
 /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied — the native handler returns a structured error), we
+/// permission denied - the native handler returns a structured error), we
 /// still attempt discovery rather than hard-failing.
 @riverpod
 class Discovery extends _$Discovery {
@@ -99,7 +99,7 @@ class Discovery extends _$Discovery {
 }
 
 /// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
 /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
@@ -114,7 +114,7 @@ class WireInstallSignal extends _$WireInstallSignal {
   int build() => 0;
 
   /// Signal that a fresh wire was installed. Monotonic; the value itself is
-  /// meaningless — only that it changes matters.
+  /// meaningless - only that it changes matters.
   void bump() => state = state + 1;
 }
 
@@ -127,7 +127,7 @@ class DiscoveryRetrying extends _$DiscoveryRetrying {
 }
 
 /// Run a multicast-lock op, swallowing a `PlatformException` (lock is
-/// best-effort). Returns whether it succeeded — so `release` is only
+/// best-effort). Returns whether it succeeded - so `release` is only
 /// attempted when `acquire` succeeded.
 Future<bool> _tryLock(Future<void> Function() op) async {
   try {

@@ -1,16 +1,16 @@
 //! Per-speaker subscription-health tracker (v0.5).
 //!
 //! The SDK at the pinned `=0.5.2` does not expose per-speaker subscription
-//! failures (it swallows them internally — see
+//! failures (it swallows them internally - see
 //! `oto-wire/src/events.rs::register_watches`), so v0.4 carried
 //! `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` on the surface
 //! but never emitted them. v0.5 closes that gap reactively from command
 //! dispatch: every user command's `Result` is observed here, and a
 //! `Healthy ↔ Errored` edge for a speaker emits the matching event.
 //!
-//! Only `WireError::Network` flips a speaker to `Errored` — it's the
+//! Only `WireError::Network` flips a speaker to `Errored` - it's the
 //! transport-reachability signal. `Backend` (a SOAP fault from a reachable
-//! device) and `NotFound` (a stale/typo'd id — a precondition error, not a
+//! device) and `NotFound` (a stale/typo'd id - a precondition error, not a
 //! reachability one) leave health untouched. Emission is **edge-triggered**:
 //! repeated failures or successes after the first do not re-emit.
 
@@ -173,7 +173,7 @@ mod tests {
     fn backend_while_errored_does_not_recover() {
         let t = HealthTracker::new();
         assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // → Errored
-        // A Backend error is still an error — must NOT recover.
+        // A Backend error is still an error - must NOT recover.
         assert!(t.observe(0, || 0, &sid(), &backend()).is_none());
         // And the speaker is still Errored: a real Ok now recovers.
         assert!(matches!(
@@ -220,14 +220,14 @@ mod tests {
     fn stale_generation_observation_is_dropped_and_does_not_poison() {
         // The under-lock generation re-check: a Network result observed at a
         // STALE generation (a rediscover already moved the live gen to 1) must
-        // be dropped — no event — AND must not poison the fresh tracker.
+        // be dropped - no event - AND must not poison the fresh tracker.
         let t = HealthTracker::new();
         assert!(
             t.observe(0, || 1, &sid(), &net()).is_none(),
             "a stale-generation observation must be dropped (no emit)"
         );
         // The speaker was never marked Errored, so an Ok at the CURRENT
-        // generation is a no-op — no spurious SubscriptionRecovered.
+        // generation is a no-op - no spurious SubscriptionRecovered.
         assert!(
             t.observe(1, || 1, &sid(), &ok()).is_none(),
             "the dropped stale observation must not leave the speaker Errored"

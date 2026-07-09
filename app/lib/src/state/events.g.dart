@@ -72,7 +72,7 @@ String _$wireGenerationReaderHash() =>
 
 /// The current wire generation, or `null` until the first successful
 /// discovery. Recomputes on every `discoveryProvider` transition, but reads
-/// the **authoritative Rust generation** via [wireGenerationReaderProvider] —
+/// the **authoritative Rust generation** via [wireGenerationReaderProvider] -
 /// not `discovery.hasValue`. The Rust generation reflects the
 /// currently-installed wire (`0` before any successful `discover_with`, `>0`
 /// after), and `discover_with` bumps it only on success.
@@ -81,13 +81,13 @@ String _$wireGenerationReaderHash() =>
 /// keeps the live event stream alive across a FAILED user re-discover: that
 /// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
 /// the old wire is still installed and its generation unchanged, so this keeps
-/// returning it — no spurious teardown (review #67-followup #2).
+/// returning it - no spurious teardown (review #67-followup #2).
 ///
 /// Recompute triggers:
-///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+///   - [discoveryProvider] - the initial discover, a user `rediscover()`, and a
 ///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
 ///     and re-reads the generation.
-///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+///   - [wireInstallSignalProvider] - a value-EQUAL `refreshTopology()` (a no-op
 ///     regroup) does NOT transition discovery (FRB `Topology` has value
 ///     equality), so the install bumps this signal to force a re-read. Without
 ///     it the new wire's generation would go unnoticed and the stream would
@@ -102,7 +102,7 @@ final wireGenerationProvider = WireGenerationProvider._();
 
 /// The current wire generation, or `null` until the first successful
 /// discovery. Recomputes on every `discoveryProvider` transition, but reads
-/// the **authoritative Rust generation** via [wireGenerationReaderProvider] —
+/// the **authoritative Rust generation** via [wireGenerationReaderProvider] -
 /// not `discovery.hasValue`. The Rust generation reflects the
 /// currently-installed wire (`0` before any successful `discover_with`, `>0`
 /// after), and `discover_with` bumps it only on success.
@@ -111,13 +111,13 @@ final wireGenerationProvider = WireGenerationProvider._();
 /// keeps the live event stream alive across a FAILED user re-discover: that
 /// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
 /// the old wire is still installed and its generation unchanged, so this keeps
-/// returning it — no spurious teardown (review #67-followup #2).
+/// returning it - no spurious teardown (review #67-followup #2).
 ///
 /// Recompute triggers:
-///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+///   - [discoveryProvider] - the initial discover, a user `rediscover()`, and a
 ///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
 ///     and re-reads the generation.
-///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+///   - [wireInstallSignalProvider] - a value-EQUAL `refreshTopology()` (a no-op
 ///     regroup) does NOT transition discovery (FRB `Topology` has value
 ///     equality), so the install bumps this signal to force a re-read. Without
 ///     it the new wire's generation would go unnoticed and the stream would
@@ -132,7 +132,7 @@ final class WireGenerationProvider
     with $Provider<BigInt?> {
   /// The current wire generation, or `null` until the first successful
   /// discovery. Recomputes on every `discoveryProvider` transition, but reads
-  /// the **authoritative Rust generation** via [wireGenerationReaderProvider] —
+  /// the **authoritative Rust generation** via [wireGenerationReaderProvider] -
   /// not `discovery.hasValue`. The Rust generation reflects the
   /// currently-installed wire (`0` before any successful `discover_with`, `>0`
   /// after), and `discover_with` bumps it only on success.
@@ -141,13 +141,13 @@ final class WireGenerationProvider
   /// keeps the live event stream alive across a FAILED user re-discover: that
   /// path ends in `AsyncError` with no retained value (`hasValue == false`), yet
   /// the old wire is still installed and its generation unchanged, so this keeps
-  /// returning it — no spurious teardown (review #67-followup #2).
+  /// returning it - no spurious teardown (review #67-followup #2).
   ///
   /// Recompute triggers:
-  ///   - [discoveryProvider] — the initial discover, a user `rediscover()`, and a
+  ///   - [discoveryProvider] - the initial discover, a user `rediscover()`, and a
   ///     value-CHANGING `refreshTopology()` all transition it, so this recomputes
   ///     and re-reads the generation.
-  ///   - [wireInstallSignalProvider] — a value-EQUAL `refreshTopology()` (a no-op
+  ///   - [wireInstallSignalProvider] - a value-EQUAL `refreshTopology()` (a no-op
   ///     regroup) does NOT transition discovery (FRB `Topology` has value
   ///     equality), so the install bumps this signal to force a re-read. Without
   ///     it the new wire's generation would go unnoticed and the stream would
@@ -252,7 +252,7 @@ String _$changeEventStreamFactoryHash() =>
     r'228bff73bc2aa543f38510adef172bcf543173ad';
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
-/// **new wire** — keyed on [wireGenerationProvider], which only changes on a
+/// **new wire** - keyed on [wireGenerationProvider], which only changes on a
 /// successful `discover_with`. A failed/loading re-discover does NOT rebuild
 /// this provider: `discover_with` keeps the old wire on failure, and its
 /// `take_event_stream` receiver is one-shot and can't be retaken, so
@@ -270,13 +270,13 @@ String _$changeEventStreamFactoryHash() =>
 /// one-shot receiver, making the wire unable to re-stream until rediscovery.
 /// Keeping it alive for the app lifetime avoids that class of bug; it still
 /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
-/// wire replacement — the intended lifecycle boundary.
+/// wire replacement - the intended lifecycle boundary.
 
 @ProviderFor(changeEvents)
 final changeEventsProvider = ChangeEventsProvider._();
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
-/// **new wire** — keyed on [wireGenerationProvider], which only changes on a
+/// **new wire** - keyed on [wireGenerationProvider], which only changes on a
 /// successful `discover_with`. A failed/loading re-discover does NOT rebuild
 /// this provider: `discover_with` keeps the old wire on failure, and its
 /// `take_event_stream` receiver is one-shot and can't be retaken, so
@@ -294,7 +294,7 @@ final changeEventsProvider = ChangeEventsProvider._();
 /// one-shot receiver, making the wire unable to re-stream until rediscovery.
 /// Keeping it alive for the app lifetime avoids that class of bug; it still
 /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
-/// wire replacement — the intended lifecycle boundary.
+/// wire replacement - the intended lifecycle boundary.
 
 final class ChangeEventsProvider
     extends
@@ -307,7 +307,7 @@ final class ChangeEventsProvider
         $FutureModifier<rust_api.ChangeEventDto>,
         $StreamProvider<rust_api.ChangeEventDto> {
   /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
-  /// **new wire** — keyed on [wireGenerationProvider], which only changes on a
+  /// **new wire** - keyed on [wireGenerationProvider], which only changes on a
   /// successful `discover_with`. A failed/loading re-discover does NOT rebuild
   /// this provider: `discover_with` keeps the old wire on failure, and its
   /// `take_event_stream` receiver is one-shot and can't be retaken, so
@@ -325,7 +325,7 @@ final class ChangeEventsProvider
   /// one-shot receiver, making the wire unable to re-stream until rediscovery.
   /// Keeping it alive for the app lifetime avoids that class of bug; it still
   /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
-  /// wire replacement — the intended lifecycle boundary.
+  /// wire replacement - the intended lifecycle boundary.
   ChangeEventsProvider._()
     : super(
         from: null,

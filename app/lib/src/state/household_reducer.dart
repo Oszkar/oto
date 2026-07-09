@@ -1,4 +1,4 @@
-/// The household reducer — the pure state spine of the v0.6 UI.
+/// The household reducer - the pure state spine of the v0.6 UI.
 ///
 /// Two pure functions, no Riverpod / no I/O, so the whole accumulation
 /// model is unit-testable without a `ProviderContainer`:
@@ -24,7 +24,7 @@ import 'model/track.dart';
 /// Per-speaker live state (`volume`/`muted`/`online`) is carried from
 /// [previous] by speaker id. Per-group live state
 /// (`transport`/`track`/`groupVolume`/`groupMuted`) is carried from the
-/// previous group that shared the SAME coordinator — group ids churn across a
+/// previous group that shared the SAME coordinator - group ids churn across a
 /// regroup, but coordinators are stable, so this keeps now-playing and group
 /// volume/mute alive through a regroup.
 Household householdFromTopology(Topology topo, {Household? previous}) {
@@ -150,7 +150,7 @@ PlaybackState playbackStateFromDto(PlaybackStateDto d) => switch (d) {
   PlaybackStateDto.transitioning => PlaybackState.transitioning,
 };
 
-/// Map the view-model enum back to the backend DTO — used by the optimistic
+/// Map the view-model enum back to the backend DTO - used by the optimistic
 /// transport mutator (Task 4) so a UI-driven play/pause folds the same delta.
 PlaybackStateDto playbackStateToDto(PlaybackState s) => switch (s) {
   PlaybackState.stopped => PlaybackStateDto.stopped,

@@ -1,4 +1,4 @@
-//! Speaker volume — a validated newtype over `u8` constrained to `0..=100`.
+//! Speaker volume - a validated newtype over `u8` constrained to `0..=100`.
 
 use std::fmt;
 

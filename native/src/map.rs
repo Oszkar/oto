@@ -8,7 +8,7 @@
 //! proving domain↔bridge-DTO with zero LAN. Keeping it here also keeps
 //! `api.rs` a pure shim (AGENTS.md §4: `oto_native` is glue only).
 //!
-//! Pure and total: no I/O, no failure modes of its own — every `WireError`
+//! Pure and total: no I/O, no failure modes of its own - every `WireError`
 //! has exactly one `DiscoveryError` / `CommandError` image. Snapshots map
 //! field-for-field; the one deliberate narrowing is `Duration` → whole
 //! `u64` seconds (Sonos SOAP time fields carry no sub-second component, so
@@ -35,7 +35,7 @@ pub fn to_discovery_error(e: WireError) -> DiscoveryError {
         WireError::Backend(m) => DiscoveryError::Sdk(m),
         WireError::NotFound(m) => DiscoveryError::Sdk(format!("not found: {m}")),
         // v0.4 subscription errors raised by `discover_with` after a
-        // successful `wire.discover()` — surface as a diagnostic so a
+        // successful `wire.discover()` - surface as a diagnostic so a
         // logic bug here is visible to Dart rather than masked.
         WireError::NoSpeakersDiscovered => {
             DiscoveryError::Sdk("subscribe_speakers called before discovery".into())
@@ -124,7 +124,7 @@ pub fn to_track_position_dto(p: TrackPosition) -> TrackPositionDto {
 }
 
 /// `Track` → `TrackDto`. Extracted so the `ChangeEvent::Track`
-/// mapping can reuse the same construction (DRY — the inline closure
+/// mapping can reuse the same construction (DRY - the inline closure
 /// inside `to_speaker_state_dto` was the only previous build site).
 fn to_track_dto(track: Track) -> TrackDto {
     TrackDto {

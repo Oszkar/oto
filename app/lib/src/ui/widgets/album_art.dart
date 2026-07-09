@@ -19,7 +19,7 @@ class AlbumArt extends StatelessWidget {
   /// Side length in logical px. Defaults to [_defaultSize].
   final double? size;
 
-  /// Default artwork size — a comfortable thumbnail; no token fits exactly.
+  /// Default artwork size - a comfortable thumbnail; no token fits exactly.
   static const double _defaultSize = 56;
 
   @override

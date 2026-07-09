@@ -1,4 +1,4 @@
-//! group_ops_probe — group-operation SOAP + event hardware probe (v0.5.1, THROWAWAY).
+//! group_ops_probe - group-operation SOAP + event hardware probe (v0.5.1, THROWAWAY).
 //!
 //! Confirms on real hardware the SOAP behaviors needed by v0.5.1:
 //!   - JOIN:  `SetAVTransportURI` with `x-rincon:<coordinator_id>`
@@ -48,10 +48,10 @@ fn main() {
     };
 
     // =========================================================================
-    // SECTION 1 — DISCOVER + PRINT TOPOLOGY
+    // SECTION 1 - DISCOVER + PRINT TOPOLOGY
     // =========================================================================
     println!("========================================================");
-    println!(" group_ops_probe — v0.5.1 hardware probe");
+    println!(" group_ops_probe - v0.5.1 hardware probe");
     println!("========================================================");
 
     let wire = SonosWire::new();
@@ -80,7 +80,7 @@ fn main() {
     }
 
     if snap.speakers.is_empty() {
-        eprintln!("SKIP: no speakers discovered — aborting.");
+        eprintln!("SKIP: no speakers discovered - aborting.");
         return;
     }
 
@@ -109,10 +109,10 @@ fn main() {
     });
 
     // =========================================================================
-    // SECTION 2 — JOIN PROBE
+    // SECTION 2 - JOIN PROBE
     // =========================================================================
     println!("\n========================================================");
-    println!(" SECTION 2 — JOIN PROBE (SetAVTransportURI x-rincon:…)");
+    println!(" SECTION 2 - JOIN PROBE (SetAVTransportURI x-rincon:…)");
     println!("========================================================");
 
     // Find a standalone speaker (group.members.len() == 1) as the joiner (S),
@@ -217,15 +217,15 @@ fn main() {
     }
 
     // =========================================================================
-    // SECTION 3 — LEAVE PROBE
+    // SECTION 3 - LEAVE PROBE
     // =========================================================================
     println!("\n========================================================");
-    println!(" SECTION 3 — LEAVE PROBE (BecomeCoordinatorOfStandaloneGroup)");
+    println!(" SECTION 3 - LEAVE PROBE (BecomeCoordinatorOfStandaloneGroup)");
     println!("========================================================");
 
     // Re-discover so we see the group just formed in SECTION 2 (the original
     // `snap` is pre-join). On this 2-zone bonded-satellite LAN the only group
-    // we can form is a 2-member one (Beam + Sonos One) — leaving its
+    // we can form is a 2-member one (Beam + Sonos One) - leaving its
     // coordinator is the coordinator-leave case we can actually exercise here.
     let leave_snap = wire.discover().unwrap_or_else(|_| snap.clone());
     let leave_group = leave_snap.groups.iter().find(|g| g.members.len() >= 2);
@@ -305,10 +305,10 @@ fn main() {
         }
     }
 
-    // ── SECTION 3b — 3+-member coordinator-leave: N/A on this 2-zone LAN ──────
+    // ── SECTION 3b - 3+-member coordinator-leave: N/A on this 2-zone LAN ──────
     //
     // This household has only 2 *controllable* zones: the Beam (its bonded
-    // surround satellites are Invisible="1" and fold into the Beam — one zone)
+    // surround satellites are Invisible="1" and fold into the Beam - one zone)
     // and the Sonos One. A 3-member group therefore can't be formed, so the
     // "coordinator leaves, 2+ members remain and re-elect" case is not
     // exercisable here.
@@ -319,22 +319,22 @@ fn main() {
     // multi-member group leaves, the Sonos household firmware elects the new
     // coordinator for the remaining members (standard Sonos behaviour); oto
     // simply re-pulls topology afterward and reflects whatever the household
-    // decided. So there is no special-case branch to design — the 2-member
+    // decided. So there is no special-case branch to design - the 2-member
     // coordinator-leave above already confirms the BCOS-on-a-coordinator path.
     // The 3+-member re-election is firmware-handled and untested on this
     // hardware; revisit only if a user with 3+ independent zones reports an
     // issue.
     println!("\n========================================================");
-    println!(" SECTION 3b — 3+-member coordinator-leave: N/A on this 2-zone LAN");
+    println!(" SECTION 3b - 3+-member coordinator-leave: N/A on this 2-zone LAN");
     println!("   bonded surrounds are not independent zones; firmware handles");
     println!("   re-election for 3+ members. See the leave_group design note.");
     println!("========================================================");
 
     // =========================================================================
-    // SECTION 4 — GROUP-VOLUME COMMAND PROBE
+    // SECTION 4 - GROUP-VOLUME COMMAND PROBE
     // =========================================================================
     println!("\n========================================================");
-    println!(" SECTION 4 — GROUP-VOLUME COMMAND PROBE (GroupRenderingControl)");
+    println!(" SECTION 4 - GROUP-VOLUME COMMAND PROBE (GroupRenderingControl)");
     println!("========================================================");
 
     match (&coord_id, &coord_ip) {
@@ -373,12 +373,12 @@ fn main() {
             // Probe over-100 clamping: the SDK validates at build time (desired_volume: u16
             // with validate_basic rejecting > 100), so this tests the builder's validation.
             println!(
-                "  SetGroupVolume(101) [over-100 clamping test — expect build-time ValidationError]:"
+                "  SetGroupVolume(101) [over-100 clamping test - expect build-time ValidationError]:"
             );
             match group_rendering_control::set_group_volume(101).build() {
                 Ok(op) => match client.execute_enhanced(cip, op) {
                     Ok(_) => println!(
-                        "    → OK (device accepted 101 — NOTE: no SDK clamp, device clamped or accepted)"
+                        "    → OK (device accepted 101 - NOTE: no SDK clamp, device clamped or accepted)"
                     ),
                     Err(e) => println!("    → device ERR: {e:?}"),
                 },
@@ -442,10 +442,10 @@ fn main() {
     }
 
     // =========================================================================
-    // SECTION 5 — GROUP-VOLUME EVENT PROBE
+    // SECTION 5 - GROUP-VOLUME EVENT PROBE
     // =========================================================================
     println!("\n========================================================");
-    println!(" SECTION 5 — GROUP-VOLUME EVENT PROBE (GroupVolume / GroupMute properties)");
+    println!(" SECTION 5 - GROUP-VOLUME EVENT PROBE (GroupVolume / GroupMute properties)");
     println!("========================================================");
 
     // Rebuild the SDK event stack (mirrors topology_probe).
@@ -550,11 +550,11 @@ fn main() {
     );
 
     // =========================================================================
-    // SECTION 6 — OPTION D PROBE (re-initialize live StateManager)
+    // SECTION 6 - OPTION D PROBE (re-initialize live StateManager)
     // =========================================================================
     println!("\n========================================================");
-    println!(" SECTION 6 — OPTION D PROBE (manager.initialize on live StateManager)");
-    println!(" [EXPLORATORY — informs in-place-vs-respawn decision for v0.5.1]");
+    println!(" SECTION 6 - OPTION D PROBE (manager.initialize on live StateManager)");
+    println!(" [EXPLORATORY - informs in-place-vs-respawn decision for v0.5.1]");
     println!("========================================================");
 
     print!(
@@ -607,7 +607,7 @@ fn main() {
 
                 let new_topology = Topology::new(sdk_speakers.clone(), new_sdk_groups);
                 manager.initialize(new_topology);
-                println!("  manager.initialize(new_topology) called on LIVE manager — OK");
+                println!("  manager.initialize(new_topology) called on LIVE manager - OK");
 
                 // Re-watch GroupVolume on any new coordinators.
                 for g in &fresh_zgt {
@@ -618,7 +618,7 @@ fn main() {
 
                 // Observe for 30 s to see if subsequent events route correctly.
                 print!(
-                    "\n>>> Watching for 30 s after re-initialize — change a group volume in the \n\
+                    "\n>>> Watching for 30 s after re-initialize - change a group volume in the \n\
                      >>> Sonos app now.\n\n"
                 );
                 std::io::stdout().flush().unwrap();
@@ -659,7 +659,7 @@ fn main() {
     // CLOSING SUMMARY
     // =========================================================================
     println!("\n========================================================");
-    println!(" group_ops_probe COMPLETE — record findings in sonos-notes.md");
+    println!(" group_ops_probe COMPLETE - record findings in sonos-notes.md");
     println!("  Key answers to look for:");
     println!("  Join: Does SetAVTransportURI x-rincon:ID join the speaker?");
     println!("  Leave: Does BecomeCoordinatorOfStandaloneGroup work on a member AND coordinator?");

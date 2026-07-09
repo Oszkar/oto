@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-//! `oto-app` — owns runtime state (the active `Wire`) and routes the
+//! `oto-app` - owns runtime state (the active `Wire`) and routes the
 //! discover command and the playback/volume/state commands.
 //! See `docs/ARCHITECTURE.md` for the command flow and the `Wire` seam.
 //!
@@ -26,17 +26,17 @@
 //!   Revisit if v0.4 event-pump threads contend on the same lock; at that
 //!   point a command channel or per-device granularity may be warranted.
 //!
-//! - **`StateManager` `RwLock`s (per-speaker / per-group / topology)** —
+//! - **`StateManager` `RwLock`s (per-speaker / per-group / topology)** -
 //!   added in v0.4. Independent of `SLOT`. The FRB-worker
 //!   consumer loop in `api.rs::subscribe_change_events` takes one of
-//!   these write locks per `ChangeEvent` applied (short hold — one
+//!   these write locks per `ChangeEvent` applied (short hold - one
 //!   variant dispatch + one HashMap insert); the cache-backed
 //!   `speaker_state` takes read locks. Production runs through v0.4
 //!   dogfooding (spec § 8.7–§ 8.9) showed no observable contention
 //!   between event-apply writes and command-time `SLOT` holds. The
 //!   reasoning: event throughput is bounded by Sonos's GENA cadence
 //!   (~120 events/min for a 4-speaker household at the spike's
-//!   baseline), and `SLOT` writes happen only on user commands —
+//!   baseline), and `SLOT` writes happen only on user commands -
 //!   different time scales, different access patterns. Lock-granularity
 //!   audit per spec § 5.4 lands here: no narrowing needed for v0.4. The
 //!   v0.5 topology-events stream lands on the same channel and the
@@ -44,7 +44,7 @@
 //!   volume produce visible latency.
 //!
 //! - **`DISCOVER_LOCK` (`Mutex<()>`)** is held for the duration of one
-//!   `discover_with` call — across `make()`, `wire.discover()`, and the
+//!   `discover_with` call - across `make()`, `wire.discover()`, and the
 //!   slot replacement. It serialises *discoveries against each other*
 //!   without touching the slot lock, so playback commands and discovery
 //!   live on independent serialisation surfaces.
@@ -56,7 +56,7 @@
 //!   `discoveryProvider` is autoDispose-d, so a remount-during-discovery
 //!   re-fires it) could finish in any order, and last-writer-wins on the
 //!   slot let an *older* snapshot overwrite a *newer* wire. Serialising
-//!   the whole discover_with call gives deterministic ordering — the
+//!   the whole discover_with call gives deterministic ordering - the
 //!   `discover_with` that acquires the lock last is the one whose wire
 //!   ends up in the slot.
 
@@ -81,13 +81,13 @@ use crate::state_manager::StateManager;
 pub use crate::events::try_recv_app_event;
 
 // `Send` lets the wire cross threads into the static; `Sync` is not
-// needed — all access is serialised by the `Mutex`. Don't add `+ Sync`.
+// needed - all access is serialised by the `Mutex`. Don't add `+ Sync`.
 type BoxedWire = Box<dyn Wire + Send>;
 
 /// The installed wire paired with the `StateManager` generation it was
 /// installed under. Pairing them in the slot lets the FRB consumer take
 /// its receiver and its generation **atomically** (one slot-lock
-/// acquisition) — see [`take_event_stream_with_generation`]. Without the
+/// acquisition) - see [`take_event_stream_with_generation`]. Without the
 /// pairing the consumer could take an OLD wire's receiver and then read a
 /// NEWER generation (a concurrent rediscover bumped it between the two
 /// reads), applying the old wire's buffered events into the new wire's
@@ -133,13 +133,13 @@ fn health_tracker() -> &'static HealthTracker {
 ///
 /// `cmd_gen` is the wire generation the command actually ran under (captured
 /// under SLOT by [`with_wire_gen`]). If a rediscover has since replaced the
-/// wire — bumping the generation and resetting health to a clean slate — the
+/// wire - bumping the generation and resetting health to a clean slate - the
 /// observation belongs to a dead wire: applying it here would both pollute the
 /// fresh tracker with a stale transition AND stamp the event onto the new
 /// stream. The generation is re-checked **under the tracker's write lock**
 /// inside [`HealthTracker::observe`] (which shares that lock with `reset_all`),
 /// so the check and the health mutation are atomic w.r.t. a concurrent wire
-/// replacement — no stale transition can land in the new wire's fresh tracker.
+/// replacement - no stale transition can land in the new wire's fresh tracker.
 /// The event is also stamped with `cmd_gen` so the FRB consumer drops it if a
 /// bump slips in between the observe and the push.
 fn observe_speaker_health<R>(cmd_gen: u64, speaker: &SpeakerId, result: &Result<R, WireError>) {
@@ -155,7 +155,7 @@ fn observe_speaker_health<R>(cmd_gen: u64, speaker: &SpeakerId, result: &Result<
 
 /// Observe a group-addressed command's result against the group's
 /// coordinator (the speaker the command was routed to). No-op if the
-/// coordinator can't be resolved (unknown/stale group) — the command's own
+/// coordinator can't be resolved (unknown/stale group) - the command's own
 /// `NotFound` already conveys that, and health is reachability-only.
 fn observe_group_health<R>(cmd_gen: u64, group: &GroupId, result: &Result<R, WireError>) {
     if let Some(coordinator) = state_manager().coordinator_of(group) {
@@ -175,7 +175,7 @@ fn with_wire<R>(f: impl FnOnce(&dyn Wire) -> Result<R, WireError>) -> Result<R, 
 
 /// Like [`with_wire`], but also returns the `StateManager` generation the
 /// held wire was installed under (read under the same SLOT acquisition, so
-/// it's the generation the command ran against — not a later one a concurrent
+/// it's the generation the command ran against - not a later one a concurrent
 /// rediscover may have bumped to). Command paths capture this to gate health
 /// observation; see [`observe_speaker_health`]. The no-wire case returns
 /// generation `0`, which is harmless: the synthetic `NotFound` never flips
@@ -189,7 +189,7 @@ fn with_wire_gen<R>(
     match guard.as_ref() {
         None => (
             0,
-            Err(WireError::NotFound("no wire — discover first".into())),
+            Err(WireError::NotFound("no wire - discover first".into())),
         ),
         Some(held) => (held.generation, f(&*held.wire)),
     }
@@ -197,7 +197,7 @@ fn with_wire_gen<R>(
 
 /// Construct a wire, run discovery, and on success replace the held
 /// wire (so v0.2 playback can act on it). On failure the previously
-/// held wire — if any — is left intact.
+/// held wire - if any - is left intact.
 ///
 /// `DISCOVER_LOCK` is held for the full call so two overlapping
 /// discoveries serialise; the slot lock is only taken at the very end
@@ -212,7 +212,7 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
     // v0.5: register topology-event interest BEFORE subscribe_speakers.
     // subscribe_speakers builds the event pump and (for SonosWire) the SDK
     // manager moves into the pump thread, so the GroupMembership watch must
-    // be requested first — subscribe_speakers reads the flag when it spawns
+    // be requested first - subscribe_speakers reads the flag when it spawns
     // the pump. Idempotent on the wire; a logic-bug error here (discover()
     // just succeeded) propagates as a discovery failure.
     wire.subscribe_topology()?;
@@ -233,11 +233,11 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
     //   1. bump_clear_and_install → bumps the generation (so any future
     //      apply_*_at_generation from the OLD consumer no-ops on the gen
     //      mismatch), clears the stale property caches, and installs the
-    //      NEW topology — in one step. Folding the topology install into
+    //      NEW topology - in one step. Folding the topology install into
     //      the bump means there is never a window where a wire is present
     //      but the topology map is empty (which would make a concurrent
     //      `speaker_state` spuriously return NotFound for a speaker that
-    //      exists in both topologies — L5). It returns the generation it
+    //      exists in both topologies - L5). It returns the generation it
     //      bumped to, which we pin to the wire in the slot swap below.
     //   2. slot replacement → installs the NEW wire PAIRED with that
     //      generation, and drops the old wire (Sender side of the old
@@ -250,7 +250,7 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
     // (generation, receiver) pair atomically from the slot on entry
     // (`take_event_stream_with_generation`).
     let generation = state_manager().bump_clear_and_install(&snapshot);
-    // v0.5: a fresh wire starts with a clean health slate — drop any
+    // v0.5: a fresh wire starts with a clean health slate - drop any
     // Errored marks from the old wire so the first command on the new wire
     // is judged from Healthy (and a recovery on the new wire isn't masked).
     health_tracker().reset_all();
@@ -269,7 +269,7 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
     discover_with(|| Box::new(SonosWire::new()))
 }
 
-/// v0.5.1 topology fast-path — a "discover() minus SSDP".
+/// v0.5.1 topology fast-path - a "discover() minus SSDP".
 ///
 /// Re-pull authoritative topology from the CURRENT wire (no SSDP) to get the
 /// reachable speaker IPs, then install a FRESH wire seeded from them through
@@ -283,9 +283,9 @@ pub fn discover() -> Result<DiscoverySnapshot, WireError> {
 /// the first regroup.
 pub fn refresh_topology() -> Result<DiscoverySnapshot, WireError> {
     // `with_wire` releases SLOT before returning; `refresh_topology_with` →
-    // `discover_with` then acquires DISCOVER_LOCK → SLOT independently — no lock
+    // `discover_with` then acquires DISCOVER_LOCK → SLOT independently - no lock
     // inversion. Two GetZoneGroupState SOAP calls happen (one here for the IPs,
-    // one in the seeded `discover()`), each ~tens of ms — still far under the
+    // one in the seeded `discover()`), each ~tens of ms - still far under the
     // ~3-5 s SSDP sweep this replaces.
     let snapshot = with_wire(|w| w.refresh_topology())?;
     let ips: Vec<std::net::IpAddr> = snapshot.speakers.iter().map(|s| s.ip).collect();
@@ -361,7 +361,7 @@ pub fn set_group_mute(group: &GroupId, muted: bool) -> Result<(), WireError> {
 
 /// v0.5.1: fold `speaker` into `coordinator`'s group. Additive; the settled
 /// topology surfaces via the debounced `GroupMembership` topology-event path
-/// (no self-trigger here). Health is attributed to the joiner — the speaker
+/// (no self-trigger here). Health is attributed to the joiner - the speaker
 /// the join SOAP is sent to.
 pub fn join_group(speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
     let (wire_gen, result) = with_wire_gen(|w| w.join_group(speaker, coordinator));
@@ -382,16 +382,16 @@ pub fn leave_group(speaker: &SpeakerId) -> Result<(), WireError> {
 ///
 /// Reads from the `StateManager` cache instead of
 /// dispatching through `Wire::speaker_state`. The trait method is kept
-/// (the production `SonosWire` still implements it via SOAP — used by
+/// (the production `SonosWire` still implements it via SOAP - used by
 /// the hardware-gated live tests for baseline reads; `MockWire` still
-/// implements it for its own unit tests). But `oto_app::speaker_state`
-/// — and therefore every FRB caller — is now event-fed: a speaker's
+/// implements it for its own unit tests). But `oto_app::speaker_state` -
+/// and therefore every FRB caller - is now event-fed: a speaker's
 /// volume/mute reflect the most recent ChangeEvent applied to the
 /// `StateManager`, and transport resolves via speaker → group →
 /// group-cache using the topology installed by `discover_with`.
 ///
 /// **Error contract preserved from v0.3:**
-///   - No wire installed → `NotFound("no wire — discover first")`.
+///   - No wire installed → `NotFound("no wire - discover first")`.
 ///   - Wire installed but `speaker` not in the topology → `NotFound(id)`.
 ///   - Wire installed AND speaker in topology → `Ok(SpeakerState)` with
 ///     honest-partial fields (`None` for any property whose event
@@ -407,7 +407,7 @@ pub fn speaker_state(speaker: &SpeakerId) -> Result<SpeakerState, WireError> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     if guard.is_none() {
-        return Err(WireError::NotFound("no wire — discover first".into()));
+        return Err(WireError::NotFound("no wire - discover first".into()));
     }
     drop(guard);
     if !state_manager().is_known_speaker(speaker) {
@@ -437,7 +437,7 @@ pub fn track_position(group: &GroupId) -> Result<TrackPosition, WireError> {
 /// Hand the v0.4 event-stream receiver to the FRB consumer loop.
 /// Called by `api.rs::subscribe_change_events`. Returns `None` if no
 /// wire is installed yet, or if the receiver has already been taken
-/// (one consumer per wire — per spec § 4 + FRB pre-check § 5).
+/// (one consumer per wire - per spec § 4 + FRB pre-check § 5).
 pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
     slot()
         .lock()
@@ -451,7 +451,7 @@ pub fn take_event_stream() -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
 /// lock so a concurrent `discover_with` cannot slip a generation bump
 /// between "take receiver" and "read generation". The consumer applies
 /// events at this generation; once a later `discover_with` bumps the
-/// `StateManager` past it, those applies no-op — so a lingering OLD-wire
+/// `StateManager` past it, those applies no-op - so a lingering OLD-wire
 /// consumer cannot pollute the NEW wire's freshly-seeded cache. Returns
 /// `None` if no wire is installed or the receiver was already taken (one
 /// consumer per wire).
@@ -465,7 +465,7 @@ pub fn take_event_stream_with_generation() -> Option<(u64, std::sync::mpsc::Rece
     held.wire.take_event_stream().map(|rx| (generation, rx))
 }
 
-/// Generation-aware apply — no-op if `generation` doesn't match the current
+/// Generation-aware apply - no-op if `generation` doesn't match the current
 /// `state_manager` generation. The FRB consumer loop captures the
 /// generation once at start, then passes it on every event so a
 /// `discover_with` that bumps mid-stream causes any in-flight writes
@@ -481,7 +481,7 @@ pub fn current_generation() -> u64 {
     state_manager().current_generation()
 }
 
-/// Read a speaker's cached volume — used by the cache-backed `speaker_state`.
+/// Read a speaker's cached volume - used by the cache-backed `speaker_state`.
 pub fn cached_volume(speaker: &SpeakerId) -> Option<Volume> {
     state_manager().volume_of(speaker)
 }
@@ -526,7 +526,7 @@ pub fn cached_group_muted(group: &GroupId) -> Option<bool> {
 // integration tests, which live in a separate compilation unit, can
 // reach them. Don't call from production paths.
 
-/// Test-only helpers — see module-level "Test helpers" section above
+/// Test-only helpers - see module-level "Test helpers" section above
 /// for context. Marked `#[doc(hidden)]` to keep them out of public
 /// docs while still cross-crate-visible.
 #[doc(hidden)]
@@ -565,7 +565,7 @@ pub mod test_helpers {
     /// Auto-refreshes the receiver when the held wire is replaced. The
     /// captured generation is re-read after a `Disconnected` (i.e.
     /// whenever a fresh receiver is taken) so that NEW-wire events
-    /// land at the NEW generation — without this, a wire replacement
+    /// land at the NEW generation - without this, a wire replacement
     /// mid-drain would silently no-op every subsequent apply against
     /// the stale (pre-bump) generation.
     pub fn process_pending_events(timeout: std::time::Duration) -> usize {
@@ -573,7 +573,7 @@ pub mod test_helpers {
         // `generation` is paired with the receiver whenever we (re)take the
         // stream via `take_event_stream_with_generation` (the refill
         // below + the `Disconnected` arm). For OLD-wire events buffered
-        // before a gen bump, the captured OLD gen is correct — the apply
+        // before a gen bump, the captured OLD gen is correct - the apply
         // succeeds if gen still matches, or no-ops if a rediscover already
         // bumped (matching production semantics). For NEW-wire events
         // arriving after a refresh, the re-paired gen ensures they reach
@@ -603,7 +603,7 @@ pub mod test_helpers {
                     None => return count,
                 }
             }
-            // Drop the guard before the (potentially blocking) recv —
+            // Drop the guard before the (potentially blocking) recv -
             // holding the Mutex across recv would needlessly serialise
             // any concurrent helper. (`process_pending_events` is
             // called serially in practice; this is purely defensive.)
@@ -621,13 +621,13 @@ pub mod test_helpers {
                     *test_event_rx().lock().unwrap_or_else(|p| p.into_inner()) = Some(rx);
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    // No more events for now — put the receiver back
+                    // No more events for now - put the receiver back
                     // and exit. (Don't busy-loop within the timeout.)
                     *test_event_rx().lock().unwrap_or_else(|p| p.into_inner()) = Some(rx);
                     break;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    // Wire was replaced — drop this rx, leave the slot
+                    // Wire was replaced - drop this rx, leave the slot
                     // empty so the next iteration re-takes (rx, generation)
                     // together via `take_event_stream_with_generation`,
                     // which re-pairs `generation` with the NEW wire (mirroring
@@ -662,7 +662,7 @@ fn clear_slot() {
     // leak into the next test (same process under `cargo test`).
     health_tracker().reset_all();
     // Drain any app-bus events a prior test pushed so they don't leak
-    // (gen-agnostic — clear() empties the channel regardless of stamp).
+    // (gen-agnostic - clear() empties the channel regardless of stamp).
     events::clear();
     // Drop any stranded test receiver so the next test starts clean.
     test_helpers::reset_rx();
@@ -680,7 +680,7 @@ mod tests {
     /// How long unit tests are willing to wait when draining MockWire
     /// events into the StateManager cache. MockWire emits synchronously
     /// from its own command thread, so 50 ms is comfortably more than
-    /// any realistic drain — but enough that a CI host under load
+    /// any realistic drain - but enough that a CI host under load
     /// shouldn't flake.
     const DRAIN_WINDOW: Duration = Duration::from_millis(50);
 
@@ -781,7 +781,7 @@ mod tests {
         let snap = discover_with(|| Box::new(MockWire::default())).unwrap();
         assert_eq!(snap.speakers.len(), 3);
         // Drain the subscribe_speakers seed events into the StateManager
-        // cache so the post-discover reads below see state — speaker_state
+        // cache so the post-discover reads below see state - speaker_state
         // reads the event-fed cache, so the consumer loop must run.
         process_pending_events(DRAIN_WINDOW);
 
@@ -838,7 +838,7 @@ mod tests {
 
         // ── 6. Second successful discover replaces the wire ───────────────
         // The new MockWire::default() seeds kitchen volume at SEED_VOLUME (30),
-        // not the 55 we wrote in step 3 — proving replacement, not retention.
+        // not the 55 we wrote in step 3 - proving replacement, not retention.
         // bump_and_clear wiped the cache; install_topology refreshed the
         // speaker→group map; then subscribe_speakers seeded the NEW wire's
         // events. Draining brings the seeds into the cache.
@@ -878,7 +878,7 @@ mod tests {
         assert_eq!(snap.speakers.len(), 3, "fixture sanity");
 
         let rx = take_event_stream().expect(
-            "discover_with must auto-invoke subscribe_speakers — without it the \
+            "discover_with must auto-invoke subscribe_speakers - without it the \
              MockWire's tx channel is None and the receiver is unreachable",
         );
 
@@ -911,7 +911,7 @@ mod tests {
     /// v0.5: `discover_with` must auto-invoke `subscribe_topology` so
     /// the topology-event watch is active without the caller driving it.
     /// The `MockWire::topology_subscribed()` introspection confirms the
-    /// call happened. (Ordering — topology before speakers — is enforced
+    /// call happened. (Ordering - topology before speakers - is enforced
     /// at the wire layer; here we only assert it was invoked.)
     #[test]
     fn discover_with_auto_invokes_subscribe_topology() {
@@ -932,7 +932,7 @@ mod tests {
     }
 
     /// v0.5.1: `refresh_topology_with` installs a fresh wire via the
-    /// proven `discover_with` path — so it returns a snapshot AND bumps the
+    /// proven `discover_with` path - so it returns a snapshot AND bumps the
     /// generation, exactly like a re-discover. (Production's `refresh_topology`
     /// first re-pulls IPs from the current wire, then calls this with a
     /// seeded-`SonosWire` factory; here we drive the seam directly with a
@@ -962,7 +962,7 @@ mod tests {
     }
 
     /// Production `refresh_topology` re-pulls the topology from the CURRENT wire
-    /// (via `with_wire(refresh_topology)`) before seeding the new wire — so it
+    /// (via `with_wire(refresh_topology)`) before seeding the new wire - so it
     /// requires a wire to be installed first. Pin that precondition: with no
     /// wire installed it returns `NotFound`, same as any other `with_wire`
     /// command.
@@ -1021,7 +1021,7 @@ mod tests {
 
     /// N1: a health observation stamped with a generation that is no longer
     /// current (a rediscover replaced the wire after the command ran) must be
-    /// dropped — not observed against the fresh tracker, not pushed onto the
+    /// dropped - not observed against the fresh tracker, not pushed onto the
     /// new stream. The current-generation observation still emits (control).
     #[test]
     fn stale_generation_health_observation_is_dropped() {
@@ -1145,7 +1145,7 @@ mod tests {
 
         assert!(
             drain_app_events().is_empty(),
-            "Backend error is not a reachability signal — no health event"
+            "Backend error is not a reachability signal - no health event"
         );
     }
 
@@ -1193,7 +1193,7 @@ mod tests {
         assert!(res.is_ok());
         assert!(
             drain_app_events().is_empty(),
-            "health reset on rediscover — no stale Recovered event"
+            "health reset on rediscover - no stale Recovered event"
         );
     }
 
@@ -1274,7 +1274,7 @@ mod tests {
         let _ = set_volume(&kitchen, Volume::new(50).unwrap());
 
         // Rediscover: health resets, so the queued event is stale and must
-        // be dropped — it must not surface on the new stream (review #65).
+        // be dropped - it must not surface on the new stream (review #65).
         let _ = discover_with_held_mock();
         assert!(
             drain_app_events().is_empty(),
@@ -1286,7 +1286,7 @@ mod tests {
     /// ran `wire.discover()` *outside* any lock and only locked the slot
     /// for the final write, so two overlapping discoveries could finish
     /// in any order and the slower one would last-writer-wins overwrite
-    /// the faster one's wire — losing whatever fresh topology the user
+    /// the faster one's wire - losing whatever fresh topology the user
     /// just observed.
     ///
     /// `DISCOVER_LOCK` now serialises the full call (make + discover +
@@ -1327,7 +1327,7 @@ mod tests {
                     thread::sleep(Duration::from_millis(50));
                     // Build the wire into a local so the closure's tail
                     // expression is `Box::new(local)`, not
-                    // `Box::new(T::default())` — the latter trips
+                    // `Box::new(T::default())` - the latter trips
                     // clippy::box_default, which would otherwise suggest
                     // `Box::default()`. That suggestion doesn't compile
                     // here because the closure's inferred return type
@@ -1395,17 +1395,17 @@ mod tests {
         );
         assert_ne!(
             paired_1, paired_2,
-            "the two wires' receivers carry distinct generations — an OLD-wire \
+            "the two wires' receivers carry distinct generations - an OLD-wire \
              event applied at paired_1 no-ops once paired_2 is current"
         );
     }
 
-    /// v0.6.1: `track_position` routes through the slot like `play` — lock
+    /// v0.6.1: `track_position` routes through the slot like `play` - lock
     /// held across the SOAP call, NOT a cache read. Verify:
     ///   1. Pre-discover -> NotFound (no wire in slot).
     ///   2. Unknown group after discover -> NotFound.
     ///   3. Known group returns Ok (validates slot dispatch; mock default
-    ///      seeds position/duration as None — both fields are tested in
+    ///      seeds position/duration as None - both fields are tested in
     ///      `oto-mock`'s own unit tests; routing correctness is proven here).
     #[test]
     fn track_position_routes_through_slot() {
@@ -1436,7 +1436,7 @@ mod tests {
         // Default transport has no current track, so duration is None.
         assert!(
             pos.duration.is_none(),
-            "default mock has no current track — duration must be None"
+            "default mock has no current track - duration must be None"
         );
     }
 }

@@ -12,7 +12,7 @@ Catalog of every file under `app/rust_builder/cargokit/` (and any other vendored
 
 ---
 
-## 1. cargokit/gradle/plugin.gradle — drop 32-bit ABIs
+## 1. cargokit/gradle/plugin.gradle - drop 32-bit ABIs
 
 **File:** `app/rust_builder/cargokit/gradle/plugin.gradle` **Upstream:** https://github.com/irondash/cargokit **Affected block:** `CargoKitPlugin.apply` → the `variants.all { variant -> ... }` closure, around the platform-list construction.
 
@@ -23,9 +23,9 @@ Catalog of every file under `app/rust_builder/cargokit/` (and any other vendored
 
 ### Why we patch instead of using config
 
-Cargokit has **no config knob** for filtering ABIs out of the platform list — the hardcoded `platforms.add("android-x86")` and the unconditional inclusion of whatever Flutter returns are not overridable from `cargokit { ... }` in the consuming `build.gradle`. Until upstream accepts a configuration option, patching is the only way to skip 32-bit builds.
+Cargokit has **no config knob** for filtering ABIs out of the platform list - the hardcoded `platforms.add("android-x86")` and the unconditional inclusion of whatever Flutter returns are not overridable from `cargokit { ... }` in the consuming `build.gradle`. Until upstream accepts a configuration option, patching is the only way to skip 32-bit builds.
 
-Why not just let cargo fail on the missing 32-bit Rust targets? Because the failure mode is opaque (`error: the target "i686-linux-android" is not installed`) — every fresh contributor hits it. The patch fails fast and quietly with the right behavior.
+Why not just let cargo fail on the missing 32-bit Rust targets? Because the failure mode is opaque (`error: the target "i686-linux-android" is not installed`) - every fresh contributor hits it. The patch fails fast and quietly with the right behavior.
 
 ### Diff (for re-application)
 
@@ -43,7 +43,7 @@ if (buildType == "debug") {
     platforms.add("android-x64")
 }
 
-// LOCAL PATCH (oto): drop 32-bit ABIs — project minSdk is 35 (Android 15+).
+// LOCAL PATCH (oto): drop 32-bit ABIs - project minSdk is 35 (Android 15+).
 // Re-apply if syncing cargokit from upstream.
 platforms = platforms.findAll { it != "android-arm" && it != "android-x86" }.unique()
 ```
@@ -103,7 +103,7 @@ No upstream issue filed yet. Link it here once one exists.
 
 ---
 
-## 3. macos/oto_native.podspec — link SystemConfiguration.framework
+## 3. macos/oto_native.podspec - link SystemConfiguration.framework
 
 **File:** `app/rust_builder/macos/oto_native.podspec` **Affected block:** the second `s.pod_target_xcconfig` (`OTHER_LDFLAGS`).
 

@@ -55,7 +55,7 @@ abstract final class TextStyles {
     height: 1.05,
   );
 
-  /// Screen header — e.g. "Speakers".
+  /// Screen header - e.g. "Speakers".
   static const TextStyle titleScreen = TextStyle(
     fontFamily: Fonts.sans,
     fontSize: 26,
@@ -116,7 +116,7 @@ abstract final class TextStyles {
     fontWeight: FontWeight.w600,
   );
 
-  /// Section eyebrows — "GROUP VOLUME", "ROOM LEVELS". Render uppercase at the
+  /// Section eyebrows - "GROUP VOLUME", "ROOM LEVELS". Render uppercase at the
   /// call site (`text.toUpperCase()`); the style only carries the tracking.
   static const TextStyle overline = TextStyle(
     fontFamily: Fonts.sans,
@@ -134,7 +134,7 @@ abstract final class TextStyles {
 }
 
 /// Drop shadows. Flat cards use a hairline border (see `OtoColors.line`), not a
-/// shadow — `card` is the subtle lift; `float`/`floatLg` are for the floating
+/// shadow - `card` is the subtle lift; `float`/`floatLg` are for the floating
 /// group bar / bottom strip.
 abstract final class Elevation {
   static const List<BoxShadow> card = [

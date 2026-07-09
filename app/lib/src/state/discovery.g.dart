@@ -14,7 +14,7 @@ part of 'discovery.dart';
 /// [Discovery.refreshTopology] alongside the deferred `build()` discover.
 /// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
 /// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged — and a `refreshTopology()` re-pull still surfaces as a
+/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
 /// `discoveryProvider` transition, which is what drives the event stream to
 /// re-subscribe against the new wire (see [Discovery.refreshTopology]).
 ///
@@ -24,14 +24,14 @@ part of 'discovery.dart';
 /// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// `WifiManager.MulticastLock` - without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
 /// platforms call `discover()` directly (no channel handler exists).
 ///
 /// The lock is **best-effort**: it's an optimization to stop Android dropping
 /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied — the native handler returns a structured error), we
+/// permission denied - the native handler returns a structured error), we
 /// still attempt discovery rather than hard-failing.
 
 @ProviderFor(Discovery)
@@ -43,7 +43,7 @@ final discoveryProvider = DiscoveryProvider._();
 /// [Discovery.refreshTopology] alongside the deferred `build()` discover.
 /// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
 /// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged — and a `refreshTopology()` re-pull still surfaces as a
+/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
 /// `discoveryProvider` transition, which is what drives the event stream to
 /// re-subscribe against the new wire (see [Discovery.refreshTopology]).
 ///
@@ -53,14 +53,14 @@ final discoveryProvider = DiscoveryProvider._();
 /// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// `WifiManager.MulticastLock` - without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
 /// platforms call `discover()` directly (no channel handler exists).
 ///
 /// The lock is **best-effort**: it's an optimization to stop Android dropping
 /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied — the native handler returns a structured error), we
+/// permission denied - the native handler returns a structured error), we
 /// still attempt discovery rather than hard-failing.
 final class DiscoveryProvider
     extends $AsyncNotifierProvider<Discovery, rust_api.Topology> {
@@ -70,7 +70,7 @@ final class DiscoveryProvider
   /// [Discovery.refreshTopology] alongside the deferred `build()` discover.
   /// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
   /// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-  /// is unchanged — and a `refreshTopology()` re-pull still surfaces as a
+  /// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
   /// `discoveryProvider` transition, which is what drives the event stream to
   /// re-subscribe against the new wire (see [Discovery.refreshTopology]).
   ///
@@ -80,14 +80,14 @@ final class DiscoveryProvider
   /// fresh scanning state immediately.
   ///
   /// On Android the SSDP window is wrapped in a held
-  /// `WifiManager.MulticastLock` — without it Android drops the inbound
+  /// `WifiManager.MulticastLock` - without it Android drops the inbound
   /// multicast replies and discovery finds nothing on release builds. The lock
   /// is released in a `finally` so a failed discover still frees it. Other
   /// platforms call `discover()` directly (no channel handler exists).
   ///
   /// The lock is **best-effort**: it's an optimization to stop Android dropping
   /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-  /// permission denied — the native handler returns a structured error), we
+  /// permission denied - the native handler returns a structured error), we
   /// still attempt discovery rather than hard-failing.
   DiscoveryProvider._()
     : super(
@@ -116,7 +116,7 @@ String _$discoveryHash() => r'24aa9eb6b43fc7b8d294f9a8d88fce0c917f3c29';
 /// [Discovery.refreshTopology] alongside the deferred `build()` discover.
 /// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
 /// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged — and a `refreshTopology()` re-pull still surfaces as a
+/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
 /// `discoveryProvider` transition, which is what drives the event stream to
 /// re-subscribe against the new wire (see [Discovery.refreshTopology]).
 ///
@@ -126,14 +126,14 @@ String _$discoveryHash() => r'24aa9eb6b43fc7b8d294f9a8d88fce0c917f3c29';
 /// fresh scanning state immediately.
 ///
 /// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` — without it Android drops the inbound
+/// `WifiManager.MulticastLock` - without it Android drops the inbound
 /// multicast replies and discovery finds nothing on release builds. The lock
 /// is released in a `finally` so a failed discover still frees it. Other
 /// platforms call `discover()` directly (no channel handler exists).
 ///
 /// The lock is **best-effort**: it's an optimization to stop Android dropping
 /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied — the native handler returns a structured error), we
+/// permission denied - the native handler returns a structured error), we
 /// still attempt discovery rather than hard-failing.
 
 abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
@@ -156,7 +156,7 @@ abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
 }
 
 /// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
 /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
@@ -170,7 +170,7 @@ abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
 final wireInstallSignalProvider = WireInstallSignalProvider._();
 
 /// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
 /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
@@ -182,7 +182,7 @@ final wireInstallSignalProvider = WireInstallSignalProvider._();
 final class WireInstallSignalProvider
     extends $NotifierProvider<WireInstallSignal, int> {
   /// A monotonic signal bumped on every wire install that may NOT transition
-  /// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+  /// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
   /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
   /// force a re-read of the Rust generation so the event stream re-subscribes
   /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
@@ -221,7 +221,7 @@ final class WireInstallSignalProvider
 String _$wireInstallSignalHash() => r'2bf533d35d8e5429c890c41b9e404b5358f7c8a6';
 
 /// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] — specifically a value-equal fast `refreshTopology()`
+/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
 /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle

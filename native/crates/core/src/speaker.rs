@@ -1,6 +1,6 @@
 //! Per-device state for a single Sonos speaker.
 //!
-//! Playback state lives on [`crate::Group`], not here — see design doc D2.
+//! Playback state lives on [`crate::Group`], not here - see design doc D2.
 
 use std::net::IpAddr;
 
