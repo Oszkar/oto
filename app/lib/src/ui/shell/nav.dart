@@ -7,6 +7,7 @@ import '../group/group_editor_screen.dart';
 import '../now_playing/now_playing_screen.dart';
 import '../room/room_detail_screen.dart';
 import '../settings/settings_screen.dart';
+import 'responsive_pop.dart';
 
 /// Open a group's Now Playing. Wide: select it into the detail pane. Phone:
 /// push the full-screen route (today's behavior).
@@ -47,6 +48,7 @@ Future<void> openSettings(BuildContext context) {
     return _showPaneDialog(
       context,
       (dismiss) => SettingsBody(onDismiss: dismiss),
+      (_) => const SettingsScreen(),
     );
   }
   return Navigator.of(
@@ -61,6 +63,7 @@ Future<void> openGroupEditor(BuildContext context, String hostId) {
     return _showPaneDialog(
       context,
       (dismiss) => GroupEditorBody(hostId: hostId, onDismiss: dismiss),
+      (_) => GroupEditorScreen(hostId: hostId),
     );
   }
   return Navigator.of(context).push(
@@ -69,19 +72,28 @@ Future<void> openGroupEditor(BuildContext context, String hostId) {
 }
 
 /// A centered, size-constrained dialog hosting a chrome-free `*Body`. The body
-/// is built with a `dismiss` callback that pops THIS dialog.
+/// is built with a `dismiss` callback that pops THIS dialog. If the window
+/// narrows to phone width while the dialog is open, it collapses into the
+/// full-screen route built by [phoneRoute] - the reverse of the phone routes'
+/// own `checkResponsivePop`.
 Future<void> _showPaneDialog(
   BuildContext context,
   Widget Function(VoidCallback dismiss) body,
+  WidgetBuilder phoneRoute,
 ) {
   return showDialog<void>(
     context: context,
-    builder: (ctx) => Dialog(
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 680),
-        child: body(() => Navigator.of(ctx).pop()),
-      ),
+    builder: (ctx) => Builder(
+      builder: (ctx) {
+        ctx.checkResponsiveCollapse(phoneRoute);
+        return Dialog(
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460, maxHeight: 680),
+            child: body(() => Navigator.of(ctx).pop()),
+          ),
+        );
+      },
     ),
   );
 }
