@@ -32,8 +32,9 @@ class NowPlayingBody extends ConsumerWidget {
   final String groupId;
   final VoidCallback? onDismiss;
 
-  /// Album-art inset from the screen edge, matching the JSX `HF.W - 88`.
-  static const double _artInset = 88;
+  /// Upper bound on the album-art side, so it stays a comfortable square on
+  /// wide panes and doesn't balloon on large windows.
+  static const double _artMax = 320;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -75,9 +76,14 @@ class NowPlayingBody extends ConsumerWidget {
   }
 
   Widget _art(BuildContext context, GroupState group) {
-    final size = MediaQuery.sizeOf(context).width - _artInset;
-    return Center(
-      child: AlbumArt(group.track?.artUri, size: size.clamp(0, 320)),
+    // Size the square off the pane's OWN width, not the window's: in the wide
+    // detail pane the window is far wider than the pane, so keying off screen
+    // width stretched the art into a rectangle.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = constraints.maxWidth.clamp(0.0, _artMax);
+        return Center(child: AlbumArt(group.track?.artUri, size: side));
+      },
     );
   }
 

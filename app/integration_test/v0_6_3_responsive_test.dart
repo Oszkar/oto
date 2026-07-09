@@ -189,9 +189,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        container.read(selectedSourceProvider),
+        container.read(selectedSourceProvider).pinned,
+        isTrue,
+        reason: 'tapping the group card body pins an explicit selection',
+      );
+      expect(
+        container.read(resolvedSourceProvider),
         _kitchenGroup,
-        reason: 'tapping the group card body selects it into the pane',
+        reason: 'the pinned selection resolves into the detail pane',
       );
 
       // ── Settings dialog from the rail ────────────────────────────────────

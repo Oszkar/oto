@@ -38,7 +38,9 @@ Future<void> initWindowBounds(SharedPreferences prefs) async {
     await windowManager.ensureInitialized();
     final saved = _rectFrom(prefs.getString(_kBounds));
     final opts = WindowOptions(
-      size: saved?.size ?? const Size(1100, 760),
+      // First-run default lands above the 1200 desktop breakpoint so a fresh
+      // install opens in the three-pane layout, not the narrower tablet tier.
+      size: saved?.size ?? const Size(1280, 800),
       center: saved == null,
     );
     await windowManager.waitUntilReadyToShow(opts, () async {
