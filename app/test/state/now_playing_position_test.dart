@@ -27,7 +27,12 @@ import 'package:oto/src/state/now_playing.dart';
 /// touching `G1`'s track/transport (the spurious-re-anchor guard test).
 const _topo = Topology(
   speakers: [
-    DiscoveredSpeaker(id: 'LR', roomName: 'Living Room', model: 'Beam', ip: '1'),
+    DiscoveredSpeaker(
+      id: 'LR',
+      roomName: 'Living Room',
+      model: 'Beam',
+      ip: '1',
+    ),
     DiscoveredSpeaker(id: 'KT', roomName: 'Kitchen', model: 'One SL', ip: '2'),
   ],
   groups: [
@@ -197,93 +202,138 @@ void main() {
     await h.push(_play);
     h.advance(const Duration(seconds: 7));
     await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
-    expect(h.position('G1'), _approx(const Duration(seconds: 7)),
-        reason: 'sanity: advanced before the track change');
+    expect(
+      h.position('G1'),
+      _approx(const Duration(seconds: 7)),
+      reason: 'sanity: advanced before the track change',
+    );
 
     await h.push(_trackB); // distinct track key -> re-anchor at 0.
-    expect(h.position('G1'), _approx(Duration.zero),
-        reason: 'a new track restarts the position at 0, NOT the advanced 7s');
+    expect(
+      h.position('G1'),
+      _approx(Duration.zero),
+      reason: 'a new track restarts the position at 0, NOT the advanced 7s',
+    );
   });
 
-  test('resume continues from the FROZEN position, not 0 (load-bearing)',
-      () async {
-    final h = await _harness();
-    await h.push(_trackA);
-    await h.push(_play);
+  test(
+    'resume continues from the FROZEN position, not 0 (load-bearing)',
+    () async {
+      final h = await _harness();
+      await h.push(_trackA);
+      await h.push(_play);
 
-    h.advance(const Duration(seconds: 10));
-    await h.push(_pause); // playing -> paused: snapshot elapsed (~10s), freeze.
-    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
-        reason: 'pause snapshots the elapsed position');
+      h.advance(const Duration(seconds: 10));
+      await h.push(
+        _pause,
+      ); // playing -> paused: snapshot elapsed (~10s), freeze.
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 10)),
+        reason: 'pause snapshots the elapsed position',
+      );
 
-    // Time passes while paused: the frozen position must NOT advance.
-    h.advance(const Duration(seconds: 30));
-    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 1));
-    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
-        reason: 'paused position is frozen - 30s of wall time does not move it');
+      // Time passes while paused: the frozen position must NOT advance.
+      h.advance(const Duration(seconds: 30));
+      await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 1));
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 10)),
+        reason: 'paused position is frozen - 30s of wall time does not move it',
+      );
 
-    // Resume: must re-anchor from the frozen ~10s, NOT snap to 0.
-    // The SOAP read fires on resume; the fake reports 10s (matching the real
-    // device which would report the actual playback position at this point).
-    h.fake.nextPositionSecs = 10;
-    await h.push(_play);
-    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
-        reason: 'resume re-anchors from the frozen 10s, never 0');
+      // Resume: must re-anchor from the frozen ~10s, NOT snap to 0.
+      // The SOAP read fires on resume; the fake reports 10s (matching the real
+      // device which would report the actual playback position at this point).
+      h.fake.nextPositionSecs = 10;
+      await h.push(_play);
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 10)),
+        reason: 'resume re-anchors from the frozen 10s, never 0',
+      );
 
-    // ...and continues upward from there.
-    h.advance(const Duration(seconds: 2));
-    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 2));
-    expect(h.position('G1'), _approx(const Duration(seconds: 12)),
-        reason: 'after resume it advances: 10s frozen + 2s elapsed');
-  });
+      // ...and continues upward from there.
+      h.advance(const Duration(seconds: 2));
+      await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 2));
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 12)),
+        reason: 'after resume it advances: 10s frozen + 2s elapsed',
+      );
+    },
+  );
 
-  test('a URI-only stream change re-anchors (uri participates in the key) - N6',
-      () async {
-    final h = await _harness();
-    // Radio-stream tracks: no id, no title - only a distinct uri. These are
-    // real content per Track.hasContent, so they must key the track.
-    await h.push(const ChangeEventDto.track(
-      groupId: 'G1',
-      track: TrackDto(uri: 'x-rinconmp3radio://streamA'),
-    ));
-    await h.push(_play);
-    h.advance(const Duration(seconds: 9));
-    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 3));
-    expect(h.position('G1'), _approx(const Duration(seconds: 9)),
-        reason: 'sanity: advanced while the first stream played');
+  test(
+    'a URI-only stream change re-anchors (uri participates in the key) - N6',
+    () async {
+      final h = await _harness();
+      // Radio-stream tracks: no id, no title - only a distinct uri. These are
+      // real content per Track.hasContent, so they must key the track.
+      await h.push(
+        const ChangeEventDto.track(
+          groupId: 'G1',
+          track: TrackDto(uri: 'x-rinconmp3radio://streamA'),
+        ),
+      );
+      await h.push(_play);
+      h.advance(const Duration(seconds: 9));
+      await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 3));
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 9)),
+        reason: 'sanity: advanced while the first stream played',
+      );
 
-    // A DIFFERENT uri-only stream is a new track -> restart at 0. Keying on
-    // id/title alone (both null here) would miss this and keep advancing.
-    await h.push(const ChangeEventDto.track(
-      groupId: 'G1',
-      track: TrackDto(uri: 'x-rinconmp3radio://streamB'),
-    ));
-    expect(h.position('G1'), _approx(Duration.zero),
-        reason: 'a distinct uri-only stream re-anchors at 0');
-  });
+      // A DIFFERENT uri-only stream is a new track -> restart at 0. Keying on
+      // id/title alone (both null here) would miss this and keep advancing.
+      await h.push(
+        const ChangeEventDto.track(
+          groupId: 'G1',
+          track: TrackDto(uri: 'x-rinconmp3radio://streamB'),
+        ),
+      );
+      expect(
+        h.position('G1'),
+        _approx(Duration.zero),
+        reason: 'a distinct uri-only stream re-anchors at 0',
+      );
+    },
+  );
 
-  test('an unrelated household change does NOT re-anchor (spurious guard)',
-      () async {
-    final h = await _harness();
-    await h.push(_trackA);
-    await h.push(_play);
-    h.advance(const Duration(seconds: 8));
-    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 5));
-    expect(h.position('G1'), _approx(const Duration(seconds: 8)),
-        reason: 'sanity: advanced to ~8s while playing');
+  test(
+    'an unrelated household change does NOT re-anchor (spurious guard)',
+    () async {
+      final h = await _harness();
+      await h.push(_trackA);
+      await h.push(_play);
+      h.advance(const Duration(seconds: 8));
+      await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 5));
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 8)),
+        reason: 'sanity: advanced to ~8s while playing',
+      );
 
-    // A different room's volume event mutates the household (G1 build re-runs)
-    // but touches neither G1's track nor its transport: position must hold.
-    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 6));
-    expect(h.position('G1'), _approx(const Duration(seconds: 8)),
-        reason: 'an unrelated change must NOT reset G1 to 0');
+      // A different room's volume event mutates the household (G1 build re-runs)
+      // but touches neither G1's track nor its transport: position must hold.
+      await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 6));
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 8)),
+        reason: 'an unrelated change must NOT reset G1 to 0',
+      );
 
-    // ...and it keeps advancing normally afterwards.
-    h.advance(const Duration(seconds: 2));
-    await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 7));
-    expect(h.position('G1'), _approx(const Duration(seconds: 10)),
-        reason: 'position continues advancing after the unrelated change');
-  });
+      // ...and it keeps advancing normally afterwards.
+      h.advance(const Duration(seconds: 2));
+      await h.push(const ChangeEventDto.volume(speakerId: 'KT', volume: 7));
+      expect(
+        h.position('G1'),
+        _approx(const Duration(seconds: 10)),
+        reason: 'position continues advancing after the unrelated change',
+      );
+    },
+  );
 
   // Bug 1 regression: a duration-less source (radio/line-in) must degrade to
   // null duration, never keep the previous track's total.
@@ -295,17 +345,23 @@ void main() {
     await h.push(_trackA);
     await h.push(_play);
     final durA = h.container.read(nowPlayingPositionProvider('G1')).duration;
-    expect(durA, const Duration(seconds: 240),
-        reason: 'sanity: first track has a 240s duration from the SOAP read');
+    expect(
+      durA,
+      const Duration(seconds: 240),
+      reason: 'sanity: first track has a 240s duration from the SOAP read',
+    );
 
     // Second track returns null duration (radio/line-in).
     h.fake.nextDurationSecs = null;
     h.fake.nextPositionSecs = 0;
     await h.push(_trackB);
     final durB = h.container.read(nowPlayingPositionProvider('G1')).duration;
-    expect(durB, isNull,
-        reason:
-            'a null-duration source must yield null, not carry the old 240s total');
+    expect(
+      durB,
+      isNull,
+      reason:
+          'a null-duration source must yield null, not carry the old 240s total',
+    );
   });
 
   // Bug 2 regression: a stale _readAnchor completion (generation < current)
@@ -351,8 +407,11 @@ void main() {
     // Start listening: first build fires the open-read (generation 1).
     container.listen(nowPlayingPositionProvider('G1'), (_, _) {});
     await Future<void>.delayed(Duration.zero);
-    expect(completers.length, 1,
-        reason: 'open-read fired exactly one _readAnchor call (gen 1)');
+    expect(
+      completers.length,
+      1,
+      reason: 'open-read fired exactly one _readAnchor call (gen 1)',
+    );
     final gen1 = completers[0]; // do NOT complete yet
 
     // Push track-A: _seenTrack was false, so this is the initial population
@@ -364,8 +423,11 @@ void main() {
     container.read(nowPlayingPositionProvider('G1'));
     await Future<void>.delayed(Duration.zero);
     // Still only 1 completer - no new read for the initial track-populate.
-    expect(completers.length, 1,
-        reason: 'initial track populate does not fire an extra read');
+    expect(
+      completers.length,
+      1,
+      reason: 'initial track populate does not fire an extra read',
+    );
 
     // Push track-B: now _seenTrack=true and the key differs -> trackChanged=true
     // -> _readAnchor fires (generation 2).
@@ -373,8 +435,11 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     container.read(nowPlayingPositionProvider('G1'));
     await Future<void>.delayed(Duration.zero);
-    expect(completers.length, 2,
-        reason: 'track-change fired a second _readAnchor call (gen 2)');
+    expect(
+      completers.length,
+      2,
+      reason: 'track-change fired a second _readAnchor call (gen 2)',
+    );
     final gen2 = completers[1];
 
     // Complete gen-2 FIRST with new-track values.
@@ -398,8 +463,7 @@ void main() {
     expect(
       container.read(nowPlayingPositionProvider('G1')).duration,
       const Duration(seconds: 180),
-      reason:
-          'stale gen-1 completion is dropped; duration stays 180s not 999s',
+      reason: 'stale gen-1 completion is dropped; duration stays 180s not 999s',
     );
   });
 
@@ -433,12 +497,18 @@ void main() {
 
     // The open-read should have re-anchored at 90s (not 0).
     final pos = container.read(nowPlayingPositionProvider('G1')).position;
-    expect(pos, _approx(const Duration(seconds: 90)),
-        reason: 'opening mid-track anchors from the SOAP read position (90s)');
+    expect(
+      pos,
+      _approx(const Duration(seconds: 90)),
+      reason: 'opening mid-track anchors from the SOAP read position (90s)',
+    );
 
     // Duration should also be set from the read.
     final dur = container.read(nowPlayingPositionProvider('G1')).duration;
-    expect(dur, const Duration(seconds: 240),
-        reason: 'duration is populated from the SOAP read');
+    expect(
+      dur,
+      const Duration(seconds: 240),
+      reason: 'duration is populated from the SOAP read',
+    );
   });
 }

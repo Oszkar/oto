@@ -52,12 +52,30 @@ class RoomCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _titleRow(context, ref, room, offline),
-          const SizedBox(height: Space.lg10),
-          if (canResume)
-            _nowPlaying(context, ref, room, group!, playing)
-          else
-            _idleRow(context, offline),
+          GestureDetector(
+            key: Key('room-open-$speakerId'),
+            behavior: HitTestBehavior.opaque,
+            onTap: offline
+                ? null
+                : () => openRoom(
+                    context,
+                    ref,
+                    speakerId: speakerId,
+                    groupId: room.groupId,
+                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _titleRow(context, room, offline),
+                const SizedBox(height: Space.lg10),
+                if (canResume)
+                  _nowPlaying(context, ref, room, group!, playing)
+                else
+                  _idleRow(context, offline),
+              ],
+            ),
+          ),
           if (!offline) ...[
             const SizedBox(height: Space.lg10),
             _volumeRow(context, ref, room),
@@ -70,12 +88,7 @@ class RoomCard extends ConsumerWidget {
     return offline ? Opacity(opacity: 0.55, child: card) : card;
   }
 
-  Widget _titleRow(
-    BuildContext context,
-    WidgetRef ref,
-    RoomState room,
-    bool offline,
-  ) {
+  Widget _titleRow(BuildContext context, RoomState room, bool offline) {
     final oto = context.oto;
     return Row(
       children: [
@@ -86,23 +99,11 @@ class RoomCard extends ConsumerWidget {
         ),
         const SizedBox(width: Space.md8),
         Expanded(
-          child: GestureDetector(
-            key: Key('room-open-$speakerId'),
-            behavior: HitTestBehavior.opaque,
-            onTap: offline
-                ? null
-                : () => openRoom(
-                    context,
-                    ref,
-                    speakerId: speakerId,
-                    groupId: room.groupId,
-                  ),
-            child: Text(
-              room.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyles.titleCard,
-            ),
+          child: Text(
+            room.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyles.titleCard,
           ),
         ),
       ],

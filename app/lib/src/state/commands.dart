@@ -52,7 +52,10 @@ class CommandApi {
 mixin _Reconciling {
   Ref get ref;
 
-  Future<void> send(Future<void> Function() op, {void Function()? rollback}) async {
+  Future<void> send(
+    Future<void> Function() op, {
+    void Function()? rollback,
+  }) async {
     try {
       await op();
     } on CommandError catch (e) {
@@ -192,7 +195,9 @@ class PlaybackController with _Reconciling {
         : PlaybackState.playing;
     _h.setOptimisticTransport(groupId, next);
     await send(
-      () => next == PlaybackState.playing ? api.play(groupId) : api.pause(groupId),
+      () => next == PlaybackState.playing
+          ? api.play(groupId)
+          : api.pause(groupId),
       rollback: () => _h.setOptimisticTransport(groupId, current),
     );
   }

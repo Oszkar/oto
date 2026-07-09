@@ -158,7 +158,7 @@ class SettingsSegmentedControl<T> extends StatelessWidget {
     required this.onChanged,
     this.segmentWidth,
     this.segmentMinWidth = 52,
-    this.segmentHeight = 34,
+    this.segmentHeight = 40,
   });
 
   final T value;

@@ -79,12 +79,6 @@ class RoomRow extends ConsumerWidget {
     final offline = !room.online;
     return Row(
       children: [
-        OtoIcon(
-          room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
-          size: 18,
-          color: oto.ink2,
-        ),
-        const SizedBox(width: Space.gutter12),
         Expanded(
           child: GestureDetector(
             key: Key('room-open-$speakerId'),
@@ -97,23 +91,44 @@ class RoomRow extends ConsumerWidget {
                     speakerId: speakerId,
                     groupId: room.groupId,
                   ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  room.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyles.titleCard,
+                OtoIcon(
+                  room.kind == RoomKind.soundbar ? 'soundbar' : 'speaker',
+                  size: 18,
+                  color: oto.ink2,
                 ),
-                const SizedBox(height: 1),
-                Text(
-                  _subtitle(room, group, offline),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyles.caption.copyWith(color: oto.inkMute),
+                const SizedBox(width: Space.gutter12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        room.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.titleCard,
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        _subtitle(room, group, offline),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyles.caption.copyWith(color: oto.inkMute),
+                      ),
+                    ],
+                  ),
                 ),
+                if (!offline)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.md8),
+                    child: OtoIcon(
+                      'chevronRight',
+                      size: 12,
+                      color: oto.inkFaint,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -141,11 +156,6 @@ class RoomRow extends ConsumerWidget {
                 color: oto.ink,
               ),
             ),
-          ),
-        if (!offline)
-          Padding(
-            padding: const EdgeInsets.only(left: Space.md8),
-            child: OtoIcon('chevronRight', size: 12, color: oto.inkFaint),
           ),
       ],
     );

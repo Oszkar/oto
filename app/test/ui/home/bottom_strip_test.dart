@@ -66,7 +66,8 @@ void main() {
     expect(find.byType(BottomStrip), findsOneWidget);
     expect(
       find.byWidgetPredicate(
-        (w) => w.key is ValueKey<String> &&
+        (w) =>
+            w.key is ValueKey<String> &&
             (w.key as ValueKey<String>).value.startsWith('strip-play-'),
       ),
       findsNothing,
@@ -101,7 +102,8 @@ void main() {
     // All three play keys present (uncapped).
     expect(
       find.byWidgetPredicate(
-        (w) => w.key is ValueKey<String> &&
+        (w) =>
+            w.key is ValueKey<String> &&
             (w.key as ValueKey<String>).value.startsWith('strip-play-'),
       ),
       findsNWidgets(3),
@@ -186,9 +188,7 @@ void main() {
     );
     await t.pumpWidget(h.widget);
 
-    final btn = t.widget<IconButton>(
-      find.byKey(const Key('strip-play-G_OS')),
-    );
+    final btn = t.widget<IconButton>(find.byKey(const Key('strip-play-G_OS')));
     expect(
       btn.onPressed,
       isNull,

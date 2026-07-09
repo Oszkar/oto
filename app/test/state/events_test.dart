@@ -73,7 +73,10 @@ void main() {
       ProviderContainer(
         overrides: [
           discoveryProvider.overrideWith(discovery),
-          wireGenerationReaderProvider.overrideWith((ref) => () => generation),
+          wireGenerationReaderProvider.overrideWith(
+            (ref) =>
+                () => generation,
+          ),
           changeEventStreamFactoryProvider.overrideWith(
             (ref) => () {
               subscribeCount++;
@@ -87,7 +90,11 @@ void main() {
     test('is null while discovery has no value', () async {
       final container = makeContainer(_LoadingDiscovery.new);
       addTearDown(container.dispose);
-      container.listen(wireGenerationProvider, (_, _) {}, fireImmediately: true);
+      container.listen(
+        wireGenerationProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
 
       expect(container.read(wireGenerationProvider), isNull);
     });
@@ -96,7 +103,11 @@ void main() {
       generation = BigInt.from(7);
       final container = makeContainer(_DataDiscovery.new);
       addTearDown(container.dispose);
-      container.listen(wireGenerationProvider, (_, _) {}, fireImmediately: true);
+      container.listen(
+        wireGenerationProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
 
       await container.read(discoveryProvider.future);
       expect(container.read(wireGenerationProvider), BigInt.from(7));
@@ -110,7 +121,11 @@ void main() {
       container.listen(changeEventsProvider, (_, _) {}, fireImmediately: true);
       await pumpEventQueue();
 
-      expect(subscribeCount, 0, reason: 'null generation must yield an empty stream');
+      expect(
+        subscribeCount,
+        0,
+        reason: 'null generation must yield an empty stream',
+      );
     });
 
     test('subscribes once when the first wire is installed', () async {
@@ -122,7 +137,11 @@ void main() {
       await container.read(discoveryProvider.future);
       await pumpEventQueue();
 
-      expect(subscribeCount, 1, reason: 'first wire → exactly one subscription');
+      expect(
+        subscribeCount,
+        1,
+        reason: 'first wire → exactly one subscription',
+      );
     });
 
     test('re-subscribes on a value-equal refresh (install signal bumps the '
@@ -146,7 +165,8 @@ void main() {
       expect(
         subscribeCount,
         2,
-        reason: 'a new wire generation must re-subscribe even without a '
+        reason:
+            'a new wire generation must re-subscribe even without a '
             'discovery transition',
       );
     });
@@ -169,7 +189,11 @@ void main() {
       container.read(wireInstallSignalProvider.notifier).bump();
       await pumpEventQueue();
 
-      expect(subscribeCount, 1, reason: 'unchanged generation must not re-subscribe');
+      expect(
+        subscribeCount,
+        1,
+        reason: 'unchanged generation must not re-subscribe',
+      );
     });
   });
 }

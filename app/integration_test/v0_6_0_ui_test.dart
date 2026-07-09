@@ -124,16 +124,12 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OtoApp)),
       );
-      await _waitFor(
-        tester,
-        () {
-          final h = container.read(householdProvider);
-          return h.rooms.length == 3 &&
-              h.groups.length == 2 &&
-              h.rooms[_kitchenSpeaker]?.volume == _seedVolume;
-        },
-        message: 'discovery + seed never populated the household',
-      );
+      await _waitFor(tester, () {
+        final h = container.read(householdProvider);
+        return h.rooms.length == 3 &&
+            h.groups.length == 2 &&
+            h.rooms[_kitchenSpeaker]?.volume == _seedVolume;
+      }, message: 'discovery + seed never populated the household');
       await tester.pumpAndSettle();
 
       // ── Composed body (no dupes) ─────────────────────────────────────────
@@ -153,7 +149,8 @@ void main() {
       expect(
         find.widgetWithText(RoomCard, 'Kitchen'),
         findsNothing,
-        reason: 'a grouped room appears only inside its group card, never as a '
+        reason:
+            'a grouped room appears only inside its group card, never as a '
             'standalone card',
       );
       expect(find.widgetWithText(RoomCard, 'Dining'), findsNothing);
@@ -179,7 +176,8 @@ void main() {
       await rust_api.setVolume(speakerId: _kitchenSpeaker, volume: newVolume);
       await _waitFor(
         tester,
-        () => container.read(householdProvider).rooms[_kitchenSpeaker]?.volume ==
+        () =>
+            container.read(householdProvider).rooms[_kitchenSpeaker]?.volume ==
             newVolume,
         message: 'setVolume did not propagate to the household',
       );

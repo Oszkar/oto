@@ -14,10 +14,14 @@ void main() {
       'accent': 'indigo',
     });
     final prefs = await SharedPreferences.getInstance();
-    await t.pumpWidget(ProviderScope(
-      overrides: [prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs))],
-      child: const OtoApp(),
-    ));
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [
+          prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+        ],
+        child: const OtoApp(),
+      ),
+    );
     // HomePage now renders HomeScreen; this test only reads MaterialApp theme
     // props via a single pump() (no discovery / FRB wired here, so we avoid
     // pumpAndSettle and just assert on MaterialApp's theme).

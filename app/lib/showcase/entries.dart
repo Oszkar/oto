@@ -100,7 +100,10 @@ final List<Entry> entries = [
     section: 'Home',
     name: 'Refresh failed (cached)',
     household: demoHousehold,
-    homeState: HomeDiscoveryFailedWithCache(demoHousehold, sampleDiscoveryError),
+    homeState: HomeDiscoveryFailedWithCache(
+      demoHousehold,
+      sampleDiscoveryError,
+    ),
     build: () => const HomeScreen(),
   ),
 
@@ -111,7 +114,10 @@ final List<Entry> entries = [
     household: demoHousehold,
     nowPlaying: (
       groupId: 'g_lr',
-      position: progress(const Duration(minutes: 2, seconds: 14), _redboneDuration),
+      position: progress(
+        const Duration(minutes: 2, seconds: 14),
+        _redboneDuration,
+      ),
     ),
     build: () => const NowPlayingScreen(groupId: 'g_lr'),
   ),
@@ -121,7 +127,10 @@ final List<Entry> entries = [
     household: demoHousehold,
     nowPlaying: (
       groupId: 'g_br',
-      position: progress(const Duration(minutes: 1, seconds: 2), _nightcallDuration),
+      position: progress(
+        const Duration(minutes: 1, seconds: 2),
+        _nightcallDuration,
+      ),
     ),
     build: () => const NowPlayingScreen(groupId: 'g_br'),
   ),

@@ -36,16 +36,18 @@ void main() {
 
   // --- Additional assertions (allowed by the task) ---
 
-  test('lerp midpoint returns an OtoColors and is not identical to either end',
-      () {
-    final a = OtoColors.light(Accent.teal);
-    final b = OtoColors.dark(Accent.teal);
-    final mid = a.lerp(b, 0.5);
-    expect(mid, isA<OtoColors>());
-    // bg should be interpolated, not equal to either endpoint.
-    expect((mid as OtoColors).bg, isNot(a.bg));
-    expect(mid.bg, isNot(b.bg));
-  });
+  test(
+    'lerp midpoint returns an OtoColors and is not identical to either end',
+    () {
+      final a = OtoColors.light(Accent.teal);
+      final b = OtoColors.dark(Accent.teal);
+      final mid = a.lerp(b, 0.5);
+      expect(mid, isA<OtoColors>());
+      // bg should be interpolated, not equal to either endpoint.
+      expect((mid as OtoColors).bg, isNot(a.bg));
+      expect(mid.bg, isNot(b.bg));
+    },
+  );
 
   test('lerp against a non-OtoColors extension returns this', () {
     final a = OtoColors.light(Accent.teal);

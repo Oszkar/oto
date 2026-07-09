@@ -31,8 +31,12 @@ const int _expectedSeedCount = 3 + 3 + 2;
 /// any post-seed mutations to avoid racing on a still-draining seed
 /// phase. Replaces the `Future.delayed(Duration(milliseconds: 200))`
 /// patterns the earlier tests used.
-({StreamSubscription<api.ChangeEventDto> sub, List<api.ChangeEventDto> events, Completer<void> seedComplete})
-    _subscribeAndCollect() {
+({
+  StreamSubscription<api.ChangeEventDto> sub,
+  List<api.ChangeEventDto> events,
+  Completer<void> seedComplete,
+})
+_subscribeAndCollect() {
   final events = <api.ChangeEventDto>[];
   final seedComplete = Completer<void>();
   final sub = api.subscribeChangeEvents().listen((event) {
@@ -72,71 +76,86 @@ void main() {
     await RustLib.init();
   });
 
-  test('v0.4 end-to-end: discover -> seed Volume -> mutation -> error', () async {
-    // 1. Discover via MockWire. This auto-invokes subscribe_speakers.
-    final topology = await api.devDiscoverMock();
-    expect(topology.speakers.length, 3);
+  test(
+    'v0.4 end-to-end: discover -> seed Volume -> mutation -> error',
+    () async {
+      // 1. Discover via MockWire. This auto-invokes subscribe_speakers.
+      final topology = await api.devDiscoverMock();
+      expect(topology.speakers.length, 3);
 
-    // 2. Subscribe to the unified event stream.
-    final h = _subscribeAndCollect();
+      // 2. Subscribe to the unified event stream.
+      final h = _subscribeAndCollect();
 
-    await h.seedComplete.future.timeout(const Duration(seconds: 5));
+      await h.seedComplete.future.timeout(const Duration(seconds: 5));
 
-    // Seed shape: 3 Volume + 3 Mute + 2 Playback.
-    final volumeSeeds = h.events.whereType<api.ChangeEventDto_Volume>().toList();
-    final muteSeeds = h.events.whereType<api.ChangeEventDto_Mute>().toList();
-    final playbackSeeds = h.events.whereType<api.ChangeEventDto_Playback>().toList();
-    expect(volumeSeeds, hasLength(3), reason: 'one Volume seed per speaker');
-    expect(muteSeeds, hasLength(3), reason: 'one Mute seed per speaker');
-    expect(playbackSeeds, hasLength(2), reason: 'one Playback seed per group');
-    for (final ev in muteSeeds) {
-      expect(ev.muted, isFalse, reason: 'seed mute starts unmuted');
-    }
-    for (final ev in playbackSeeds) {
+      // Seed shape: 3 Volume + 3 Mute + 2 Playback.
+      final volumeSeeds = h.events
+          .whereType<api.ChangeEventDto_Volume>()
+          .toList();
+      final muteSeeds = h.events.whereType<api.ChangeEventDto_Mute>().toList();
+      final playbackSeeds = h.events
+          .whereType<api.ChangeEventDto_Playback>()
+          .toList();
+      expect(volumeSeeds, hasLength(3), reason: 'one Volume seed per speaker');
+      expect(muteSeeds, hasLength(3), reason: 'one Mute seed per speaker');
       expect(
-        ev.state,
-        api.PlaybackStateDto.stopped,
-        reason: 'seed playback is Stopped',
+        playbackSeeds,
+        hasLength(2),
+        reason: 'one Playback seed per group',
       );
-    }
+      for (final ev in muteSeeds) {
+        expect(ev.muted, isFalse, reason: 'seed mute starts unmuted');
+      }
+      for (final ev in playbackSeeds) {
+        expect(
+          ev.state,
+          api.PlaybackStateDto.stopped,
+          reason: 'seed playback is Stopped',
+        );
+      }
 
-    // 3. Mutation: set volume on Kitchen -> ChangeEventDto.Volume arrives.
-    h.events.clear();
-    await api.setVolume(speakerId: 'RINCON_KITCHEN', volume: 75);
-    await _waitFor(() => h.events.isNotEmpty,
-        message: 'no Volume event arrived after setVolume');
-    expect(h.events, hasLength(1));
-    final volEv = h.events.first;
-    expect(volEv, isA<api.ChangeEventDto_Volume>());
-    volEv as api.ChangeEventDto_Volume;
-    expect(volEv.speakerId, 'RINCON_KITCHEN');
-    expect(volEv.volume, 75);
+      // 3. Mutation: set volume on Kitchen -> ChangeEventDto.Volume arrives.
+      h.events.clear();
+      await api.setVolume(speakerId: 'RINCON_KITCHEN', volume: 75);
+      await _waitFor(
+        () => h.events.isNotEmpty,
+        message: 'no Volume event arrived after setVolume',
+      );
+      expect(h.events, hasLength(1));
+      final volEv = h.events.first;
+      expect(volEv, isA<api.ChangeEventDto_Volume>());
+      volEv as api.ChangeEventDto_Volume;
+      expect(volEv.speakerId, 'RINCON_KITCHEN');
+      expect(volEv.volume, 75);
 
-    // 4. Adversarial: a SubscriptionError pushed onto the held MockWire
-    //    surfaces in Dart unchanged. Regression test for the cfg-gated
-    //    dev_push_subscription_error_on_mock seam.
-    h.events.clear();
-    await api.devPushSubscriptionErrorOnMock(
-      speakerId: 'RINCON_GHOST',
-      message: 'synthesized for integration test',
-    );
-    await _waitFor(() => h.events.isNotEmpty,
-        message: 'no SubscriptionError event arrived after devPush');
-    expect(h.events, hasLength(1));
-    final errEv = h.events.first;
-    expect(errEv, isA<api.ChangeEventDto_SubscriptionError>());
-    errEv as api.ChangeEventDto_SubscriptionError;
-    expect(errEv.speakerId, 'RINCON_GHOST');
-    expect(errEv.message, 'synthesized for integration test');
+      // 4. Adversarial: a SubscriptionError pushed onto the held MockWire
+      //    surfaces in Dart unchanged. Regression test for the cfg-gated
+      //    dev_push_subscription_error_on_mock seam.
+      h.events.clear();
+      await api.devPushSubscriptionErrorOnMock(
+        speakerId: 'RINCON_GHOST',
+        message: 'synthesized for integration test',
+      );
+      await _waitFor(
+        () => h.events.isNotEmpty,
+        message: 'no SubscriptionError event arrived after devPush',
+      );
+      expect(h.events, hasLength(1));
+      final errEv = h.events.first;
+      expect(errEv, isA<api.ChangeEventDto_SubscriptionError>());
+      errEv as api.ChangeEventDto_SubscriptionError;
+      expect(errEv.speakerId, 'RINCON_GHOST');
+      expect(errEv.message, 'synthesized for integration test');
 
-    // Don't `await sub.cancel()`: it waits for the Rust loop's next
-    // `sink.add(...)` to fail before returning, but the loop is now
-    // blocked in `rx.recv()` waiting for the next event (we have no
-    // more events to push). Fire-and-forget cancel; the Rust loop
-    // will tear down naturally when the cdylib unloads at process
-    // exit, or on the next `discover()` (Sender drop -> recv Err).
-    unawaited(h.sub.cancel());
-  });
+      // Don't `await sub.cancel()`: it waits for the Rust loop's next
+      // `sink.add(...)` to fail before returning, but the loop is now
+      // blocked in `rx.recv()` waiting for the next event (we have no
+      // more events to push). Fire-and-forget cancel; the Rust loop
+      // will tear down naturally when the cdylib unloads at process
+      // exit, or on the next `discover()` (Sender drop -> recv Err).
+      unawaited(h.sub.cancel());
+    },
+  );
 
   test('v0.4: set_mute auto-emits ChangeEventDto.Mute', () async {
     // Office is the solo-group fixture speaker; muting it is the
@@ -147,8 +166,10 @@ void main() {
     h.events.clear();
 
     await api.setMute(speakerId: 'RINCON_OFFICE', muted: true);
-    await _waitFor(() => h.events.isNotEmpty,
-        message: 'no Mute event arrived after setMute');
+    await _waitFor(
+      () => h.events.isNotEmpty,
+      message: 'no Mute event arrived after setMute',
+    );
 
     expect(h.events, hasLength(1));
     final ev = h.events.first;
@@ -160,27 +181,37 @@ void main() {
     unawaited(h.sub.cancel());
   });
 
-  test('v0.5: TopologyChanged is delivered end-to-end over the FRB stream', () async {
-    // The FRB `subscribe_change_events` stream-loop has no Rust-level CI
-    // test (it blocks on recv()); this integration test is the only
-    // automated coverage that the loop forwards a variant to Dart. v0.5
-    // adds the payload-less TopologyChanged variant - assert it crosses
-    // the bridge unchanged, driven by the dev seam (debug-only).
-    await api.devDiscoverMock();
-    final h = _subscribeAndCollect();
-    await h.seedComplete.future.timeout(const Duration(seconds: 5));
-    h.events.clear();
+  test(
+    'v0.5: TopologyChanged is delivered end-to-end over the FRB stream',
+    () async {
+      // The FRB `subscribe_change_events` stream-loop has no Rust-level CI
+      // test (it blocks on recv()); this integration test is the only
+      // automated coverage that the loop forwards a variant to Dart. v0.5
+      // adds the payload-less TopologyChanged variant - assert it crosses
+      // the bridge unchanged, driven by the dev seam (debug-only).
+      await api.devDiscoverMock();
+      final h = _subscribeAndCollect();
+      await h.seedComplete.future.timeout(const Duration(seconds: 5));
+      h.events.clear();
 
-    await api.devPushTopologyChangeOnMock();
-    await _waitFor(() => h.events.isNotEmpty,
-        message: 'no TopologyChanged event arrived after devPushTopologyChangeOnMock');
+      await api.devPushTopologyChangeOnMock();
+      await _waitFor(
+        () => h.events.isNotEmpty,
+        message:
+            'no TopologyChanged event arrived after devPushTopologyChangeOnMock',
+      );
 
-    expect(h.events, hasLength(1));
-    expect(h.events.first, isA<api.ChangeEventDto_TopologyChanged>(),
-        reason: 'the payload-less TopologyChanged variant must cross the FRB stream');
+      expect(h.events, hasLength(1));
+      expect(
+        h.events.first,
+        isA<api.ChangeEventDto_TopologyChanged>(),
+        reason:
+            'the payload-less TopologyChanged variant must cross the FRB stream',
+      );
 
-    unawaited(h.sub.cancel());
-  });
+      unawaited(h.sub.cancel());
+    },
+  );
 
   test('v0.4: play(group) emits per-GROUP ChangeEventDto.Playback', () async {
     // Kitchen group is the multi-speaker fixture group (Kitchen +
@@ -194,8 +225,10 @@ void main() {
 
     const groupId = 'RINCON_KITCHEN:1';
     await api.play(groupId: groupId);
-    await _waitFor(() => h.events.isNotEmpty,
-        message: 'no Playback event arrived after play');
+    await _waitFor(
+      () => h.events.isNotEmpty,
+      message: 'no Playback event arrived after play',
+    );
 
     expect(h.events, hasLength(1));
     final ev = h.events.first;
@@ -248,8 +281,10 @@ void main() {
       // alive right before re-discovery.
       h1.events.clear();
       await api.setVolume(speakerId: 'RINCON_KITCHEN', volume: 88);
-      await _waitFor(() => h1.events.isNotEmpty,
-          message: 'OLD stream missed setVolume before rediscover');
+      await _waitFor(
+        () => h1.events.isNotEmpty,
+        message: 'OLD stream missed setVolume before rediscover',
+      );
       final preRediscoverEvent = h1.events.last as api.ChangeEventDto_Volume;
       expect(preRediscoverEvent.volume, 88);
 

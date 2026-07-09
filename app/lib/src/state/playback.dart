@@ -10,10 +10,8 @@ part 'playback.g.dart';
 /// One-shot read of a speaker's current volume/mute/transport snapshot.
 /// The Rust `speaker_state` SOAP round-trip runs off the UI isolate via FRB.
 @riverpod
-Future<rust_api.SpeakerStateDto> speakerState(
-  Ref ref,
-  String speakerId,
-) => rust_api.speakerState(speakerId: speakerId);
+Future<rust_api.SpeakerStateDto> speakerState(Ref ref, String speakerId) =>
+    rust_api.speakerState(speakerId: speakerId);
 
 /// Facade for the six transport/volume commands. Methods are thin pass-throughs
 /// to the FRB-generated Dart bindings; no state is held here. A real command
@@ -30,8 +28,7 @@ class PlaybackCommands {
 
   Future<void> next(String groupId) => rust_api.next(groupId: groupId);
 
-  Future<void> previous(String groupId) =>
-      rust_api.previous(groupId: groupId);
+  Future<void> previous(String groupId) => rust_api.previous(groupId: groupId);
 
   Future<void> setVolume(String speakerId, int volume) =>
       rust_api.setVolume(speakerId: speakerId, volume: volume);

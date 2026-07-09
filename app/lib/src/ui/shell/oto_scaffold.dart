@@ -26,7 +26,10 @@ class OtoScaffold extends StatelessWidget {
     // already thinks it is wide (strip suppressed, no pane), or the reverse.
     final tier = context.layoutTier;
     if (tier == LayoutTier.compact || detail == null) {
-      return Scaffold(backgroundColor: oto.bg, body: SafeArea(child: body));
+      return Scaffold(
+        backgroundColor: oto.bg,
+        body: SafeArea(child: body),
+      );
     }
     return Scaffold(
       backgroundColor: oto.bg,

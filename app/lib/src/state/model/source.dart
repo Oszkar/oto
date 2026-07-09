@@ -54,8 +54,7 @@ class Source {
           memberCount == other.memberCount;
 
   @override
-  int get hashCode =>
-      Object.hash(id, coordinatorId, label, track, memberCount);
+  int get hashCode => Object.hash(id, coordinatorId, label, track, memberCount);
 }
 
 /// Derive the active sources from a household: one [Source] per group with

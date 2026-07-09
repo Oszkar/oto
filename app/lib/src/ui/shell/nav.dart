@@ -15,7 +15,9 @@ void openSource(BuildContext context, WidgetRef ref, String groupId) {
     ref.read(selectedSourceProvider.notifier).select(groupId);
   } else {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => NowPlayingScreen(groupId: groupId)),
+      MaterialPageRoute<void>(
+        builder: (_) => NowPlayingScreen(groupId: groupId),
+      ),
     );
   }
 }
@@ -29,10 +31,13 @@ void openRoom(
   required String? groupId,
 }) {
   if (context.isWide) {
-    if (groupId != null) ref.read(selectedSourceProvider.notifier).select(groupId);
+    if (groupId != null)
+      ref.read(selectedSourceProvider.notifier).select(groupId);
   } else {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => RoomDetailScreen(speakerId: speakerId)),
+      MaterialPageRoute<void>(
+        builder: (_) => RoomDetailScreen(speakerId: speakerId),
+      ),
     );
   }
 }
@@ -40,11 +45,14 @@ void openRoom(
 /// Open Settings. Wide: a centered dialog. Phone: push the full-screen route.
 Future<void> openSettings(BuildContext context) {
   if (context.isWide) {
-    return _showPaneDialog(context, (dismiss) => SettingsBody(onDismiss: dismiss));
+    return _showPaneDialog(
+      context,
+      (dismiss) => SettingsBody(onDismiss: dismiss),
+    );
   }
-  return Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-  );
+  return Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()));
 }
 
 /// Open the Group editor hosted by [hostId]. Wide: a centered dialog. Phone:

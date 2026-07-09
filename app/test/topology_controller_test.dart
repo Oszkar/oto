@@ -106,7 +106,11 @@ void main() {
       container.listen(discoveryProvider, (_, _) {}, fireImmediately: true);
       // Activate + keep the controller mounted (a persistent listener, not a
       // one-shot read) so its ref.listen subscription stays live for the test.
-      container.listen(topologyControllerProvider, (_, _) {}, fireImmediately: true);
+      container.listen(
+        topologyControllerProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
     });
 
     tearDown(() {
@@ -125,74 +129,99 @@ void main() {
       await pumpEventQueue();
     }
 
-    test('a single TopologyChanged triggers one fast re-pull after the window',
-        () async {
-      await pumpEventQueue();
-      expect(_counters.builds, 1, reason: 'initial build only');
-      expect(_counters.refreshes, 0, reason: 'no fast re-pull yet');
+    test(
+      'a single TopologyChanged triggers one fast re-pull after the window',
+      () async {
+        await pumpEventQueue();
+        expect(_counters.builds, 1, reason: 'initial build only');
+        expect(_counters.refreshes, 0, reason: 'no fast re-pull yet');
 
-      events.add(const rust_api.ChangeEventDto.topologyChanged());
-      await settle();
+        events.add(const rust_api.ChangeEventDto.topologyChanged());
+        await settle();
 
-      expect(
-        _counters.refreshes,
-        1,
-        reason: 'one fast re-pull (refreshTopology) after the debounce window',
-      );
-      expect(
-        _counters.builds,
-        1,
-        reason: 'fast path used - no full re-discover (build) on the happy path',
-      );
-    }, timeout: _testTimeout);
+        expect(
+          _counters.refreshes,
+          1,
+          reason:
+              'one fast re-pull (refreshTopology) after the debounce window',
+        );
+        expect(
+          _counters.builds,
+          1,
+          reason:
+              'fast path used - no full re-discover (build) on the happy path',
+        );
+      },
+      timeout: _testTimeout,
+    );
 
-    test('a burst of TopologyChanged coalesces into exactly one fast re-pull',
-        () async {
-      await pumpEventQueue();
-      expect(_counters.builds, 1);
+    test(
+      'a burst of TopologyChanged coalesces into exactly one fast re-pull',
+      () async {
+        await pumpEventQueue();
+        expect(_counters.builds, 1);
 
-      // Three events well within the 250 ms window.
-      events.add(const rust_api.ChangeEventDto.topologyChanged());
-      events.add(const rust_api.ChangeEventDto.topologyChanged());
-      events.add(const rust_api.ChangeEventDto.topologyChanged());
-      await settle();
+        // Three events well within the 250 ms window.
+        events.add(const rust_api.ChangeEventDto.topologyChanged());
+        events.add(const rust_api.ChangeEventDto.topologyChanged());
+        events.add(const rust_api.ChangeEventDto.topologyChanged());
+        await settle();
 
-      expect(
-        _counters.refreshes,
-        1,
-        reason: 'the per-speaker NOTIFY burst must coalesce into one re-pull',
-      );
-      expect(_counters.builds, 1, reason: 'no full re-discover on the happy path');
-    }, timeout: _testTimeout);
+        expect(
+          _counters.refreshes,
+          1,
+          reason: 'the per-speaker NOTIFY burst must coalesce into one re-pull',
+        );
+        expect(
+          _counters.builds,
+          1,
+          reason: 'no full re-discover on the happy path',
+        );
+      },
+      timeout: _testTimeout,
+    );
 
     test('non-topology events do not trigger a re-pull', () async {
       await pumpEventQueue();
       expect(_counters.builds, 1);
 
       events.add(
-        const rust_api.ChangeEventDto.volume(speakerId: 'RINCON_KITCHEN', volume: 40),
+        const rust_api.ChangeEventDto.volume(
+          speakerId: 'RINCON_KITCHEN',
+          volume: 40,
+        ),
       );
-      events.add(const rust_api.ChangeEventDto.mute(speakerId: 'RINCON_KITCHEN', muted: true));
+      events.add(
+        const rust_api.ChangeEventDto.mute(
+          speakerId: 'RINCON_KITCHEN',
+          muted: true,
+        ),
+      );
       await settle();
 
       expect(_counters.refreshes, 0, reason: 'only TopologyChanged re-pulls');
       expect(_counters.builds, 1, reason: 'only TopologyChanged re-pulls');
     }, timeout: _testTimeout);
 
-    test('a failing fast re-pull falls back to a full re-discover', () async {
-      await pumpEventQueue();
-      expect(_counters.builds, 1, reason: 'initial build only');
-      _counters.refreshThrows = true;
+    test(
+      'a failing fast re-pull falls back to a full re-discover',
+      () async {
+        await pumpEventQueue();
+        expect(_counters.builds, 1, reason: 'initial build only');
+        _counters.refreshThrows = true;
 
-      events.add(const rust_api.ChangeEventDto.topologyChanged());
-      await settle();
+        events.add(const rust_api.ChangeEventDto.topologyChanged());
+        await settle();
 
-      expect(_counters.refreshes, 1, reason: 'the fast path was attempted');
-      expect(
-        _counters.builds,
-        2,
-        reason: 'on fast-path failure the controller invalidates → full re-discover',
-      );
-    }, timeout: _testTimeout);
+        expect(_counters.refreshes, 1, reason: 'the fast path was attempted');
+        expect(
+          _counters.builds,
+          2,
+          reason:
+              'on fast-path failure the controller invalidates → full re-discover',
+        );
+      },
+      timeout: _testTimeout,
+    );
   });
 }

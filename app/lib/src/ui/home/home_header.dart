@@ -119,7 +119,7 @@ class _LayoutToggle extends StatelessWidget {
       value: value,
       onChanged: onChanged,
       segmentWidth: 40,
-      segmentHeight: 36,
+      segmentHeight: 40,
       segments: const [
         SettingsSegment(
           key: Key('layout-toggle-cards'),

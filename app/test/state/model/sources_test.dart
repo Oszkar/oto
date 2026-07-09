@@ -96,23 +96,26 @@ void main() {
       expect(g.hasActiveStream, isFalse);
     });
 
-    test('paused/transitioning with an empty or absent track is NOT a source', () {
-      const pausedEmpty = GroupState(
-        id: 'G',
-        coordinatorId: 'LR',
-        memberIds: ['LR'],
-        transport: PlaybackState.paused,
-        track: Track(),
-      );
-      const transitioningNoTrack = GroupState(
-        id: 'G',
-        coordinatorId: 'LR',
-        memberIds: ['LR'],
-        transport: PlaybackState.transitioning,
-      );
-      expect(pausedEmpty.hasActiveStream, isFalse);
-      expect(transitioningNoTrack.hasActiveStream, isFalse);
-    });
+    test(
+      'paused/transitioning with an empty or absent track is NOT a source',
+      () {
+        const pausedEmpty = GroupState(
+          id: 'G',
+          coordinatorId: 'LR',
+          memberIds: ['LR'],
+          transport: PlaybackState.paused,
+          track: Track(),
+        );
+        const transitioningNoTrack = GroupState(
+          id: 'G',
+          coordinatorId: 'LR',
+          memberIds: ['LR'],
+          transport: PlaybackState.transitioning,
+        );
+        expect(pausedEmpty.hasActiveStream, isFalse);
+        expect(transitioningNoTrack.hasActiveStream, isFalse);
+      },
+    );
 
     test('playing with no metadata yet IS a source', () {
       // `playing` counts even before the Track event lands (radio / line-in /

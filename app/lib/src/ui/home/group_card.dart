@@ -47,9 +47,7 @@ class GroupCard extends ConsumerWidget {
     final selected = wide && ref.watch(resolvedSourceProvider) == groupId;
 
     return GestureDetector(
-      onTap: wide
-          ? () => ref.read(selectedSourceProvider.notifier).select(groupId)
-          : null,
+      onTap: () => openSource(context, ref, groupId),
       behavior: HitTestBehavior.opaque,
       child: Container(
         decoration: BoxDecoration(
@@ -345,8 +343,9 @@ class GroupCard extends ConsumerWidget {
       child: InkWell(
         key: Key('group-more-$groupId'),
         onTap: () => openGroupEditor(context, coordinatorId),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Space.xs4),
+        child: Container(
+          height: 44,
+          alignment: Alignment.centerLeft,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

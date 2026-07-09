@@ -122,21 +122,18 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OtoApp)),
       );
-      await _waitFor(
-        tester,
-        () {
-          final h = container.read(householdProvider);
-          return h.rooms.length == 3 && h.groups.length == 2;
-        },
-        message: 'discovery + seed never populated the household',
-      );
+      await _waitFor(tester, () {
+        final h = container.read(householdProvider);
+        return h.rooms.length == 3 && h.groups.length == 2;
+      }, message: 'discovery + seed never populated the household');
       await tester.pumpAndSettle();
 
       // ── Wide three-pane shell ────────────────────────────────────────────
       expect(
         find.byType(NowPlayingPane),
         findsOneWidget,
-        reason: 'wide replaces the floating strip with a persistent detail pane',
+        reason:
+            'wide replaces the floating strip with a persistent detail pane',
       );
       expect(
         find.byType(BottomStrip),
@@ -163,7 +160,10 @@ void main() {
       await _waitFor(
         tester,
         () =>
-            container.read(householdProvider).groups[_kitchenGroup]?.transport ==
+            container
+                .read(householdProvider)
+                .groups[_kitchenGroup]
+                ?.transport ==
             PlaybackState.playing,
         message: 'play(group) did not propagate to the household',
       );
@@ -184,7 +184,10 @@ void main() {
       // Tap the group card body (the header album art is inside the outer
       // select-on-wide GestureDetector and absorbs no taps of its own).
       await tester.tap(
-        find.descendant(of: find.byType(GroupCard), matching: find.byType(AlbumArt)),
+        find.descendant(
+          of: find.byType(GroupCard),
+          matching: find.byType(AlbumArt),
+        ),
       );
       await tester.pumpAndSettle();
 

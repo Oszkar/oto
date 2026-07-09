@@ -24,12 +24,14 @@ void main() {
   testWidgets('app boots with RustLib initialised', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
-      ],
-      child: const OtoApp(),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+        ],
+        child: const OtoApp(),
+      ),
+    );
     await tester.pump();
     // The placeholder Home (`shell/home_page.dart`) renders a centered loading
     // spinner until Task 11b brings the real HomeScreen. Asserting on it catches

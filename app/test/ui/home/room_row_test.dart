@@ -114,7 +114,10 @@ void main() {
   testWidgets('offline room identity tap does not navigate', (t) async {
     // Offline rooms are non-interactive (no chevron, no controls); the identity
     // tap is disabled to match, so it must not open room detail.
-    final h = wrap(const RoomRow(speakerId: 'PT'), household: offlineHousehold());
+    final h = wrap(
+      const RoomRow(speakerId: 'PT'),
+      household: offlineHousehold(),
+    );
     await t.pumpWidget(h.widget);
 
     await t.tap(find.byKey(const Key('room-open-PT')));

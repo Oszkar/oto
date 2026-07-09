@@ -38,18 +38,30 @@ void main() {
 
   final anchor = DateTime(2026, 1, 1, 0, 0, 0);
   test('position advances by wall-clock while playing', () {
-    final p = positionAt(anchor.add(const Duration(seconds: 5)),
-        anchorTime: anchor, anchorPosition: Duration.zero, state: PlaybackState.playing);
+    final p = positionAt(
+      anchor.add(const Duration(seconds: 5)),
+      anchorTime: anchor,
+      anchorPosition: Duration.zero,
+      state: PlaybackState.playing,
+    );
     expect(p, const Duration(seconds: 5));
   });
   test('position is frozen while paused', () {
-    final p = positionAt(anchor.add(const Duration(seconds: 5)),
-        anchorTime: anchor, anchorPosition: const Duration(seconds: 2), state: PlaybackState.paused);
+    final p = positionAt(
+      anchor.add(const Duration(seconds: 5)),
+      anchorTime: anchor,
+      anchorPosition: const Duration(seconds: 2),
+      state: PlaybackState.paused,
+    );
     expect(p, const Duration(seconds: 2));
   });
   test('position advances from a non-zero anchor (resume case)', () {
-    final p = positionAt(anchor.add(const Duration(seconds: 3)),
-        anchorTime: anchor, anchorPosition: const Duration(seconds: 12), state: PlaybackState.playing);
+    final p = positionAt(
+      anchor.add(const Duration(seconds: 3)),
+      anchorTime: anchor,
+      anchorPosition: const Duration(seconds: 12),
+      state: PlaybackState.playing,
+    );
     expect(p, const Duration(seconds: 15));
   });
 }

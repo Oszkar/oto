@@ -12,10 +12,12 @@ Future<void> main() async {
   await RustLib.init();
   final prefs = await SharedPreferences.getInstance();
   await initWindowBounds(prefs);
-  runApp(ProviderScope(
-    overrides: [
-      prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
-    ],
-    child: const OtoApp(),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [
+        prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+      ],
+      child: const OtoApp(),
+    ),
+  );
 }
