@@ -24,9 +24,7 @@ class RoomDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final room = ref.watch(
-      householdProvider.select((h) => h.rooms[speakerId]),
-    );
+    final room = ref.watch(householdProvider.select((h) => h.rooms[speakerId]));
 
     if (room == null) {
       // Unknown room (stale nav, or it left via a topology change): show the
@@ -122,6 +120,7 @@ class RoomDetailScreen extends ConsumerWidget {
       child: Row(
         children: [
           IconButton(
+            tooltip: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
             icon: OtoIcon('chevronLeft', size: 18, color: oto.ink2),
           ),
@@ -134,14 +133,7 @@ class RoomDetailScreen extends ConsumerWidget {
                   name ?? 'Room',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  // Inline 19px per the V3RoomDetail header: no TextStyles token
-                  // covers this size (titleCard 14.5 / titleSection 22).
-                  style: const TextStyle(
-                    fontFamily: Fonts.sans,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 19 * -0.015,
-                  ),
+                  style: TextStyles.titleDetail,
                 ),
                 if (model != null) ...[
                   const SizedBox(height: 1),
@@ -221,11 +213,7 @@ class _NowPlayingCard extends ConsumerWidget {
                   track?.title ?? 'Nothing playing',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: Fonts.sans,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyles.label,
                 ),
                 if (track?.artist != null) ...[
                   const SizedBox(height: 1),
@@ -241,29 +229,30 @@ class _NowPlayingCard extends ConsumerWidget {
           ),
           IconButton(
             key: Key('room-detail-prev-$speakerId'),
-            onPressed: (gid == null || !online) ? null : () => ctrl.previous(gid),
+            tooltip: 'Previous track',
+            onPressed: (gid == null || !online)
+                ? null
+                : () => ctrl.previous(gid),
             icon: OtoIcon('prev', size: 18, color: oto.ink),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
           IconButton(
             key: Key('room-detail-play-$speakerId'),
+            tooltip: playing ? 'Pause' : 'Play',
             onPressed: (gid == null || !online)
                 ? null
                 : () => ctrl.togglePlay(
-                      gid,
-                      group?.transport ?? PlaybackState.paused,
-                    ),
-            icon: OtoIcon(
-              playing ? 'pause' : 'play',
-              size: 22,
-              color: oto.ink,
-            ),
+                    gid,
+                    group?.transport ?? PlaybackState.paused,
+                  ),
+            icon: OtoIcon(playing ? 'pause' : 'play', size: 22, color: oto.ink),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
           ),
           IconButton(
             key: Key('room-detail-next-$speakerId'),
+            tooltip: 'Next track',
             onPressed: (gid == null || !online) ? null : () => ctrl.next(gid),
             icon: OtoIcon('next', size: 18, color: oto.ink),
             padding: EdgeInsets.zero,
@@ -358,6 +347,7 @@ class _KebabButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return IconButton(
       key: Key('room-kebab-$speakerId'),
+      tooltip: 'Room options',
       onPressed: () => _showMenu(context, ref),
       icon: OtoIcon('more', size: 18, color: context.oto.ink2),
     );
@@ -417,7 +407,10 @@ class _KebabSheet extends StatelessWidget {
             ListTile(
               key: Key('room-kebab-ungroup-$speakerId'),
               leading: OtoIcon('x', size: 20, color: oto.danger),
-              title: Text('Ungroup', style: TextStyle(color: oto.danger)),
+              title: Text(
+                'Ungroup',
+                style: TextStyles.body.copyWith(color: oto.danger),
+              ),
               onTap: onUngroup,
             ),
           const SizedBox(height: Space.md8),

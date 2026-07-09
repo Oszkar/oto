@@ -21,8 +21,8 @@ import '../home/_fixtures.dart';
 class EditorHandle {
   EditorHandle(this.widget, this._resolveGrouping);
   final Widget widget;
-  final SpyGrouping Function() _resolveGrouping;
-  List<String> get groupingCalls => _resolveGrouping().calls;
+  final SpyGrouping? Function() _resolveGrouping;
+  List<String> get groupingCalls => _resolveGrouping()?.calls ?? const [];
 }
 
 EditorHandle wrapEditor(String hostId, {required Household household}) {
@@ -56,7 +56,7 @@ EditorHandle wrapEditor(String hostId, {required Household household}) {
       ),
     ),
   );
-  return EditorHandle(widget, () => grouping!);
+  return EditorHandle(widget, () => grouping);
 }
 
 void main() {
@@ -81,24 +81,26 @@ void main() {
     });
 
     testWidgets(
-        'conflict sub-line appears when selected room has active stream',
-        (t) async {
-      // groupEditWithConflictHousehold: BR is in G_BR which is playing.
-      final h = wrapEditor('LR', household: groupEditWithConflictHousehold());
-      await t.pumpWidget(h.widget);
-      await t.tap(find.byKey(const Key('open-editor')));
-      await t.pumpAndSettle();
+      'conflict sub-line appears when selected room has active stream',
+      (t) async {
+        // groupEditWithConflictHousehold: BR is in G_BR which is playing.
+        final h = wrapEditor('LR', household: groupEditWithConflictHousehold());
+        await t.pumpWidget(h.widget);
+        await t.tap(find.byKey(const Key('open-editor')));
+        await t.pumpAndSettle();
 
-      // BR is unselected initially, so no conflict yet.
-      expect(find.text('Will stop current playback'), findsNothing);
-      // Select BR - now it conflicts because G_BR has an active stream.
-      await t.tap(find.byKey(const Key('group-row-BR')));
-      await t.pump();
-      expect(find.text('Will stop current playback'), findsOneWidget);
-    });
+        // BR is unselected initially, so no conflict yet.
+        expect(find.text('Will stop current playback'), findsNothing);
+        // Select BR - now it conflicts because G_BR has an active stream.
+        await t.tap(find.byKey(const Key('group-row-BR')));
+        await t.pump();
+        expect(find.text('Will stop current playback'), findsOneWidget);
+      },
+    );
 
-    testWidgets('ungroup-all leaves non-host members and does not leave host',
-        (t) async {
+    testWidgets('ungroup-all leaves non-host members and does not leave host', (
+      t,
+    ) async {
       final h = wrapEditor('LR', household: groupEditHousehold());
       await t.pumpWidget(h.widget);
       await t.tap(find.byKey(const Key('open-editor')));
@@ -106,34 +108,58 @@ void main() {
 
       await t.tap(find.byKey(const Key('group-ungroup-all')));
       await t.pumpAndSettle();
+      expect(find.text('Ungroup all rooms?'), findsOneWidget);
+
+      await t.tap(find.byKey(const Key('group-confirm-ungroup-all')));
+      await t.pumpAndSettle();
       // KT is a non-host member; should be left.
       expect(h.groupingCalls, contains('leaveGroup(KT)'));
       // Host LR must NOT be left.
       expect(h.groupingCalls, isNot(contains('leaveGroup(LR)')));
     });
 
-    testWidgets('save with no changes issues no grouping calls but still pops',
-        (t) async {
+    testWidgets('ungroup-all cancel issues no grouping calls', (t) async {
       final h = wrapEditor('LR', household: groupEditHousehold());
       await t.pumpWidget(h.widget);
       await t.tap(find.byKey(const Key('open-editor')));
       await t.pumpAndSettle();
-      expect(find.byType(GroupEditorScreen), findsOneWidget);
 
-      // No selection changes - tap save immediately.
-      await t.tap(find.byKey(const Key('group-save')));
+      await t.tap(find.byKey(const Key('group-ungroup-all')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('group-cancel-ungroup-all')));
       await t.pumpAndSettle();
 
-      // Screen should be gone (popped back to home).
-      expect(find.byType(GroupEditorScreen), findsNothing);
-      // No join/leave calls issued.
+      expect(find.byType(GroupEditorScreen), findsOneWidget);
       final joinLeave = h.groupingCalls
-          .where(
-            (c) => c.startsWith('joinGroup') || c.startsWith('leaveGroup'),
-          )
+          .where((c) => c.startsWith('joinGroup') || c.startsWith('leaveGroup'))
           .toList();
       expect(joinLeave, isEmpty);
     });
+
+    testWidgets(
+      'save with no changes issues no grouping calls but still pops',
+      (t) async {
+        final h = wrapEditor('LR', household: groupEditHousehold());
+        await t.pumpWidget(h.widget);
+        await t.tap(find.byKey(const Key('open-editor')));
+        await t.pumpAndSettle();
+        expect(find.byType(GroupEditorScreen), findsOneWidget);
+
+        // No selection changes - tap save immediately.
+        await t.tap(find.byKey(const Key('group-save')));
+        await t.pumpAndSettle();
+
+        // Screen should be gone (popped back to home).
+        expect(find.byType(GroupEditorScreen), findsNothing);
+        // No join/leave calls issued.
+        final joinLeave = h.groupingCalls
+            .where(
+              (c) => c.startsWith('joinGroup') || c.startsWith('leaveGroup'),
+            )
+            .toList();
+        expect(joinLeave, isEmpty);
+      },
+    );
 
     testWidgets('tapping host row is a no-op (host stays selected)', (t) async {
       final h = wrapEditor('LR', household: groupEditHousehold());
@@ -152,9 +178,7 @@ void main() {
       await t.tap(find.byKey(const Key('group-save')));
       await t.pumpAndSettle();
       final joinLeave = h.groupingCalls
-          .where(
-            (c) => c.startsWith('joinGroup') || c.startsWith('leaveGroup'),
-          )
+          .where((c) => c.startsWith('joinGroup') || c.startsWith('leaveGroup'))
           .toList();
       expect(joinLeave, isEmpty);
     });

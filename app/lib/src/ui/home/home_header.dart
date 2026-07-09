@@ -90,9 +90,7 @@ class HomeHeader extends ConsumerWidget {
               // keep it as their only Settings entry point.
               if (!context.isDesktop) ...[
                 const SizedBox(width: Space.lg10),
-                _GearButton(
-                  onPressed: () => openSettings(context),
-                ),
+                _GearButton(onPressed: () => openSettings(context)),
               ],
             ],
           ),
@@ -126,11 +124,13 @@ class _LayoutToggle extends StatelessWidget {
         SettingsSegment(
           key: Key('layout-toggle-cards'),
           value: HomeLayout.cards,
+          semanticLabel: 'Cards layout',
           icon: 'layoutGrid',
         ),
         SettingsSegment(
           key: Key('layout-toggle-stack'),
           value: HomeLayout.stack,
+          semanticLabel: 'Stack layout',
           icon: 'list',
         ),
       ],
@@ -147,19 +147,26 @@ class _GearButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oto = context.oto;
-    return InkWell(
-      key: const Key('header-settings'),
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(Radius_.art10),
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          border: Border.all(color: oto.line),
+    return Tooltip(
+      message: 'Open settings',
+      child: Semantics(
+        label: 'Open settings',
+        button: true,
+        child: InkWell(
+          key: const Key('header-settings'),
+          onTap: onPressed,
           borderRadius: BorderRadius.circular(Radius_.art10),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              border: Border.all(color: oto.line),
+              borderRadius: BorderRadius.circular(Radius_.art10),
+            ),
+            alignment: Alignment.center,
+            child: OtoIcon('settings', size: 17, color: oto.ink2),
+          ),
         ),
-        alignment: Alignment.center,
-        child: OtoIcon('settings', size: 17, color: oto.ink2),
       ),
     );
   }

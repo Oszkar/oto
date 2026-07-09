@@ -33,6 +33,7 @@ class SettingsBody extends StatelessWidget {
               PaneDismiss(
                 onDismiss: onDismiss,
                 icon: 'chevronLeft',
+                tooltip: 'Back',
                 iconSize: 20, // preserve the pre-split OtoIcon default size
                 buttonKey: const Key('settings-back'),
               ),

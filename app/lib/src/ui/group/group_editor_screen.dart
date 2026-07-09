@@ -22,8 +22,8 @@ import '../widgets/pane_dismiss.dart';
 ///
 /// Selection state lives in [groupEditorSelectionProvider]. Save computes a
 /// [MembershipDiff] and fires [GroupingController.joinGroup] /
-/// [GroupingController.leaveGroup] per the diff, then pops. Ungroup-all leaves
-/// every non-host current member, then pops.
+/// [GroupingController.leaveGroup] per the diff, then pops. Ungroup-all first
+/// asks for confirmation, then leaves every non-host current member and pops.
 class GroupEditorBody extends ConsumerWidget {
   const GroupEditorBody({super.key, required this.hostId, this.onDismiss});
 
@@ -37,8 +37,9 @@ class GroupEditorBody extends ConsumerWidget {
 
     // Resolve the host group so we know current members and the selection count.
     final hostGroupId = household.rooms[hostId]?.groupId;
-    final hostGroup =
-        hostGroupId == null ? null : household.groups[hostGroupId];
+    final hostGroup = hostGroupId == null
+        ? null
+        : household.groups[hostGroupId];
     final currentMembers = hostGroup?.memberIds.toSet() ?? {hostId};
 
     final conflicts = roomsWithConflict(
@@ -84,7 +85,8 @@ class GroupEditorBody extends ConsumerWidget {
           ),
         ),
         _Footer(
-          onUngroupAll: () => _onUngroupAll(context, ref, currentMembers),
+          canUngroupAll: currentMembers.any((member) => member != hostId),
+          onUngroupAll: () => _confirmUngroupAll(context, ref, currentMembers),
         ),
       ],
     );
@@ -127,6 +129,23 @@ class GroupEditorBody extends ConsumerWidget {
       grouping.leaveGroup(member);
     }
     Navigator.of(context).maybePop();
+  }
+
+  Future<void> _confirmUngroupAll(
+    BuildContext context,
+    WidgetRef ref,
+    Set<String> currentMembers,
+  ) async {
+    final roomsToUngroup = currentMembers.where((m) => m != hostId).length;
+    if (roomsToUngroup == 0) return;
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (ctx) => _UngroupAllSheet(count: roomsToUngroup),
+    );
+    if (!context.mounted || confirmed != true) return;
+
+    _onUngroupAll(context, ref, currentMembers);
   }
 }
 
@@ -179,6 +198,7 @@ class _Header extends StatelessWidget {
           PaneDismiss(
             onDismiss: onDismiss,
             icon: 'x',
+            tooltip: 'Close group editor',
             iconSize: 17,
             buttonKey: Key('group-close-$hostId'),
           ),
@@ -189,18 +209,13 @@ class _Header extends StatelessWidget {
                 Text(
                   'Group rooms',
                   style: TextStyles.titleCard.copyWith(
-                    fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 15 * -0.01,
                   ),
                 ),
                 const SizedBox(height: 1),
                 Text(
                   '$selectedCount selected',
-                  style: TextStyles.caption.copyWith(
-                    fontSize: 11,
-                    color: oto.inkMute,
-                  ),
+                  style: TextStyles.caption.copyWith(color: oto.inkMute),
                 ),
               ],
             ),
@@ -218,7 +233,7 @@ class _Header extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(Radius_.button12 - 2),
               ),
-              textStyle: TextStyles.label.copyWith(fontSize: 13),
+              textStyle: TextStyles.label,
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -328,7 +343,11 @@ class _RoomRow extends StatelessWidget {
                   ),
                   child: selected
                       ? Center(
-                          child: OtoIcon('check', size: 12, color: oto.onAccent),
+                          child: OtoIcon(
+                            'check',
+                            size: 12,
+                            color: oto.onAccent,
+                          ),
                         )
                       : const SizedBox.shrink(),
                 ),
@@ -370,10 +389,7 @@ class _RoomRow extends StatelessWidget {
                       subText,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyles.caption.copyWith(
-                        fontSize: 11.5,
-                        color: subColor,
-                      ),
+                      style: TextStyles.caption.copyWith(color: subColor),
                     ),
                   ],
                 ),
@@ -394,10 +410,7 @@ class _HostBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Space.sm6,
-        vertical: 2,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: Space.sm6, vertical: 2),
       decoration: BoxDecoration(
         color: oto.accent,
         borderRadius: BorderRadius.circular(Radius_.xs4),
@@ -405,7 +418,7 @@ class _HostBadge extends StatelessWidget {
       child: Text(
         'HOST',
         style: TextStyles.badge.copyWith(
-          letterSpacing: 10.5 * 0.06,
+          letterSpacing: 12 * 0.06,
           color: oto.onAccent,
         ),
       ),
@@ -418,9 +431,10 @@ class _HostBadge extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _Footer extends StatelessWidget {
-  const _Footer({required this.onUngroupAll});
+  const _Footer({required this.canUngroupAll, required this.onUngroupAll});
 
-  final VoidCallback onUngroupAll;
+  final bool canUngroupAll;
+  final Future<void> Function() onUngroupAll;
 
   @override
   Widget build(BuildContext context) {
@@ -439,7 +453,7 @@ class _Footer extends StatelessWidget {
         ),
         child: OutlinedButton(
           key: const Key('group-ungroup-all'),
-          onPressed: onUngroupAll,
+          onPressed: canUngroupAll ? () => onUngroupAll() : null,
           style: OutlinedButton.styleFrom(
             foregroundColor: oto.danger,
             side: BorderSide(color: oto.line),
@@ -455,6 +469,65 @@ class _Footer extends StatelessWidget {
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           child: const Text('Ungroup all'),
+        ),
+      ),
+    );
+  }
+}
+
+class _UngroupAllSheet extends StatelessWidget {
+  const _UngroupAllSheet({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final oto = context.oto;
+    final roomLabel = count == 1 ? 'room' : 'rooms';
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Space.screen18,
+          Space.section22,
+          Space.screen18,
+          Space.section22,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Ungroup all rooms?', style: TextStyles.titleSection),
+            const SizedBox(height: Space.md8),
+            Text(
+              'This will remove $count $roomLabel from this group. Playback may stop on rooms that leave.',
+              style: TextStyles.body.copyWith(color: oto.inkMute),
+            ),
+            const SizedBox(height: Space.section22),
+            FilledButton(
+              key: const Key('group-confirm-ungroup-all'),
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: oto.danger,
+                foregroundColor: oto.onAccent,
+                textStyle: TextStyles.label,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Space.gutter12,
+                  vertical: Space.lg10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(Radius_.button12 - 2),
+                ),
+              ),
+              child: const Text('Ungroup all'),
+            ),
+            const SizedBox(height: Space.md8),
+            TextButton(
+              key: const Key('group-cancel-ungroup-all'),
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(textStyle: TextStyles.label),
+              child: const Text('Cancel'),
+            ),
+          ],
         ),
       ),
     );

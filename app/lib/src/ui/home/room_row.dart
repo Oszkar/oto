@@ -92,11 +92,11 @@ class RoomRow extends ConsumerWidget {
             onTap: offline
                 ? null
                 : () => openRoom(
-                      context,
-                      ref,
-                      speakerId: speakerId,
-                      groupId: room.groupId,
-                    ),
+                    context,
+                    ref,
+                    speakerId: speakerId,
+                    groupId: room.groupId,
+                  ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,10 +112,7 @@ class RoomRow extends ConsumerWidget {
                   _subtitle(room, group, offline),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyles.caption.copyWith(
-                    fontSize: 11,
-                    color: oto.inkMute,
-                  ),
+                  style: TextStyles.caption.copyWith(color: oto.inkMute),
                 ),
               ],
             ),
@@ -125,6 +122,7 @@ class RoomRow extends ConsumerWidget {
         if (canResume)
           IconButton(
             key: Key('room-play-$speakerId'),
+            tooltip: playing ? 'Pause ${room.name}' : 'Play ${room.name}',
             onPressed: () => ref
                 .read(playbackControllerProvider)
                 .togglePlay(group!.id, group.transport ?? PlaybackState.paused),
@@ -195,7 +193,6 @@ class RoomRow extends ConsumerWidget {
               textAlign: TextAlign.right,
               style: TextStyles.caption.copyWith(
                 fontFamily: Fonts.mono,
-                fontSize: 11,
                 color: oto.inkMute,
               ),
             ),

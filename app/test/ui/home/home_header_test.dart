@@ -64,6 +64,19 @@ void main() {
     expect(find.byKey(const Key('header-search')), findsNothing);
   });
 
+  testWidgets('icon-only controls expose accessible labels', (t) async {
+    final semantics = t.ensureSemantics();
+    try {
+      await _pumpHeader(t);
+
+      expect(find.bySemanticsLabel('Cards layout'), findsWidgets);
+      expect(find.bySemanticsLabel('Stack layout'), findsWidgets);
+      expect(find.bySemanticsLabel('Open settings'), findsWidgets);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('tapping the gear pushes the Settings route', (t) async {
     await _pumpHeader(t);
     await t.tap(find.byKey(const Key('header-settings')));

@@ -136,12 +136,20 @@ class NowPlayingBody extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(_fmt(p.position),
-                style: TextStyles.caption.copyWith(
-                    fontFamily: Fonts.mono, color: oto.inkMute)),
-            Text(dur == null ? '--:--' : _fmt(dur),
-                style: TextStyles.caption.copyWith(
-                    fontFamily: Fonts.mono, color: oto.inkMute)),
+            Text(
+              _fmt(p.position),
+              style: TextStyles.caption.copyWith(
+                fontFamily: Fonts.mono,
+                color: oto.inkMute,
+              ),
+            ),
+            Text(
+              dur == null ? '--:--' : _fmt(dur),
+              style: TextStyles.caption.copyWith(
+                fontFamily: Fonts.mono,
+                color: oto.inkMute,
+              ),
+            ),
           ],
         ),
       ],
@@ -168,21 +176,22 @@ class NowPlayingBody extends ConsumerWidget {
       children: [
         IconButton(
           key: Key('np-prev-$groupId'),
+          tooltip: 'Previous track',
           onPressed: () => ctrl.previous(group.id),
           icon: OtoIcon('prev', size: 30, color: oto.ink),
         ),
         // Center play/pause: the filled ink disc from the JSX.
         IconButton(
           key: Key('np-play-$groupId'),
-          onPressed: () =>
-              ctrl.togglePlay(group.id, group.transport ?? PlaybackState.paused),
+          tooltip: playing ? 'Pause' : 'Play',
+          onPressed: () => ctrl.togglePlay(
+            group.id,
+            group.transport ?? PlaybackState.paused,
+          ),
           icon: Container(
             width: 60,
             height: 60,
-            decoration: BoxDecoration(
-              color: oto.ink,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: oto.ink, shape: BoxShape.circle),
             alignment: Alignment.center,
             child: OtoIcon(
               playing ? 'pause' : 'play',
@@ -193,6 +202,7 @@ class NowPlayingBody extends ConsumerWidget {
         ),
         IconButton(
           key: Key('np-next-$groupId'),
+          tooltip: 'Next track',
           onPressed: () => ctrl.next(group.id),
           icon: OtoIcon('next', size: 30, color: oto.ink),
         ),
@@ -310,7 +320,11 @@ class NowPlayingBody extends ConsumerWidget {
 /// Kept as a small private widget so the unknown-group fallback reuses the
 /// same chrome.
 class _Header extends ConsumerWidget {
-  const _Header({required this.groupId, required this.onDismiss, required this.child});
+  const _Header({
+    required this.groupId,
+    required this.onDismiss,
+    required this.child,
+  });
 
   final String groupId;
   final VoidCallback? onDismiss;
@@ -345,6 +359,7 @@ class _Header extends ConsumerWidget {
               PaneDismiss(
                 onDismiss: onDismiss,
                 icon: 'chevronDown',
+                tooltip: 'Dismiss Now Playing',
                 buttonKey: Key('np-dismiss-$groupId'),
               ),
               Expanded(
@@ -353,10 +368,7 @@ class _Header extends ConsumerWidget {
                   children: [
                     Text(
                       'PLAYING ON',
-                      style: TextStyles.overline.copyWith(
-                        fontSize: 10.5,
-                        color: oto.inkMute,
-                      ),
+                      style: TextStyles.overline.copyWith(color: oto.inkMute),
                     ),
                     const SizedBox(height: 2),
                     Row(

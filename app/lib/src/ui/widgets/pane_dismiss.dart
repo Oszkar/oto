@@ -12,6 +12,7 @@ class PaneDismiss extends StatelessWidget {
     super.key,
     required this.onDismiss,
     required this.icon,
+    required this.tooltip,
     this.iconSize = 18,
     this.buttonKey,
     this.collapsedWidth = 48,
@@ -19,6 +20,7 @@ class PaneDismiss extends StatelessWidget {
 
   final VoidCallback? onDismiss;
   final String icon;
+  final String tooltip;
   final double iconSize;
   final Key? buttonKey;
   final double collapsedWidth;
@@ -29,6 +31,7 @@ class PaneDismiss extends StatelessWidget {
     return IconButton(
       key: buttonKey,
       onPressed: onDismiss,
+      tooltip: tooltip,
       icon: OtoIcon(icon, size: iconSize, color: context.oto.ink2),
     );
   }

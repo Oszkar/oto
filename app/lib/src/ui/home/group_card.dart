@@ -124,6 +124,7 @@ class GroupCard extends ConsumerWidget {
           if (canResume)
             IconButton(
               key: Key('group-play-$groupId'),
+              tooltip: playing ? 'Pause group' : 'Play group',
               onPressed: () => ref
                   .read(playbackControllerProvider)
                   .togglePlay(
@@ -152,6 +153,7 @@ class GroupCard extends ConsumerWidget {
           // editor and could never be ungrouped.
           IconButton(
             key: Key('group-open-$groupId'),
+            tooltip: 'Group options',
             onPressed: () => openGroupEditor(context, group.coordinatorId),
             icon: OtoIcon('more', size: 18, color: oto.ink2),
           ),
@@ -213,11 +215,7 @@ class GroupCard extends ConsumerWidget {
           const SizedBox(height: Space.gutter12),
           Text(
             'ROOM LEVELS',
-            style: TextStyles.overline.copyWith(
-              fontSize: 9.5,
-              letterSpacing: 9.5 * 0.07,
-              color: oto.inkMute,
-            ),
+            style: TextStyles.overline.copyWith(color: oto.inkMute),
           ),
           for (final id in visible) ...[
             const SizedBox(height: 9),
@@ -303,7 +301,7 @@ class GroupCard extends ConsumerWidget {
             room.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyles.caption.copyWith(fontSize: 12, color: oto.ink2),
+            style: TextStyles.caption.copyWith(color: oto.ink2),
           ),
         ),
         const SizedBox(width: Space.lg10),
@@ -326,7 +324,6 @@ class GroupCard extends ConsumerWidget {
             textAlign: TextAlign.right,
             style: TextStyles.caption.copyWith(
               fontFamily: Fonts.mono,
-              fontSize: 11,
               color: oto.inkMute,
             ),
           ),

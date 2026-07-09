@@ -92,11 +92,11 @@ class RoomCard extends ConsumerWidget {
             onTap: offline
                 ? null
                 : () => openRoom(
-                      context,
-                      ref,
-                      speakerId: speakerId,
-                      groupId: room.groupId,
-                    ),
+                    context,
+                    ref,
+                    speakerId: speakerId,
+                    groupId: room.groupId,
+                  ),
             child: Text(
               room.name,
               maxLines: 1,
@@ -149,6 +149,7 @@ class RoomCard extends ConsumerWidget {
         // Resume-only transport: present ONLY when the group has an active stream.
         IconButton(
           key: Key('room-play-$speakerId'),
+          tooltip: playing ? 'Pause ${room.name}' : 'Play ${room.name}',
           onPressed: () => ref
               .read(playbackControllerProvider)
               .togglePlay(group.id, group.transport ?? PlaybackState.paused),
