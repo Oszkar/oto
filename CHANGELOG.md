@@ -20,6 +20,13 @@ v0.6.3 - Responsive layouts. oto now fills the window it is given: a tablet gets
 
 - On a wide window, tapping a room shows it in the Now Playing pane instead of opening the separate room screen - that screen stays the phone experience.
 
+### Fixed
+
+- **Keyboard focus and tap targets.** Cards and list rows are keyboard-focusable, have correctly sized touch targets, and no longer overlap adjacent controls (a room card's tap area no longer stole taps from its own volume slider).
+- **Independent scrollbars.** Each scrollable pane on desktop gets its own scrollbar, and hovering shows the desktop pointing-hand cursor where appropriate.
+- **Wide dialogs collapse cleanly on resize.** Settings and the group editor now fall back to the phone's full-screen presentation automatically if the window is resized narrow while they're open, instead of leaving a stray dialog behind.
+- **Wide pane selection no longer dangles.** If the room or group currently shown in the Now Playing pane disappears (regroup, going offline), the pane falls back cleanly instead of holding a stale selection.
+
 Validated on a Windows desktop across phone, tablet, and desktop widths; the phone layout is unchanged.
 
 ## [0.6.2] - 2026-07-01
