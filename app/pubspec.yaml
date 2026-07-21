@@ -38,10 +38,10 @@ dependencies:
   # UI foundation (v0.6.0).
   shared_preferences: ^2.3.0
   flutter_svg: ^2.0.10
-  lucide_icons_flutter: ^3.1.14
+  lucide_icons_flutter: ^3.1.15
 
   # Windows/desktop window size + position persistence (v0.6.3).
-  window_manager: ^0.4.3
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
