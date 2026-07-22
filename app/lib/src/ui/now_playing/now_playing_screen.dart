@@ -7,6 +7,7 @@ import '../../state/model/group_state.dart';
 import '../../state/now_playing.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
+import '../room/room_options_menu.dart';
 import '../shell/oto_scaffold.dart';
 import '../shell/responsive_pop.dart';
 import '../widgets/album_art.dart';
@@ -395,6 +396,18 @@ class _Header extends ConsumerWidget {
     final memberCount = ref.watch(
       householdProvider.select((h) => h.groups[groupId]?.memberIds.length ?? 0),
     );
+    // Room-level options belong to a SOLO room only: a multi-room group has no
+    // single room to act on, and its own options live on the group card. On
+    // wide, Room detail is folded away, so without this the pane offered no
+    // join/leave path at all (#129).
+    final soloMemberId = ref.watch(
+      householdProvider.select((h) {
+        final g = h.groups[groupId];
+        return (g != null && g.memberIds.length == 1)
+            ? g.memberIds.single
+            : null;
+      }),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -445,9 +458,19 @@ class _Header extends ConsumerWidget {
                   ],
                 ),
               ),
-              // Balances the leading dismiss button so the caption stays
-              // centered. No queue icon (backend-true: §7).
-              const SizedBox(width: 48),
+              // A solo room gets its options kebab here; otherwise a spacer of
+              // the same width keeps the caption centered against the leading
+              // dismiss button. No queue icon (backend-true: §7).
+              if (soloMemberId == null)
+                const SizedBox(width: 48)
+              else
+                RoomOptionsButton(
+                  speakerId: soloMemberId,
+                  // A solo room is its own coordinator, so it hosts its own
+                  // group editor, and there is nothing to ungroup from.
+                  hostId: soloMemberId,
+                  memberCount: 1,
+                ),
             ],
           ),
         ),
