@@ -8,16 +8,30 @@ import '../rust/api.dart' as rust_api;
 
 part 'discovery.g.dart';
 
-/// Which path produced a published topology.
+/// WHY a topology was published, not which mechanism produced it.
 ///
-/// `HouseholdNotifier` needs the distinction to decide whether to reset stale
-/// per-speaker health. A [fullDiscovery] is user-initiated (app start or "Scan
-/// network"), so an optimistic reset is what the user asked for. A
-/// [fastRefresh] fires automatically on every regroup, so resetting there would
-/// repeatedly flap a genuinely-off speaker back to online with no user action
-/// behind it. Neither path carries per-speaker reachability evidence - see the
-/// `clearHealth` comment in `household_reducer.dart`.
-enum TopologySource { fullDiscovery, fastRefresh }
+/// `HouseholdNotifier` uses this to decide whether to reset stale per-speaker
+/// health. The reset is optimistic - neither path carries per-speaker
+/// reachability evidence (see the `clearHealth` comment in
+/// `household_reducer.dart`) - so it is only justified when the user actually
+/// asked for a rescan.
+///
+/// The distinction is deliberately about intent rather than "did SSDP run".
+/// Several automatic paths also run a full `discover()`: `ref.invalidate` after
+/// a `CommandError_NotFound` (commands.dart), and `topologyController`'s
+/// fallback when a fast refresh throws (topology.dart). Labelling those by
+/// mechanism made them clear health with no user action behind it - and the
+/// second case is exactly the background-regroup path the fast-refresh
+/// exclusion exists to protect, re-entering through its own error fallback.
+enum TopologySource {
+  /// The user asked for it: [Discovery.rediscover] (the "Scan network" /
+  /// "Retry" buttons). The only source that clears carried health.
+  userScan,
+
+  /// Everything else - app start, a `NotFound` re-discover, the fast-refresh
+  /// fallback, or a fast `refreshTopology()`. Carries health forward.
+  automatic,
+}
 
 /// LAN discovery + the v0.5.1 topology fast-path.
 ///
@@ -58,20 +72,33 @@ class Discovery extends _$Discovery {
   /// missed reset, never a spurious one).
   ({rust_api.Topology topology, TopologySource source})? lastPublish;
 
+  /// Set by [rediscover] and consumed by the next [build]. A bare "this was a
+  /// full discovery" label was wrong: `ref.invalidate(discoveryProvider)` also
+  /// re-runs `build()`, and those callers are automatic. Invalidation
+  /// constructs a FRESH notifier, so this flag resets to false for them - only
+  /// [rediscover], which calls `build()` on the existing instance, can set it.
+  bool _userRequested = false;
+
   @override
   Future<rust_api.Topology> build() async {
+    // Read-and-clear up front, so a throwing discover still consumes the flag
+    // and a later automatic rebuild cannot inherit it.
+    final source = _userRequested
+        ? TopologySource.userScan
+        : TopologySource.automatic;
+    _userRequested = false;
     if (Platform.isAndroid) {
       final acquired = await _tryLock(AndroidMulticastLock.acquire);
       try {
         final topo = await rust_api.discover();
-        lastPublish = (topology: topo, source: TopologySource.fullDiscovery);
+        lastPublish = (topology: topo, source: source);
         return topo;
       } finally {
         if (acquired) await _tryLock(AndroidMulticastLock.release);
       }
     }
     final topo = await rust_api.discover();
-    lastPublish = (topology: topo, source: TopologySource.fullDiscovery);
+    lastPublish = (topology: topo, source: source);
     return topo;
   }
 
@@ -84,6 +111,8 @@ class Discovery extends _$Discovery {
   /// the authoritative Rust generation, not `discovery.hasValue`, so it keeps
   /// returning the installed (old) wire's generation across a failed retry.
   Future<void> rediscover() async {
+    // The one path the user drives. `build()` consumes this.
+    _userRequested = true;
     final retrying = ref.read(discoveryRetryingProvider.notifier);
     retrying.setRetrying(true);
     state = const AsyncLoading();
@@ -104,7 +133,7 @@ class Discovery extends _$Discovery {
   /// caller (`topologyController`) falls back to a full re-discover.
   Future<void> refreshTopology() async {
     final topo = await rust_api.refreshTopology();
-    lastPublish = (topology: topo, source: TopologySource.fastRefresh);
+    lastPublish = (topology: topo, source: TopologySource.automatic);
     _publishInstalledWire(topo);
   }
 

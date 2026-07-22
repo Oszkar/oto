@@ -257,37 +257,78 @@ void main() {
     );
   });
 
-  test('a newer gesture is not clobbered by an older end cleanup', () async {
-    final spy = _SpyApi()..deferVolume = true; // control completion order.
+  test('sends to one target are serialized, in order', () async {
+    // Two gestures on the same room: the second must NOT dispatch until the
+    // first settles. Concurrency here is what let an older failure land after a
+    // newer success - and the Rust layer then emitted a SubscriptionError that
+    // marked the room unreachable even though the user's last command worked.
+    final spy = _SpyApi()..deferVolume = true;
+    final (:container, :discovery) = _container(spy);
+    await _seedHousehold(container);
+
+    final c = container.read(playbackControllerProvider);
+    c.setVolumeEnd('KT', 20);
+    expect(spy.volumeCompleters.length, 1, reason: 'first send dispatched');
+
+    c.setVolumeEnd('KT', 30);
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      spy.volumeCompleters.length,
+      1,
+      reason: 'second send is queued behind the first, not dispatched',
+    );
+
+    spy.volumeCompleters[0].complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(spy.volumeCompleters.length, 2, reason: 'second send follows');
+    expect(spy.calls, ['setVolume(KT,20)', 'setVolume(KT,30)']);
+  });
+
+  test('sends to DIFFERENT targets still run in parallel', () async {
+    // Serialization is per target; unrelated rooms must not queue behind each
+    // other, or one dead speaker would stall the whole household.
+    final spy = _SpyApi()..deferVolume = true;
+    final (:container, :discovery) = _container(spy);
+    await _seedHousehold(container);
+
+    final c = container.read(playbackControllerProvider);
+    c.setVolumeEnd('KT', 20);
+    c.setVolumeEnd('LR', 40);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(spy.volumeCompleters.length, 2);
+  });
+
+  test('a superseded gesture failing first neither rolls back nor reports', () async {
+    final spy = _SpyApi()..deferVolume = true;
     final (:container, :discovery) = _container(spy);
     await _seedHousehold(container);
     container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
 
     final c = container.read(playbackControllerProvider);
-    // Gesture 1: end(20) - send in flight (deferred → completer[0]).
-    c.setVolumeEnd('KT', 20);
-    expect(spy.volumeCompleters.length, 1);
-    // Gesture 2 starts before gesture 1 resolves: end(30) → completer[1].
-    c.setVolumeEnd('KT', 30);
-    expect(spy.volumeCompleters.length, 2);
+    c.setVolumeEnd('KT', 20); // gesture 1 - dispatched
+    c.setVolumeEnd('KT', 30); // gesture 2 - supersedes it, queued
 
-    // Gesture 1 succeeds now; under the old unconditional cleanup its
-    // whenComplete would wipe gesture 2's anchor + sequence.
-    spy.volumeCompleters[0].complete();
-    await Future<void>.delayed(Duration.zero);
-
-    // Gesture 2 then FAILS - its rollback must still fire (bookkeeping intact),
-    // restoring the pre-interaction anchor 10.
-    spy.volumeCompleters[1].completeError(const CommandError.sonos('late'));
+    // Gesture 1 now fails. The user has already moved to 30, so this must be
+    // silent: no rollback to the anchor, no notice.
+    spy.volumeCompleters[0].completeError(const CommandError.sonos('late'));
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
+    expect(container.read(commandFailuresProvider), isNull);
     expect(
       container.read(householdProvider).rooms['KT']!.volume,
-      10,
-      reason:
-          'gesture 2 rollback survived gesture 1 cleanup; restored to anchor 10',
+      30,
+      reason: 'the superseded failure must not roll back over the newer value',
     );
+
+    // And gesture 2 still gets its turn.
+    expect(spy.volumeCompleters.length, 2);
+    spy.volumeCompleters[1].complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(householdProvider).rooms['KT']!.volume, 30);
   });
 
   test(
@@ -328,18 +369,21 @@ void main() {
 
       final c = container.read(playbackControllerProvider);
       c.setVolume('KT', 30); // arms the 150ms throttle (mid-drag).
-      // Let the throttle fire the mid-drag send - it is now in flight (deferred).
+      // Let the throttle fire the mid-drag send - it is now in flight.
       await Future<void>.delayed(const Duration(milliseconds: 160));
       expect(spy.volumeCompleters.length, 1, reason: 'mid-drag send fired');
 
       c.setVolumeEnd('KT', 55); // final send supersedes the mid-drag one.
-      expect(spy.volumeCompleters.length, 2);
 
-      // Final (55) succeeds; the stale mid-drag (30) then fails LATE.
-      spy.volumeCompleters[1].complete();
-      await Future<void>.delayed(Duration.zero);
+      // The stale mid-drag (30) fails. Sends are serialized, so it resolves
+      // before the final one dispatches - and its rollback is suppressed
+      // because a newer gesture already exists.
       spy.volumeCompleters[0].completeError(const CommandError.sonos('late'));
       await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(spy.volumeCompleters.length, 2, reason: 'final send follows');
+      spy.volumeCompleters[1].complete();
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -557,38 +601,28 @@ void main() {
       expect(container.read(commandFailuresProvider), isNull);
     });
 
-    test('a superseded volume send that fails reports nothing', () async {
-      // The N3 stale-send race, extended to the notice: an earlier send is
-      // still in flight when a newer one lands and succeeds. When the stale one
-      // then fails it must neither roll back NOR announce a failure - the value
-      // the user set is correct and on screen, so "Could not reach Kitchen"
-      // would be a lie.
+    test('a superseded send that fails stays silent', () async {
+      // Sends to one target are serialized, so the stale one resolves first;
+      // the sequence gate keeps it quiet because a newer gesture supersedes it.
       final spy = _SpyApi()..deferVolume = true;
       final (:container, :discovery) = _container(spy);
       await _seedHousehold(container);
       container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
 
       final c = container.read(playbackControllerProvider);
-      c.setVolumeEnd('KT', 20); // gesture 1 -> completer[0]
-      c.setVolumeEnd('KT', 30); // gesture 2 -> completer[1], supersedes it
+      c.setVolumeEnd('KT', 20);
+      c.setVolumeEnd('KT', 30);
 
-      // The NEWER gesture succeeds first...
-      spy.volumeCompleters[1].complete();
-      await Future<void>.delayed(Duration.zero);
-      // ...then the stale one fails.
       spy.volumeCompleters[0].completeError(const CommandError.network('down'));
+      await Future<void>.delayed(Duration.zero);
       await Future<void>.delayed(Duration.zero);
 
       expect(
         container.read(commandFailuresProvider),
         isNull,
-        reason: 'a superseded send must stay silent',
+        reason: 'a superseded send must not announce a failure',
       );
-      expect(
-        container.read(householdProvider).rooms['KT']!.volume,
-        30,
-        reason: 'and must not roll back over the value that landed',
-      );
+      expect(container.read(householdProvider).rooms['KT']!.volume, 30);
     });
 
     test('a stale-id failure still re-discovers even when superseded', () async {
@@ -603,12 +637,9 @@ void main() {
       c.setVolumeEnd('KT', 20);
       c.setVolumeEnd('KT', 30);
 
-      spy.volumeCompleters[1].complete();
-      await Future<void>.delayed(Duration.zero);
       spy.volumeCompleters[0].completeError(const CommandError.notFound('gone'));
       await Future<void>.delayed(Duration.zero);
-      // Invalidation re-runs build() lazily; reading the future forces it
-      // (same idiom as the NotFound test above).
+      // Invalidation re-runs build() lazily; reading the future forces it.
       await container.read(discoveryProvider.future);
 
       expect(
