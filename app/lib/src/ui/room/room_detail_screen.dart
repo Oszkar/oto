@@ -10,6 +10,7 @@ import '../shell/nav.dart';
 import '../shell/oto_scaffold.dart';
 import '../shell/responsive_pop.dart';
 import '../widgets/album_art.dart';
+import '../widgets/mute_button.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
@@ -108,7 +109,9 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
                       const SizedBox(height: Space.screen18),
                       _VolumeRow(
                         speakerId: speakerId,
+                        name: room.name,
                         volume: room.volume,
+                        muted: room.muted,
                         online: room.online,
                       ),
                     ],
@@ -303,12 +306,21 @@ class _NowPlayingCard extends ConsumerWidget {
 class _VolumeRow extends ConsumerWidget {
   const _VolumeRow({
     required this.speakerId,
+    required this.name,
     required this.volume,
+    required this.muted,
     required this.online,
   });
 
   final String speakerId;
+
+  /// Room name - names the mute action in its tooltip.
+  final String name;
+
   final int? volume;
+
+  /// Current mute state; null when no `Mute` event has been seen yet.
+  final bool? muted;
 
   /// Offline -> disable the slider (the speaker is unreachable), mirroring
   /// RoomRow/RoomCard. A stale last-known volume can still render.
@@ -324,18 +336,29 @@ class _VolumeRow extends ConsumerWidget {
 
     return Row(
       children: [
-        OtoIcon('volume', size: 18, color: oto.ink2),
-        const SizedBox(width: Space.card14),
+        MuteButton(
+          key: Key('room-detail-mute-$speakerId'),
+          muted: muted,
+          enabled: online,
+          size: 18,
+          color: oto.ink2,
+          label: name,
+          onToggle: () => ctrl.setMute(speakerId, !(muted ?? false)),
+        ),
+        const SizedBox(width: Space.md8),
         Expanded(
-          child: OtoSlider(
-            key: Key('room-volume-$speakerId'),
-            value: value,
-            onChanged: enabled
-                ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
-                : null,
-            onChangeEnd: enabled
-                ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
-                : null,
+          child: Opacity(
+            opacity: (muted ?? false) ? 0.45 : 1,
+            child: OtoSlider(
+              key: Key('room-volume-$speakerId'),
+              value: value,
+              onChanged: enabled
+                  ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
+                  : null,
+              onChangeEnd: enabled
+                  ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
+                  : null,
+            ),
           ),
         ),
         const SizedBox(width: Space.lg10),

@@ -10,6 +10,7 @@ import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/nav.dart';
 import '../widgets/album_art.dart';
+import '../widgets/mute_button.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
@@ -206,22 +207,37 @@ class RoomCard extends ConsumerWidget {
   Widget _volumeRow(BuildContext context, WidgetRef ref, RoomState room) {
     final oto = context.oto;
     final hasVolume = room.volume != null;
+    final muted = room.muted ?? false;
     final value = (room.volume ?? 0) / 100;
     final ctrl = ref.read(playbackControllerProvider);
     return Row(
       children: [
-        OtoIcon('volume', size: 12, color: oto.inkFaint),
+        MuteButton(
+          key: Key('room-mute-$speakerId'),
+          muted: room.muted,
+          enabled: room.online,
+          size: 12,
+          // NOT inkFaint (what the static icon used): this is an interactive
+          // control now, so its colour is load-bearing. inkMute is the
+          // AA-passing step up, matching the room row's volume icon.
+          color: oto.inkMute,
+          label: room.name,
+          onToggle: () => ctrl.setMute(speakerId, !muted),
+        ),
         const SizedBox(width: Space.md8),
         Expanded(
-          child: OtoSlider(
-            value: value,
-            // No known volume yet: render a disabled (non-interactive) track.
-            onChanged: hasVolume
-                ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
-                : null,
-            onChangeEnd: hasVolume
-                ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
-                : null,
+          child: Opacity(
+            opacity: muted ? 0.45 : 1,
+            child: OtoSlider(
+              value: value,
+              // No known volume yet: render a disabled (non-interactive) track.
+              onChanged: hasVolume
+                  ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
+                  : null,
+              onChangeEnd: hasVolume
+                  ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
+                  : null,
+            ),
           ),
         ),
         const SizedBox(width: Space.md8),

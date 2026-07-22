@@ -275,4 +275,13 @@ void main() {
       expect(find.byType(NowPlayingScreen), findsNothing);
     },
   );
+
+  testWidgets('tapping the group volume icon mutes the group', (t) async {
+    final h = wrap(const GroupCard(groupId: 'G'), household: groupHousehold(3));
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('group-mute-G')));
+
+    expect(h.groupingCalls, contains('setGroupMute(G,true)'));
+  });
 }

@@ -215,6 +215,19 @@ class PlaybackController with _Reconciling {
 
   /// Drag release: send the final value exactly once.
   void setVolumeEnd(String speakerId, int v) => _volume.end(speakerId, v);
+
+  /// Flip a room's mute optimistically and fire the command. Mirrors
+  /// [GroupingController.setGroupMute]: `prev` may be null (event-only field,
+  /// no value seen yet), so a failed command restores null rather than leaving
+  /// a fabricated value standing.
+  Future<void> setMute(String speakerId, bool muted) {
+    final prev = ref.read(householdProvider).rooms[speakerId]?.muted;
+    _h.setOptimisticMuted(speakerId, muted);
+    return send(
+      () => api.setMute(speakerId, muted),
+      rollback: () => _h.restoreMuted(speakerId, prev),
+    );
+  }
 }
 
 /// Group form/break + group volume/mute commands. Form/break do NOT mutate
