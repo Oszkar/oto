@@ -6,13 +6,13 @@ import '../../state/household.dart';
 import '../../state/model/group_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
-import '../shell/nav.dart';
 import '../shell/oto_scaffold.dart';
 import '../shell/responsive_pop.dart';
 import '../widgets/album_art.dart';
 import '../widgets/mute_button.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
+import 'room_options_menu.dart';
 
 /// Room detail screen. Shows the room's header, a now-playing mini-card
 /// (transport routed to the room's GROUP), a per-room volume slider, and a
@@ -174,7 +174,7 @@ class _RoomDetailScreenState extends ConsumerState<RoomDetailScreen> {
             ),
           ),
           if (showMenu)
-            _KebabButton(
+            RoomOptionsButton(
               speakerId: widget.speakerId,
               hostId: hostId,
               memberCount: memberCount,
@@ -375,102 +375,6 @@ class _VolumeRow extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Kebab button + menu
-// ---------------------------------------------------------------------------
-
-class _KebabButton extends ConsumerWidget {
-  const _KebabButton({
-    required this.speakerId,
-    required this.hostId,
-    required this.memberCount,
-  });
-
-  final String speakerId;
-
-  /// The group's coordinator - the editor host. For a solo room this equals
-  /// speakerId; for a grouped member it is the real coordinator (not this room).
-  final String hostId;
-
-  final int memberCount;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return IconButton(
-      key: Key('room-kebab-$speakerId'),
-      tooltip: 'Room options',
-      onPressed: () => _showMenu(context, ref),
-      icon: OtoIcon('more', size: 18, color: context.oto.ink2),
-    );
-  }
-
-  void _showMenu(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) => _KebabSheet(
-        speakerId: speakerId,
-        memberCount: memberCount,
-        onGroupRooms: () {
-          Navigator.of(ctx).pop();
-          openGroupEditor(context, hostId);
-        },
-        // Ungroup removes THIS room from its group, so it targets speakerId
-        // (not the coordinator).
-        onUngroup: memberCount > 1
-            ? () {
-                Navigator.of(ctx).pop();
-                ref.read(groupingControllerProvider).leaveGroup(speakerId);
-              }
-            : null,
-      ),
-    );
-  }
-}
-
-class _KebabSheet extends StatelessWidget {
-  const _KebabSheet({
-    required this.speakerId,
-    required this.memberCount,
-    required this.onGroupRooms,
-    required this.onUngroup,
-  });
-
-  final String speakerId;
-  final int memberCount;
-  final VoidCallback onGroupRooms;
-  final VoidCallback? onUngroup;
-
-  @override
-  Widget build(BuildContext context) {
-    final oto = context.oto;
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            key: Key('room-kebab-group-$speakerId'),
-            leading: OtoIcon('group', size: 20, color: oto.ink2),
-            title: const Text('Group rooms'),
-            onTap: onGroupRooms,
-          ),
-          if (onUngroup != null)
-            ListTile(
-              key: Key('room-kebab-ungroup-$speakerId'),
-              leading: OtoIcon('x', size: 20, color: oto.danger),
-              title: Text(
-                'Ungroup',
-                style: TextStyles.body.copyWith(color: oto.danger),
-              ),
-              onTap: onUngroup,
-            ),
-          const SizedBox(height: Space.md8),
-        ],
-      ),
     );
   }
 }
