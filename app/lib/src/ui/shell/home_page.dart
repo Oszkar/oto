@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/topology.dart';
 import '../home/home_screen.dart';
+import 'command_failure_listener.dart';
 
 /// The shell's Home entry point. Renders the assembled [HomeScreen]; the shell
 /// (`OtoApp`) points [MaterialApp.home] at this widget.
@@ -21,6 +22,9 @@ class HomePage extends ConsumerWidget {
     // (spec §1 / ARCHITECTURE). We ignore the return: the controller exposes
     // no state, it just needs to be kept alive.
     ref.watch(topologyControllerProvider);
-    return const HomeScreen();
+    // One listener at the shell covers every screen: a command can fail from
+    // Home, Now Playing, Room detail or a dialog, and the notice must not
+    // depend on which one happened to wire it up.
+    return const CommandFailureListener(child: HomeScreen());
   }
 }

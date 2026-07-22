@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oto/src/rust/api.dart';
+import 'package:oto/src/state/command_failures.dart';
 import 'package:oto/src/state/commands.dart';
 import 'package:oto/src/state/discovery.dart';
 import 'package:oto/src/state/events.dart';
@@ -513,6 +514,114 @@ void main() {
         reason:
             'mute is event-fed and unobserved here, so a failed command must '
             'restore null rather than fabricate a false',
+      );
+    });
+  });
+
+  group('failure notices', () {
+    test('a failed command reports a labelled notice', () async {
+      final spy = _SpyApi()..throwOn = const CommandError.network('down');
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+
+      await container.read(playbackControllerProvider).setMute('LR', true);
+
+      expect(
+        container.read(commandFailuresProvider)?.message,
+        'Could not reach Living Room',
+      );
+    });
+
+    test('a group-addressed failure names the coordinator room', () async {
+      final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+
+      await container
+          .read(playbackControllerProvider)
+          .togglePlay('G1', PlaybackState.paused);
+
+      expect(
+        container.read(commandFailuresProvider)?.message,
+        'Living Room rejected that command',
+      );
+    });
+
+    test('a successful command reports nothing', () async {
+      final spy = _SpyApi();
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+
+      await container.read(playbackControllerProvider).setMute('LR', true);
+
+      expect(container.read(commandFailuresProvider), isNull);
+    });
+
+    test('a superseded volume send that fails reports nothing', () async {
+      // The N3 stale-send race, extended to the notice: an earlier send is
+      // still in flight when a newer one lands and succeeds. When the stale one
+      // then fails it must neither roll back NOR announce a failure - the value
+      // the user set is correct and on screen, so "Could not reach Kitchen"
+      // would be a lie.
+      final spy = _SpyApi()..deferVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
+
+      final c = container.read(playbackControllerProvider);
+      c.setVolumeEnd('KT', 20); // gesture 1 -> completer[0]
+      c.setVolumeEnd('KT', 30); // gesture 2 -> completer[1], supersedes it
+
+      // The NEWER gesture succeeds first...
+      spy.volumeCompleters[1].complete();
+      await Future<void>.delayed(Duration.zero);
+      // ...then the stale one fails.
+      spy.volumeCompleters[0].completeError(const CommandError.network('down'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        container.read(commandFailuresProvider),
+        isNull,
+        reason: 'a superseded send must stay silent',
+      );
+      expect(
+        container.read(householdProvider).rooms['KT']!.volume,
+        30,
+        reason: 'and must not roll back over the value that landed',
+      );
+    });
+
+    test('a stale-id failure still re-discovers even when superseded', () async {
+      // The NotFound re-discover is deliberately OUTSIDE the supersede gate: a
+      // stale identifier is stale regardless of which gesture observed it.
+      final spy = _SpyApi()..deferVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      final buildsBefore = discovery.buildCount;
+
+      final c = container.read(playbackControllerProvider);
+      c.setVolumeEnd('KT', 20);
+      c.setVolumeEnd('KT', 30);
+
+      spy.volumeCompleters[1].complete();
+      await Future<void>.delayed(Duration.zero);
+      spy.volumeCompleters[0].completeError(const CommandError.notFound('gone'));
+      await Future<void>.delayed(Duration.zero);
+      // Invalidation re-runs build() lazily; reading the future forces it
+      // (same idiom as the NotFound test above).
+      await container.read(discoveryProvider.future);
+
+      expect(
+        container.read(commandFailuresProvider),
+        isNull,
+        reason: 'the notice is gated, so a superseded failure stays quiet',
+      );
+      expect(
+        discovery.buildCount,
+        greaterThan(buildsBefore),
+        reason:
+            'but the re-discover is NOT gated - a stale id is stale whichever '
+            'gesture observed it',
       );
     });
   });
