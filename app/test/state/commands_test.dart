@@ -76,6 +76,12 @@ class _SpyApi extends CommandApi {
   }
 
   @override
+  Future<void> setMute(String speakerId, bool m) async {
+    calls.add('setMute($speakerId,$m)');
+    _maybeThrow();
+  }
+
+  @override
   Future<void> joinGroup(String speakerId, String coordinatorId) async {
     calls.add('joinGroup($speakerId,$coordinatorId)');
     _maybeThrow();
@@ -477,6 +483,36 @@ void main() {
         reason:
             'a failed mute clears the optimistic true back to null '
             '(no prior value to restore)',
+      );
+    });
+  });
+
+  group('per-room mute', () {
+    test('applies optimistically and keeps the value on success', () async {
+      final spy = _SpyApi();
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+
+      await container.read(playbackControllerProvider).setMute('LR', true);
+
+      expect(spy.calls, contains('setMute(LR,true)'));
+      expect(container.read(householdProvider).rooms['LR']!.muted, isTrue);
+    });
+
+    test('failed mute with a null prior clears back to null', () async {
+      final spy = _SpyApi()..throwOn = const CommandError.network('down');
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      expect(container.read(householdProvider).rooms['LR']!.muted, isNull);
+
+      await container.read(playbackControllerProvider).setMute('LR', true);
+
+      expect(
+        container.read(householdProvider).rooms['LR']!.muted,
+        isNull,
+        reason:
+            'mute is event-fed and unobserved here, so a failed command must '
+            'restore null rather than fabricate a false',
       );
     });
   });

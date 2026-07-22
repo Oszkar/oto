@@ -97,6 +97,10 @@ class HouseholdNotifier extends _$HouseholdNotifier {
   void restoreVolume(String speakerId, int? v) =>
       state = updateRoom(state, speakerId, (r) => r.copyWith(volume: v));
 
+  /// Restore a room's mute to [m] (may be `null`) after a failed command.
+  void restoreMuted(String speakerId, bool? m) =>
+      state = updateRoom(state, speakerId, (r) => r.copyWith(muted: m));
+
   /// Restore a group's master volume to [v] (may be `null`).
   void restoreGroupVolume(String groupId, int? v) =>
       state = updateGroup(state, groupId, (g) => g.copyWith(groupVolume: v));
