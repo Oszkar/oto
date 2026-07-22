@@ -234,6 +234,15 @@ class GroupCard extends ConsumerWidget {
 
   Widget _groupMaster(BuildContext context, WidgetRef ref, GroupState group) {
     final oto = context.oto;
+    // A group command is dispatched to its coordinator, so an unreachable
+    // coordinator means the command cannot land - match the per-room controls,
+    // which already gate on `online`, instead of offering a control that is
+    // known to fail.
+    final coordinatorOnline = ref.watch(
+      householdProvider.select(
+        (h) => h.rooms[group.coordinatorId]?.online ?? true,
+      ),
+    );
     final hasVolume = group.groupVolume != null;
     final value = (group.groupVolume ?? 0) / 100;
     final ctrl = ref.read(groupingControllerProvider);
@@ -246,7 +255,7 @@ class GroupCard extends ConsumerWidget {
             MuteButton(
               key: Key('group-mute-$groupId'),
               muted: group.groupMuted,
-              enabled: true,
+              enabled: coordinatorOnline,
               size: 14,
               color: oto.ink2,
               label: 'group',

@@ -133,10 +133,16 @@ mixin _Reconciling {
               .catchError((_) {})
               .then((_) => _dispatch(op, rollback, label, isCurrent));
     _chain[target] = next;
-    next.whenComplete(() {
+    // Handle BOTH outcomes rather than `whenComplete`: that returns a derived
+    // future carrying the same error, and discarding it raises an unhandled
+    // async error if `_dispatch` ever throws something other than CommandError
+    // (an FRB panic, say) - even when the caller handles `next` itself.
+    void releaseTail(Object? _) {
       // Only clear if we are still the tail - a newer send may have chained on.
       if (identical(_chain[target], next)) _chain.remove(target);
-    });
+    }
+
+    next.then(releaseTail, onError: releaseTail);
     return next;
   }
 
@@ -199,6 +205,7 @@ class _ThrottledScalar {
     required this.restore,
     required this.command,
     required this.reconcile,
+    this.onGestureSettled,
   });
 
   /// Current authoritative value for [id] - the rollback target (anchor).
@@ -218,6 +225,11 @@ class _ThrottledScalar {
 
   /// Fire the SOAP command for [id] at [value].
   final Future<void> Function(String id, int value) command;
+
+  /// Called once a release gesture for [id] has fully settled AND is still the
+  /// latest - lets an owner release gesture-scoped bookkeeping in step with
+  /// this class's own `_anchor`/`_seq` cleanup, under the same guard.
+  final void Function(String id)? onGestureSettled;
 
   /// The shared reconciler - [_Reconciling.send].
   final Future<void> Function(
@@ -259,6 +271,7 @@ class _ThrottledScalar {
       if (_seq[id] == mySeq) {
         _anchor.remove(id);
         _seq.remove(id);
+        onGestureSettled?.call(id);
       }
     });
   }
@@ -372,6 +385,9 @@ class GroupingController with _Reconciling {
           _h.restoreGroupVolume(resolveGroupId(id, _coordAtDrag[id]), v),
       command: (id, v) => api.setGroupVolume(id, v),
       reconcile: send,
+      // Release the gesture-scoped coordinator capture once the gesture
+      // settles, so the map cannot accumulate stale ids across regroups.
+      onGestureSettled: _coordAtDrag.remove,
     );
   }
   @override
