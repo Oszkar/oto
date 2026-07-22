@@ -255,6 +255,40 @@ void main() {
   );
 
   testWidgets(
+    'every room unreachable keeps Home content and offers a rescan',
+    (t) async {
+      // Discovery itself succeeded, so the full-screen error state never
+      // fires - without the all-unreachable banner the user would be left
+      // with a healthy-looking Home and no way to trigger a scan (#104).
+      final offline = Household(
+        rooms: {
+          for (final e in _twoRoomGroupPlusTwoSolos().rooms.entries)
+            e.key: e.value.copyWith(online: false),
+        },
+        groups: _twoRoomGroupPlusTwoSolos().groups,
+      );
+
+      await _pump(
+        t,
+        const HomeScreen(),
+        household: offline,
+        discovery: () => _DataDiscovery(_oneRoomTopology),
+      );
+
+      expect(find.byType(HomeStatusBanner), findsOneWidget);
+      expect(
+        find.text('No speakers are responding. Showing the last known state.'),
+        findsOneWidget,
+      );
+      // The rescan affordance is the whole point of the state.
+      expect(find.text('Retry'), findsOneWidget);
+      // The cached rooms still render - last known state beats a blank screen.
+      expect(find.byType(HomeHeader), findsOneWidget);
+      expect(find.byType(GroupCard), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'groups render as one group card, solo rooms as room cards (no dupes)',
     (t) async {
       await _pump(

@@ -8,87 +8,12 @@ part of 'discovery.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// LAN discovery + the v0.5.1 topology fast-path.
-///
-/// An async Notifier (not a plain Future provider) so it can expose
-/// [Discovery.refreshTopology] alongside the deferred `build()` discover.
-/// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
-/// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
-/// `discoveryProvider` transition, which is what drives the event stream to
-/// re-subscribe against the new wire (see [Discovery.refreshTopology]).
-///
-/// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
-/// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// user-facing retries go through [Discovery.rediscover] so the UI can show a
-/// fresh scanning state immediately.
-///
-/// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` - without it Android drops the inbound
-/// multicast replies and discovery finds nothing on release builds. The lock
-/// is released in a `finally` so a failed discover still frees it. Other
-/// platforms call `discover()` directly (no channel handler exists).
-///
-/// The lock is **best-effort**: it's an optimization to stop Android dropping
-/// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied - the native handler returns a structured error), we
-/// still attempt discovery rather than hard-failing.
 
 @ProviderFor(Discovery)
 final discoveryProvider = DiscoveryProvider._();
 
-/// LAN discovery + the v0.5.1 topology fast-path.
-///
-/// An async Notifier (not a plain Future provider) so it can expose
-/// [Discovery.refreshTopology] alongside the deferred `build()` discover.
-/// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
-/// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
-/// `discoveryProvider` transition, which is what drives the event stream to
-/// re-subscribe against the new wire (see [Discovery.refreshTopology]).
-///
-/// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
-/// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// user-facing retries go through [Discovery.rediscover] so the UI can show a
-/// fresh scanning state immediately.
-///
-/// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` - without it Android drops the inbound
-/// multicast replies and discovery finds nothing on release builds. The lock
-/// is released in a `finally` so a failed discover still frees it. Other
-/// platforms call `discover()` directly (no channel handler exists).
-///
-/// The lock is **best-effort**: it's an optimization to stop Android dropping
-/// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied - the native handler returns a structured error), we
-/// still attempt discovery rather than hard-failing.
 final class DiscoveryProvider
     extends $AsyncNotifierProvider<Discovery, rust_api.Topology> {
-  /// LAN discovery + the v0.5.1 topology fast-path.
-  ///
-  /// An async Notifier (not a plain Future provider) so it can expose
-  /// [Discovery.refreshTopology] alongside the deferred `build()` discover.
-  /// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
-  /// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-  /// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
-  /// `discoveryProvider` transition, which is what drives the event stream to
-  /// re-subscribe against the new wire (see [Discovery.refreshTopology]).
-  ///
-  /// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
-  /// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-  /// user-facing retries go through [Discovery.rediscover] so the UI can show a
-  /// fresh scanning state immediately.
-  ///
-  /// On Android the SSDP window is wrapped in a held
-  /// `WifiManager.MulticastLock` - without it Android drops the inbound
-  /// multicast replies and discovery finds nothing on release builds. The lock
-  /// is released in a `finally` so a failed discover still frees it. Other
-  /// platforms call `discover()` directly (no channel handler exists).
-  ///
-  /// The lock is **best-effort**: it's an optimization to stop Android dropping
-  /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-  /// permission denied - the native handler returns a structured error), we
-  /// still attempt discovery rather than hard-failing.
   DiscoveryProvider._()
     : super(
         from: null,
@@ -108,33 +33,7 @@ final class DiscoveryProvider
   Discovery create() => Discovery();
 }
 
-String _$discoveryHash() => r'24aa9eb6b43fc7b8d294f9a8d88fce0c917f3c29';
-
-/// LAN discovery + the v0.5.1 topology fast-path.
-///
-/// An async Notifier (not a plain Future provider) so it can expose
-/// [Discovery.refreshTopology] alongside the deferred `build()` discover.
-/// `ref.watch(discoveryProvider)` still yields an `AsyncValue<Topology>`, so
-/// every existing consumer (incl. `events.dart`'s `wireGenerationProvider`)
-/// is unchanged - and a `refreshTopology()` re-pull still surfaces as a
-/// `discoveryProvider` transition, which is what drives the event stream to
-/// re-subscribe against the new wire (see [Discovery.refreshTopology]).
-///
-/// `build()` runs the full `discover()`: Rust SSDP (~3–5 s) + GetZoneGroupState.
-/// FRB runs it off the UI isolate, so AsyncValue gives loading / error / data;
-/// user-facing retries go through [Discovery.rediscover] so the UI can show a
-/// fresh scanning state immediately.
-///
-/// On Android the SSDP window is wrapped in a held
-/// `WifiManager.MulticastLock` - without it Android drops the inbound
-/// multicast replies and discovery finds nothing on release builds. The lock
-/// is released in a `finally` so a failed discover still frees it. Other
-/// platforms call `discover()` directly (no channel handler exists).
-///
-/// The lock is **best-effort**: it's an optimization to stop Android dropping
-/// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
-/// permission denied - the native handler returns a structured error), we
-/// still attempt discovery rather than hard-failing.
+String _$discoveryHash() => r'0320061c7b0855afad2eb0aa542b90e4a5eaa35c';
 
 abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
   FutureOr<rust_api.Topology> build();

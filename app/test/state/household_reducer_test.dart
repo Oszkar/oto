@@ -152,4 +152,65 @@ void main() {
       returnsNormally,
     );
   });
+
+  test('clearHealth resets a carried unreachable flag', () {
+    final stale = householdFromTopology(_topo());
+    final offline = stale.copyWith(
+      rooms: {
+        ...stale.rooms,
+        'KT': stale.rooms['KT']!.copyWith(online: false),
+      },
+    );
+
+    final fresh = householdFromTopology(
+      _topo(),
+      previous: offline,
+      clearHealth: true,
+    );
+
+    expect(
+      fresh.rooms['KT']!.online,
+      isTrue,
+      reason: 'a user-initiated scan stops asserting a stale unreachable flag',
+    );
+  });
+
+  test('without clearHealth an unreachable room stays unreachable', () {
+    final stale = householdFromTopology(_topo());
+    final offline = stale.copyWith(
+      rooms: {
+        ...stale.rooms,
+        'KT': stale.rooms['KT']!.copyWith(online: false),
+      },
+    );
+
+    final fresh = householdFromTopology(_topo(), previous: offline);
+
+    expect(
+      fresh.rooms['KT']!.online,
+      isFalse,
+      reason:
+          'the automatic fast-refresh path must not flap an off speaker back '
+          'to online with no user action behind it',
+    );
+  });
+
+  test('clearHealth leaves volume/mute carry-over untouched', () {
+    final stale = householdFromTopology(_topo());
+    final seeded = stale.copyWith(
+      rooms: {
+        ...stale.rooms,
+        'KT': stale.rooms['KT']!.copyWith(volume: 42, muted: true),
+      },
+    );
+
+    final fresh = householdFromTopology(
+      _topo(),
+      previous: seeded,
+      clearHealth: true,
+    );
+
+    expect(fresh.rooms['KT']!.volume, 42);
+    expect(fresh.rooms['KT']!.muted, isTrue);
+  });
 }

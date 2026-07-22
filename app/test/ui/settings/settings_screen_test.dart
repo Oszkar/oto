@@ -139,7 +139,7 @@ void main() {
     expect(find.text('Move 2'), findsOneWidget);
     expect(find.text('Bedroom'), findsOneWidget);
     expect(find.text('Patio'), findsOneWidget);
-    expect(find.text('Offline'), findsOneWidget);
+    expect(find.text('Unreachable'), findsOneWidget);
     expect(find.text('Standalone'), findsNWidgets(2));
   });
 

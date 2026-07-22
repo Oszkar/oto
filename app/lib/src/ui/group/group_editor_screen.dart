@@ -312,7 +312,7 @@ class _RoomRow extends StatelessWidget {
         subText = 'Hosting';
         subColor = oto.inkMute;
       } else if (!room.online) {
-        subText = 'Powered off';
+        subText = 'Unreachable';
         subColor = oto.inkMute;
       } else {
         subText = 'Idle';

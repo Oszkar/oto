@@ -27,7 +27,15 @@ import 'model/track.dart';
 /// previous group that shared the SAME coordinator - group ids churn across a
 /// regroup, but coordinators are stable, so this keeps now-playing and group
 /// volume/mute alive through a regroup.
-Household householdFromTopology(Topology topo, {Household? previous}) {
+///
+/// [clearHealth] resets carried `online` flags to true. Set it for a
+/// user-initiated full discovery only - see the note at the assignment below
+/// for why this is a deliberate optimistic reset rather than proof.
+Household householdFromTopology(
+  Topology topo, {
+  Household? previous,
+  bool clearHealth = false,
+}) {
   final speakerToGroup = <String, String>{};
   for (final g in topo.groups) {
     for (final m in g.members) {
@@ -46,7 +54,17 @@ Household householdFromTopology(Topology topo, {Household? previous}) {
       groupId: speakerToGroup[s.id],
       volume: prev?.volume,
       muted: prev?.muted,
-      online: prev?.online ?? true,
+      // Optimistic reset on a user-initiated scan. This is NOT proof the
+      // speaker answered: `discover()` sweeps SSDP for candidates but then
+      // builds the whole list from the FIRST one that returns ZoneGroupState
+      // (native/crates/wire/src/adapter.rs), so an unreachable unit can still
+      // be listed by the speaker that did answer. It is a deliberate choice to
+      // stop asserting a stale flag when the user explicitly rescans - a
+      // still-unreachable speaker flips back on its next failed command, which
+      // now also produces a visible notice. The automatic `refreshTopology()`
+      // path carries health forward instead, so a background regroup cannot
+      // flap a genuinely-off speaker back to online.
+      online: clearHealth ? true : (prev?.online ?? true),
     );
   }
 

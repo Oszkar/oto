@@ -187,7 +187,7 @@ Household idleHousehold() {
   );
 }
 
-/// A powered-off (offline) solo room `PT` (Patio).
+/// An unreachable solo room `PT` (Patio) - `online: false`.
 Household offlineHousehold() {
   return const Household(
     rooms: {

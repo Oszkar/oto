@@ -33,19 +33,39 @@ part 'discovery.g.dart';
 /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
 /// permission denied - the native handler returns a structured error), we
 /// still attempt discovery rather than hard-failing.
+/// Which path produced the topology currently in [Discovery]'s state.
+///
+/// `HouseholdNotifier` needs the distinction to decide whether to reset stale
+/// per-speaker health. A [fullDiscovery] is user-initiated (app start or "Scan
+/// network"), so an optimistic reset is what the user asked for. A
+/// [fastRefresh] fires automatically on every regroup, so resetting there would
+/// repeatedly flap a genuinely-off speaker back to online with no user action
+/// behind it. Neither path carries per-speaker reachability evidence - see the
+/// `clearHealth` comment in `household_reducer.dart`.
+enum TopologySource { fullDiscovery, fastRefresh }
+
 @riverpod
 class Discovery extends _$Discovery {
+  /// Source of the most recent publish. Assigned immediately BEFORE the value
+  /// is published, so a slow `build()` completing after a fast refresh cannot
+  /// mislabel itself.
+  TopologySource lastSource = TopologySource.fullDiscovery;
+
   @override
   Future<rust_api.Topology> build() async {
     if (Platform.isAndroid) {
       final acquired = await _tryLock(AndroidMulticastLock.acquire);
       try {
-        return await rust_api.discover();
+        final topo = await rust_api.discover();
+        lastSource = TopologySource.fullDiscovery;
+        return topo;
       } finally {
         if (acquired) await _tryLock(AndroidMulticastLock.release);
       }
     }
-    return rust_api.discover();
+    final topo = await rust_api.discover();
+    lastSource = TopologySource.fullDiscovery;
+    return topo;
   }
 
   /// User-initiated full SSDP discovery retry.
@@ -76,7 +96,9 @@ class Discovery extends _$Discovery {
   /// inbound multicast replies for Android to drop. On error this throws; the
   /// caller (`topologyController`) falls back to a full re-discover.
   Future<void> refreshTopology() async {
-    _publishInstalledWire(await rust_api.refreshTopology());
+    final topo = await rust_api.refreshTopology();
+    lastSource = TopologySource.fastRefresh;
+    _publishInstalledWire(topo);
   }
 
   /// Publish a freshly re-pulled wire's [topology] AND re-key the event stream.

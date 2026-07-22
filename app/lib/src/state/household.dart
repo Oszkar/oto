@@ -28,9 +28,18 @@ class HouseholdNotifier extends _$HouseholdNotifier {
     // Future discovery transitions (regroup / re-discover) fold in here,
     // preserving accumulated per-speaker/-group state via `previous: state`.
     ref.listen(discoveryProvider, (_, next) {
-      next.whenData(
-        (topo) => state = householdFromTopology(topo, previous: state),
-      );
+      next.whenData((topo) {
+        // A user-initiated scan resets stale unreachable flags; the automatic
+        // fast-refresh path carries them forward. See `TopologySource`.
+        final userScan =
+            ref.read(discoveryProvider.notifier).lastSource ==
+            TopologySource.fullDiscovery;
+        state = householdFromTopology(
+          topo,
+          previous: state,
+          clearHealth: userScan,
+        );
+      });
     });
     ref.listen(changeEventsProvider, (_, next) {
       next.whenData((e) => state = applyEvent(state, e));
