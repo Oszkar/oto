@@ -64,6 +64,12 @@ Household householdFromTopology(
       // now also produces a visible notice. The automatic `refreshTopology()`
       // path carries health forward instead, so a background regroup cannot
       // flap a genuinely-off speaker back to online.
+      //
+      // Accepted limitation: this also clears a `SubscriptionError` that landed
+      // DURING the ~3-5 s scan, so evidence newer than the scan is discarded.
+      // Distinguishing it needs a health snapshot or generation token; not
+      // worth the machinery while the reset is optimistic by construction, and
+      // the speaker re-flips on its next failed command either way.
       online: clearHealth ? true : (prev?.online ?? true),
     );
   }

@@ -31,9 +31,17 @@ class HouseholdNotifier extends _$HouseholdNotifier {
       next.whenData((topo) {
         // A user-initiated scan resets stale unreachable flags; the automatic
         // fast-refresh path carries them forward. See `TopologySource`.
+        //
+        // Identity-matched against the topology the source describes: `build()`
+        // publishes some microtasks after it completes, so a `refreshTopology()`
+        // landing in between could otherwise make a full-discovery result read
+        // as a fast refresh. On a mismatch we carry health forward - a missed
+        // reset (the user can scan again) rather than a spurious one.
+        final last = ref.read(discoveryProvider.notifier).lastPublish;
         final userScan =
-            ref.read(discoveryProvider.notifier).lastSource ==
-            TopologySource.fullDiscovery;
+            last != null &&
+            identical(last.topology, topo) &&
+            last.source == TopologySource.fullDiscovery;
         state = householdFromTopology(
           topo,
           previous: state,

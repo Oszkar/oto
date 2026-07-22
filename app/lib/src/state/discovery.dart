@@ -8,6 +8,17 @@ import '../rust/api.dart' as rust_api;
 
 part 'discovery.g.dart';
 
+/// Which path produced a published topology.
+///
+/// `HouseholdNotifier` needs the distinction to decide whether to reset stale
+/// per-speaker health. A [fullDiscovery] is user-initiated (app start or "Scan
+/// network"), so an optimistic reset is what the user asked for. A
+/// [fastRefresh] fires automatically on every regroup, so resetting there would
+/// repeatedly flap a genuinely-off speaker back to online with no user action
+/// behind it. Neither path carries per-speaker reachability evidence - see the
+/// `clearHealth` comment in `household_reducer.dart`.
+enum TopologySource { fullDiscovery, fastRefresh }
+
 /// LAN discovery + the v0.5.1 topology fast-path.
 ///
 /// An async Notifier (not a plain Future provider) so it can expose
@@ -33,23 +44,19 @@ part 'discovery.g.dart';
 /// SSDP replies, not a precondition. If acquire fails (no Wi-Fi service,
 /// permission denied - the native handler returns a structured error), we
 /// still attempt discovery rather than hard-failing.
-/// Which path produced the topology currently in [Discovery]'s state.
-///
-/// `HouseholdNotifier` needs the distinction to decide whether to reset stale
-/// per-speaker health. A [fullDiscovery] is user-initiated (app start or "Scan
-/// network"), so an optimistic reset is what the user asked for. A
-/// [fastRefresh] fires automatically on every regroup, so resetting there would
-/// repeatedly flap a genuinely-off speaker back to online with no user action
-/// behind it. Neither path carries per-speaker reachability evidence - see the
-/// `clearHealth` comment in `household_reducer.dart`.
-enum TopologySource { fullDiscovery, fastRefresh }
-
 @riverpod
 class Discovery extends _$Discovery {
-  /// Source of the most recent publish. Assigned immediately BEFORE the value
-  /// is published, so a slow `build()` completing after a fast refresh cannot
-  /// mislabel itself.
-  TopologySource lastSource = TopologySource.fullDiscovery;
+  /// The most recent topology paired with the path that produced it.
+  ///
+  /// Deliberately ONE field holding both halves: a bare "last source" flag is a
+  /// side channel that can describe a different topology than the one a
+  /// listener is folding. `build()` completes asynchronously and Riverpod
+  /// publishes its value some microtasks later, so a `refreshTopology()` that
+  /// lands in between would leave a bare flag pointing at the wrong result.
+  /// Consumers identity-match against [topology] and fall back to carrying
+  /// health forward when it does not match - the conservative direction (a
+  /// missed reset, never a spurious one).
+  ({rust_api.Topology topology, TopologySource source})? lastPublish;
 
   @override
   Future<rust_api.Topology> build() async {
@@ -57,14 +64,14 @@ class Discovery extends _$Discovery {
       final acquired = await _tryLock(AndroidMulticastLock.acquire);
       try {
         final topo = await rust_api.discover();
-        lastSource = TopologySource.fullDiscovery;
+        lastPublish = (topology: topo, source: TopologySource.fullDiscovery);
         return topo;
       } finally {
         if (acquired) await _tryLock(AndroidMulticastLock.release);
       }
     }
     final topo = await rust_api.discover();
-    lastSource = TopologySource.fullDiscovery;
+    lastPublish = (topology: topo, source: TopologySource.fullDiscovery);
     return topo;
   }
 
@@ -97,7 +104,7 @@ class Discovery extends _$Discovery {
   /// caller (`topologyController`) falls back to a full re-discover.
   Future<void> refreshTopology() async {
     final topo = await rust_api.refreshTopology();
-    lastSource = TopologySource.fastRefresh;
+    lastPublish = (topology: topo, source: TopologySource.fastRefresh);
     _publishInstalledWire(topo);
   }
 
