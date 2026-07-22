@@ -16,6 +16,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../rust/api.dart' as rust_api;
 import '../rust/api.dart' show CommandError, CommandError_NotFound;
+import 'command_failures.dart';
 import 'discovery.dart';
 import 'household.dart';
 import 'model/group_state.dart';
@@ -52,22 +53,55 @@ class CommandApi {
 mixin _Reconciling {
   Ref get ref;
 
+  /// Room name for [speakerId], to name it in a failure notice. Null when the
+  /// id is unknown (already gone from the household) - `describeCommandError`
+  /// then falls back to a generic subject rather than printing a raw id.
+  String? roomLabel(String speakerId) =>
+      ref.read(householdProvider).rooms[speakerId]?.name;
+
+  /// A group is labelled by its coordinator's room name - the same name the
+  /// group card titles itself with. Used for group-addressed commands
+  /// (transport, group volume/mute), which have no single speaker to name.
+  String? groupLabel(String groupId) {
+    final h = ref.read(householdProvider);
+    final coord = h.groups[groupId]?.coordinatorId;
+    return coord == null ? null : h.rooms[coord]?.name;
+  }
+
   Future<void> send(
     Future<void> Function() op, {
     void Function()? rollback,
+    String? label,
+    bool Function()? isCurrent,
   }) async {
     try {
       await op();
     } on CommandError catch (e) {
-      // Any thrown error means the optimistic guess didn't take, so undo it. A
-      // *successful* no-op set emits no echo, so a standing optimistic value is
-      // correct - we roll back only on a thrown error, never for a missing echo.
-      rollback?.call();
+      // A superseded send stays SILENT. `_ThrottledScalar` can have an earlier
+      // mid-drag send still in flight when the final one succeeds; if that
+      // stale send then fails, neither its rollback nor its failure notice is
+      // about anything the user is still doing - announcing it would claim
+      // "Could not reach Kitchen" right after the volume they set landed fine.
+      if (isCurrent?.call() ?? true) {
+        // Any thrown error means the optimistic guess didn't take, so undo it. A
+        // *successful* no-op set emits no echo, so a standing optimistic value
+        // is correct - we roll back only on a thrown error, never for a missing
+        // echo.
+        rollback?.call();
+        // Say so. Before v0.6.4 the rollback was silent, which made a failed
+        // command look like a control that bounced back for no reason.
+        ref
+            .read(commandFailuresProvider.notifier)
+            .report(describeCommandError(e, label));
+      }
       if (e is CommandError_NotFound) {
         // Stale identifier - also re-discover so the id is refreshed (sonos-notes
-        // § Identifiers). Rolling back first means the view shows the last-known
-        // value until the fresh topology re-seeds it via events, rather than a
-        // wrong optimistic guess carried across re-discovery by coordinator.
+        // § Identifiers). Deliberately OUTSIDE the isCurrent gate: a stale id is
+        // stale regardless of which gesture observed it, which preserves the
+        // pre-v0.6.4 re-discover behaviour exactly. Rolling back first means the
+        // view shows the last-known value until the fresh topology re-seeds it
+        // via events, rather than a wrong optimistic guess carried across
+        // re-discovery by coordinator.
         ref.invalidate(discoveryProvider);
       }
     }
@@ -88,6 +122,7 @@ mixin _Reconciling {
 class _ThrottledScalar {
   _ThrottledScalar({
     required this.readCurrent,
+    required this.readLabel,
     required this.applyOptimistic,
     required this.restore,
     required this.command,
@@ -96,6 +131,9 @@ class _ThrottledScalar {
 
   /// Current authoritative value for [id] - the rollback target (anchor).
   final int? Function(String id) readCurrent;
+
+  /// Human label for [id], for the failure notice.
+  final String? Function(String id) readLabel;
 
   /// Apply an optimistic [value] for [id] to local household state.
   final void Function(String id, int value) applyOptimistic;
@@ -113,6 +151,8 @@ class _ThrottledScalar {
   final Future<void> Function(
     Future<void> Function(), {
     void Function()? rollback,
+    String? label,
+    bool Function()? isCurrent,
   })
   reconcile;
 
@@ -158,8 +198,11 @@ class _ThrottledScalar {
     _seq[id] = mySeq;
     return reconcile(
       () => command(id, value),
+      label: readLabel(id),
+      // Superseded by a newer gesture on the same id -> no rollback AND no
+      // notice. One predicate governs both so they cannot drift.
+      isCurrent: () => _seq[id] == mySeq,
       rollback: () {
-        if (_seq[id] != mySeq) return; // superseded by a newer gesture.
         // Restore the pre-gesture anchor, which may be null (cold-start) -
         // `restore` clears to null so a failed command can't leave a fabricated
         // value standing.
@@ -174,6 +217,7 @@ class PlaybackController with _Reconciling {
   PlaybackController(this.ref, this.api) {
     _volume = _ThrottledScalar(
       readCurrent: (id) => ref.read(householdProvider).rooms[id]?.volume,
+      readLabel: roomLabel,
       applyOptimistic: (id, v) => _h.setOptimisticVolume(id, v),
       restore: (id, v) => _h.restoreVolume(id, v),
       command: (id, v) => api.setVolume(id, v),
@@ -198,6 +242,7 @@ class PlaybackController with _Reconciling {
       () => next == PlaybackState.playing
           ? api.play(groupId)
           : api.pause(groupId),
+      label: groupLabel(groupId),
       rollback: () => _h.setOptimisticTransport(groupId, current),
     );
   }
@@ -205,10 +250,12 @@ class PlaybackController with _Reconciling {
   /// Skip to the next track. No optimistic state: the authoritative `Track`
   /// event drives the change, and the shared [send] re-discovers on a stale-id
   /// `NotFound`. (Deferred from Task 4 to the Now Playing screen.)
-  Future<void> next(String groupId) => send(() => api.next(groupId));
+  Future<void> next(String groupId) =>
+      send(() => api.next(groupId), label: groupLabel(groupId));
 
   /// Skip to the previous track. Same no-optimistic-state rationale as [next].
-  Future<void> previous(String groupId) => send(() => api.previous(groupId));
+  Future<void> previous(String groupId) =>
+      send(() => api.previous(groupId), label: groupLabel(groupId));
 
   /// Mid-drag volume: optimistic now, SOAP send throttled to the trailing edge.
   void setVolume(String speakerId, int v) => _volume.drag(speakerId, v);
@@ -225,6 +272,7 @@ class PlaybackController with _Reconciling {
     _h.setOptimisticMuted(speakerId, muted);
     return send(
       () => api.setMute(speakerId, muted),
+      label: roomLabel(speakerId),
       rollback: () => _h.restoreMuted(speakerId, prev),
     );
   }
@@ -237,6 +285,7 @@ class GroupingController with _Reconciling {
   GroupingController(this.ref, this.api) {
     _groupVolume = _ThrottledScalar(
       readCurrent: (id) => ref.read(householdProvider).groups[id]?.groupVolume,
+      readLabel: groupLabel,
       applyOptimistic: (id, v) => _h.setOptimisticGroupVolume(id, v),
       restore: (id, v) => _h.restoreGroupVolume(id, v),
       command: (id, v) => api.setGroupVolume(id, v),
@@ -250,11 +299,13 @@ class GroupingController with _Reconciling {
 
   HouseholdNotifier get _h => ref.read(householdProvider.notifier);
 
-  Future<void> joinGroup(String speakerId, String coordinatorId) =>
-      send(() => api.joinGroup(speakerId, coordinatorId));
+  Future<void> joinGroup(String speakerId, String coordinatorId) => send(
+    () => api.joinGroup(speakerId, coordinatorId),
+    label: roomLabel(speakerId),
+  );
 
   Future<void> leaveGroup(String speakerId) =>
-      send(() => api.leaveGroup(speakerId));
+      send(() => api.leaveGroup(speakerId), label: roomLabel(speakerId));
 
   void setGroupVolume(String groupId, int v) => _groupVolume.drag(groupId, v);
 
@@ -265,6 +316,7 @@ class GroupingController with _Reconciling {
     _h.setOptimisticGroupMuted(groupId, muted);
     return send(
       () => api.setGroupMute(groupId, muted),
+      label: groupLabel(groupId),
       // `prev` may be null (event-only field, no value seen yet) - restore it
       // as-is so a failed mute can't leave a fabricated value standing.
       rollback: () => _h.restoreGroupMuted(groupId, prev),
