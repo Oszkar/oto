@@ -11,8 +11,14 @@ part of 'command_failures.dart';
 /// The latest command failure, or null before the first one.
 ///
 /// `keepAlive`: failures are reported from controllers that outlive any single
-/// widget, and the shell listener must not miss one because no widget happened
-/// to be watching.
+/// widget, so the channel must not be torn down between them.
+///
+/// This is a latest-value channel, not a queue: the delivered value is never
+/// cleared, and consumers are edge-triggered (`ref.listen`, not
+/// `fireImmediately`). That is only correct because the sole consumer -
+/// `CommandFailureListener` - is mounted for the whole app lifetime, so there
+/// is no window in which a report has no listener. See that widget's doc
+/// comment before changing either half.
 
 @ProviderFor(CommandFailures)
 final commandFailuresProvider = CommandFailuresProvider._();
@@ -20,15 +26,27 @@ final commandFailuresProvider = CommandFailuresProvider._();
 /// The latest command failure, or null before the first one.
 ///
 /// `keepAlive`: failures are reported from controllers that outlive any single
-/// widget, and the shell listener must not miss one because no widget happened
-/// to be watching.
+/// widget, so the channel must not be torn down between them.
+///
+/// This is a latest-value channel, not a queue: the delivered value is never
+/// cleared, and consumers are edge-triggered (`ref.listen`, not
+/// `fireImmediately`). That is only correct because the sole consumer -
+/// `CommandFailureListener` - is mounted for the whole app lifetime, so there
+/// is no window in which a report has no listener. See that widget's doc
+/// comment before changing either half.
 final class CommandFailuresProvider
     extends $NotifierProvider<CommandFailures, CommandFailure?> {
   /// The latest command failure, or null before the first one.
   ///
   /// `keepAlive`: failures are reported from controllers that outlive any single
-  /// widget, and the shell listener must not miss one because no widget happened
-  /// to be watching.
+  /// widget, so the channel must not be torn down between them.
+  ///
+  /// This is a latest-value channel, not a queue: the delivered value is never
+  /// cleared, and consumers are edge-triggered (`ref.listen`, not
+  /// `fireImmediately`). That is only correct because the sole consumer -
+  /// `CommandFailureListener` - is mounted for the whole app lifetime, so there
+  /// is no window in which a report has no listener. See that widget's doc
+  /// comment before changing either half.
   CommandFailuresProvider._()
     : super(
         from: null,
@@ -61,8 +79,14 @@ String _$commandFailuresHash() => r'd18bc8f4a6d1c70e723f15a4ff15332fb35d3348';
 /// The latest command failure, or null before the first one.
 ///
 /// `keepAlive`: failures are reported from controllers that outlive any single
-/// widget, and the shell listener must not miss one because no widget happened
-/// to be watching.
+/// widget, so the channel must not be torn down between them.
+///
+/// This is a latest-value channel, not a queue: the delivered value is never
+/// cleared, and consumers are edge-triggered (`ref.listen`, not
+/// `fireImmediately`). That is only correct because the sole consumer -
+/// `CommandFailureListener` - is mounted for the whole app lifetime, so there
+/// is no window in which a report has no listener. See that widget's doc
+/// comment before changing either half.
 
 abstract class _$CommandFailures extends $Notifier<CommandFailure?> {
   CommandFailure? build();

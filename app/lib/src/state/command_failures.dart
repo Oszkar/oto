@@ -48,8 +48,14 @@ String describeCommandError(CommandError e, String? label) {
 /// The latest command failure, or null before the first one.
 ///
 /// `keepAlive`: failures are reported from controllers that outlive any single
-/// widget, and the shell listener must not miss one because no widget happened
-/// to be watching.
+/// widget, so the channel must not be torn down between them.
+///
+/// This is a latest-value channel, not a queue: the delivered value is never
+/// cleared, and consumers are edge-triggered (`ref.listen`, not
+/// `fireImmediately`). That is only correct because the sole consumer -
+/// `CommandFailureListener` - is mounted for the whole app lifetime, so there
+/// is no window in which a report has no listener. See that widget's doc
+/// comment before changing either half.
 @Riverpod(keepAlive: true)
 class CommandFailures extends _$CommandFailures {
   int _seq = 0;

@@ -14,6 +14,19 @@ import '../../state/command_failures.dart';
 /// That means `removeCurrentSnackBar`, not `hideCurrentSnackBar` - hide runs
 /// the bar's normal exit animation and the next bar only appears once it
 /// finishes, so a burst would still play through every message in turn.
+///
+/// **Load-bearing invariant: this widget is mounted for the whole app
+/// lifetime** (`HomePage`, i.e. `MaterialApp.home`), and every command
+/// originates inside its subtree. `ref.listen` is edge-triggered, so a failure
+/// reported while no listener is mounted would be dropped - it stays in
+/// `commandFailuresProvider`'s state but is never delivered. Today that window
+/// does not exist. If this ever moves somewhere conditionally mounted, the
+/// channel needs pending/acknowledged semantics rather than a bare latest-value
+/// notifier.
+///
+/// Do NOT "fix" that by switching to `fireImmediately: true`: notices are never
+/// cleared after delivery, so an immediate fire would replay the last failure
+/// every time the listener remounted.
 class CommandFailureListener extends ConsumerWidget {
   const CommandFailureListener({super.key, required this.child});
 
