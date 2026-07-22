@@ -16,6 +16,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.6.1 | released | **UI: room management** - group editor + room detail |
 | v0.6.2 | released | **UI: settings + states** - settings plus a Home presentation state model |
 | v0.6.3 | released | **UI: responsive** - tablet master-detail, desktop three-pane |
+| v0.6.4 | planned | **UI: mute + honest failure** - the missing mute controls, command-failure surfacing, and a recovery path out of the unreachable state |
 | v0.7.0 | planned | **Hardening + polish** - SSDP hardening, cleanup TODOs, dogfooding finds |
 | v1.0   | future | Stable - externally tested, packaged |
 
@@ -92,9 +93,31 @@ Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0
   read-only devices list) plus a Home presentation state model for loading,
   empty, discovery-error, and cached-error states, with offline room/device
   presentation.
-- **v0.6.3 - Responsive (released).** Tablet master-detail + desktop three-pane (Windows first-class): on wide, the room grid keeps its place beside a persistent Now Playing pane (the phone's floating strip, dissolved), desktop adds a nav rail, Settings and the group editor open as dialogs, Room detail folds away (a wide room tap selects its group into the pane), and the Windows window remembers its size/position. Layout keys off one `LayoutTier` helper read from `MediaQuery`. Closes the v0.6 UI milestone.
+- **v0.6.3 - Responsive (released).** Tablet master-detail + desktop three-pane (Windows first-class): on wide, the room grid keeps its place beside a persistent Now Playing pane (the phone's floating strip, dissolved), desktop adds a nav rail, Settings and the group editor open as dialogs, Room detail folds away (a wide room tap selects its group into the pane), and the Windows window remembers its size/position. Layout keys off one `LayoutTier` helper read from `MediaQuery`. Completes the designed UI as originally phased; v0.6.4 closes the milestone with what dogfooding and a capability-vs-UI audit surfaced afterwards.
 
 The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.
+
+## v0.6.4 - Mute + honest failure (planned)
+
+The v0.6 closer: one release, no new capability-layer work, everything below already backed by the shipped `Wire` surface. Two themes.
+
+**Mute - an oversight, not a deferral.** Mute is the one capability that is plumbed end-to-end and rendered nowhere. `set_mute` / `set_group_mute` shipped in v0.2 / v0.5.1, `ChangeEventDto::{Mute, GroupMute}` flow through `household_reducer.dart`, `RoomState.muted` and `GroupState.groupMuted` are in the model, and `commands.dart` has optimistic setters with tests - but `app/lib/src/ui` contains no mute control at all (the showcase's `setMute` fixture is a no-op stub). Unlike shuffle/repeat/seek/queue/EQ, nothing about mute is deferred-with-its-backend; it simply fell off the phase list. Add the per-room and group-master controls that the existing state already feeds.
+
+**Honest failure + a way out.** Today a failed command is silent - there is no `SnackBar` anywhere in the app, so an optimistic update just reverts and the control bounces back with no explanation. That compounds into the trap in [#104](https://github.com/Oszkar/oto/issues/104): a command failure marks a speaker offline, offline disables its controls, and a successful command is the only thing that clears the flag - so the recovery path disables itself. Because cached topology still counts as a successful discovery, the full-screen discovery-error state and its `Scan network` button never appear either, and every speaker can end up unreachable with no rescan affordance on screen.
+
+Scoped items:
+
+- **Surface command failures.** A non-silent, non-modal signal when a command fails, so the reverted optimistic update is explained rather than mysterious.
+- **Never disable the way out.** An unreachable room keeps whatever control can clear its own health flag, and a rescan is always reachable when every controllable speaker is unreachable - not gated on the global discovery state.
+- **Stop over-claiming.** `Powered off` is a claim the app cannot support - the only signal behind it is a command that failed with a network error. Reword to what is actually known (unreachable). **Genuinely distinguishing power state from network unreachability needs backend and is explicitly out of scope** - recorded below.
+- **[#129](https://github.com/Oszkar/oto/issues/129) - room options on wide.** v0.6.3 folded Room detail away on wide, taking its join/leave-group kebab with it; a wide-window user cannot ungroup a solo room without resizing. Needs one design call first (kebab in the pane header vs. embedding a chrome-free `RoomDetailBody`).
+- **[#105](https://github.com/Oszkar/oto/issues/105) - default vs. current Home layout.** Split the persisted startup default (Settings) from the session layout (Home header toggle); today both write the same `homeLayout` pref, so Settings mirrors the live toggle. Already carried as a known issue in the 0.6.2 changelog.
+
+### Explicit non-goals
+
+- **No backend work.** Deliberate constraint, accepted with its consequences - the power-off-vs-unreachable distinction and any richer speaker-health probing stay out (the post-1.0 `SubscriptionError` strategies below are the eventual home for the latter).
+- **No new controls that need backend.** Shuffle/repeat/seek, queue, and EQ/Sound stay unrendered under the v0.6 backend-true rule - never faked, never shown disabled. They arrive with their own SOAP work in a later milestone, not here.
+- **[#125](https://github.com/Oszkar/oto/issues/125) (Windows CI job)** is not UI and stays parked on its own stated trigger.
 
 ## v0.7 - Hardening + polish
 
@@ -107,6 +130,14 @@ Externally tested, packaged: signed Android, signed Windows. **Bounded.** After 
 ## Project-bound open items
 
 Work items, not technical unknowns. Technical knowledge lives in [sonos-notes.md](sonos-notes.md).
+
+### Power state vs. network unreachable
+
+oto cannot tell a powered-off speaker from one it simply cannot reach: the only signal is a `WireError::Network` from a dispatched command, which v0.5's reactive health tracking flips to `Errored`. v0.6.4 responds by wording the UI to what is actually known ("unreachable") rather than claiming `Powered off`.
+
+Actually distinguishing the two needs backend - a reachability probe that can separate "no route / no response" from "responds but is in standby", and a story for speakers that are idle rather than off. Related to (and probably solved alongside) the richer `SubscriptionError` strategies below, since both want a wire-side health signal that does not depend on the user issuing a command. Deliberately out of scope for v0.6.4, which is a no-backend release.
+
+Revisit when dogfooding shows the softened wording is not enough - i.e. users are misreading "unreachable" for a speaker that is genuinely off, or vice versa.
 
 ### Post-1.0 polish - alternative SubscriptionError strategies
 
