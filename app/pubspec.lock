@@ -411,10 +411,10 @@ packages:
     dependency: "direct main"
     description:
       name: lucide_icons_flutter
-      sha256: "7c5dc01a32a9905ae34e2d84224e92d6d0c42acf8926df9e01c35a1446bf1b69"
+      sha256: "234155b10641b8ef7bab8a077b93ea6c92fe849c06740cf89dcd86dcf350934f"
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.14+2"
+    version: "3.1.15"
   matcher:
     dependency: transitive
     description:
@@ -951,10 +951,10 @@ packages:
     dependency: "direct main"
     description:
       name: window_manager
-      sha256: "732896e1416297c63c9e3fb95aea72d0355f61390263982a47fd519169dc5059"
+      sha256: "05c231fd7b23d2380f14c5cc10b7b93d60d4fa4a2fb4e0f032de27e44b5560e9"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.3"
+    version: "0.5.2"
   xdg_directories:
     dependency: transitive
     description:
