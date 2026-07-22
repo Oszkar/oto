@@ -403,9 +403,13 @@ class _Header extends ConsumerWidget {
     final soloMemberId = ref.watch(
       householdProvider.select((h) {
         final g = h.groups[groupId];
-        return (g != null && g.memberIds.length == 1)
-            ? g.memberIds.single
-            : null;
+        if (g == null || g.memberIds.length != 1) return null;
+        final memberId = g.memberIds.single;
+        // Cross-check the room's own view of its group. `householdFromTopology`
+        // builds both sides from one topology so they agree, but this control
+        // dispatches commands against `memberId` - it should not act on a room
+        // that is missing or has already moved to another group.
+        return h.rooms[memberId]?.groupId == groupId ? memberId : null;
       }),
     );
 
