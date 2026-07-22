@@ -53,6 +53,25 @@ class CommandApi {
 mixin _Reconciling {
   Ref get ref;
 
+  /// Tail of the in-flight send chain per target id.
+  ///
+  /// Sends to the SAME target are serialized: each waits for its predecessor
+  /// before dispatching. Two reasons, both load-bearing.
+  ///
+  /// 1. Out-of-order completion becomes impossible, so an older failure can no
+  ///    longer land after a newer success. The `isCurrent` gate suppressed the
+  ///    Dart-side rollback and notice for that case, but it cannot suppress the
+  ///    `SubscriptionError` the Rust layer emits when the stale command fails -
+  ///    which marked the room unreachable even though the user's actual last
+  ///    command succeeded, and could tip Home into `HomeAllUnreachable`.
+  ///    Serializing removes the interleaving rather than papering over half of
+  ///    its consequences.
+  /// 2. LAN politeness: never two concurrent SOAP calls to one device.
+  ///
+  /// Keyed by target (speaker id for per-room commands, group id for
+  /// group-addressed ones), so unrelated rooms still command in parallel.
+  final Map<String, Future<void>> _chain = {};
+
   /// Room name for [speakerId], to name it in a failure notice. Null when the
   /// id is unknown (already gone from the household) - `describeCommandError`
   /// then falls back to a generic subject rather than printing a raw id.
@@ -68,12 +87,71 @@ mixin _Reconciling {
     return coord == null ? null : h.rooms[coord]?.name;
   }
 
+  /// Coordinator of [groupId] right now, or null if the group is gone.
+  String? coordinatorOf(String groupId) =>
+      ref.read(householdProvider).groups[groupId]?.coordinatorId;
+
+  /// Re-resolve a group id captured at dispatch time against the CURRENT
+  /// household, following the coordinator.
+  ///
+  /// Group ids churn across a regroup while coordinators are stable, and
+  /// `householdFromTopology` carries per-group state (including `groupMuted`
+  /// and `groupVolume`) to the new id by coordinator. A rollback that still
+  /// used the captured id would hit `updateGroup`'s unknown-id no-op, silently
+  /// leaving the optimistic value standing while the failure notice claimed the
+  /// command failed. Falls back to the original id when the coordinator is
+  /// unknown - no worse than before.
+  String resolveGroupId(String groupId, String? coordinatorId) {
+    if (coordinatorId == null) return groupId;
+    final h = ref.read(householdProvider);
+    if (h.groups.containsKey(groupId)) return groupId;
+    for (final g in h.groups.values) {
+      if (g.coordinatorId == coordinatorId) return g.id;
+    }
+    return groupId;
+  }
+
+  /// Run [op] after any in-flight send to [target] has settled. Returns the
+  /// chained future so callers still await their own send.
   Future<void> send(
     Future<void> Function() op, {
     void Function()? rollback,
     String? label,
     bool Function()? isCurrent,
-  }) async {
+    String? target,
+  }) {
+    if (target == null) return _dispatch(op, rollback, label, isCurrent);
+    final prev = _chain[target];
+    // With nothing in flight, dispatch straight away so the common case keeps
+    // its old timing (the SOAP call starts synchronously, up to the first
+    // await) rather than slipping a microtask. `_dispatch` never throws (it
+    // swallows CommandError), but chain off a CAUGHT predecessor anyway so one
+    // unexpected error cannot wedge a target forever.
+    final next = prev == null
+        ? _dispatch(op, rollback, label, isCurrent)
+        : prev
+              .catchError((_) {})
+              .then((_) => _dispatch(op, rollback, label, isCurrent));
+    _chain[target] = next;
+    // Handle BOTH outcomes rather than `whenComplete`: that returns a derived
+    // future carrying the same error, and discarding it raises an unhandled
+    // async error if `_dispatch` ever throws something other than CommandError
+    // (an FRB panic, say) - even when the caller handles `next` itself.
+    void releaseTail(Object? _) {
+      // Only clear if we are still the tail - a newer send may have chained on.
+      if (identical(_chain[target], next)) _chain.remove(target);
+    }
+
+    next.then(releaseTail, onError: releaseTail);
+    return next;
+  }
+
+  Future<void> _dispatch(
+    Future<void> Function() op,
+    void Function()? rollback,
+    String? label,
+    bool Function()? isCurrent,
+  ) async {
     try {
       await op();
     } on CommandError catch (e) {
@@ -127,6 +205,7 @@ class _ThrottledScalar {
     required this.restore,
     required this.command,
     required this.reconcile,
+    this.onGestureSettled,
   });
 
   /// Current authoritative value for [id] - the rollback target (anchor).
@@ -147,12 +226,18 @@ class _ThrottledScalar {
   /// Fire the SOAP command for [id] at [value].
   final Future<void> Function(String id, int value) command;
 
+  /// Called once a release gesture for [id] has fully settled AND is still the
+  /// latest - lets an owner release gesture-scoped bookkeeping in step with
+  /// this class's own `_anchor`/`_seq` cleanup, under the same guard.
+  final void Function(String id)? onGestureSettled;
+
   /// The shared reconciler - [_Reconciling.send].
   final Future<void> Function(
     Future<void> Function(), {
     void Function()? rollback,
     String? label,
     bool Function()? isCurrent,
+    String? target,
   })
   reconcile;
 
@@ -186,6 +271,7 @@ class _ThrottledScalar {
       if (_seq[id] == mySeq) {
         _anchor.remove(id);
         _seq.remove(id);
+        onGestureSettled?.call(id);
       }
     });
   }
@@ -199,6 +285,7 @@ class _ThrottledScalar {
     return reconcile(
       () => command(id, value),
       label: readLabel(id),
+      target: id,
       // Superseded by a newer gesture on the same id -> no rollback AND no
       // notice. One predicate governs both so they cannot drift.
       isCurrent: () => _seq[id] == mySeq,
@@ -243,6 +330,7 @@ class PlaybackController with _Reconciling {
           ? api.play(groupId)
           : api.pause(groupId),
       label: groupLabel(groupId),
+      target: groupId,
       rollback: () => _h.setOptimisticTransport(groupId, current),
     );
   }
@@ -251,11 +339,14 @@ class PlaybackController with _Reconciling {
   /// event drives the change, and the shared [send] re-discovers on a stale-id
   /// `NotFound`. (Deferred from Task 4 to the Now Playing screen.)
   Future<void> next(String groupId) =>
-      send(() => api.next(groupId), label: groupLabel(groupId));
+      send(() => api.next(groupId), label: groupLabel(groupId), target: groupId);
 
   /// Skip to the previous track. Same no-optimistic-state rationale as [next].
-  Future<void> previous(String groupId) =>
-      send(() => api.previous(groupId), label: groupLabel(groupId));
+  Future<void> previous(String groupId) => send(
+    () => api.previous(groupId),
+    label: groupLabel(groupId),
+    target: groupId,
+  );
 
   /// Mid-drag volume: optimistic now, SOAP send throttled to the trailing edge.
   void setVolume(String speakerId, int v) => _volume.drag(speakerId, v);
@@ -273,6 +364,7 @@ class PlaybackController with _Reconciling {
     return send(
       () => api.setMute(speakerId, muted),
       label: roomLabel(speakerId),
+      target: speakerId,
       rollback: () => _h.restoreMuted(speakerId, prev),
     );
   }
@@ -287,9 +379,15 @@ class GroupingController with _Reconciling {
       readCurrent: (id) => ref.read(householdProvider).groups[id]?.groupVolume,
       readLabel: groupLabel,
       applyOptimistic: (id, v) => _h.setOptimisticGroupVolume(id, v),
-      restore: (id, v) => _h.restoreGroupVolume(id, v),
+      // Same regroup re-keying hazard as setGroupMute: resolve the id through
+      // the coordinator captured when the gesture started.
+      restore: (id, v) =>
+          _h.restoreGroupVolume(resolveGroupId(id, _coordAtDrag[id]), v),
       command: (id, v) => api.setGroupVolume(id, v),
       reconcile: send,
+      // Release the gesture-scoped coordinator capture once the gesture
+      // settles, so the map cannot accumulate stale ids across regroups.
+      onGestureSettled: _coordAtDrag.remove,
     );
   }
   @override
@@ -297,29 +395,49 @@ class GroupingController with _Reconciling {
   final CommandApi api;
   late final _ThrottledScalar _groupVolume;
 
+  /// Coordinator of each group with a volume gesture in flight, captured when
+  /// the gesture starts. A regroup can re-key the group before the command
+  /// fails, and the coordinator is the stable handle back to it.
+  final Map<String, String?> _coordAtDrag = {};
+
   HouseholdNotifier get _h => ref.read(householdProvider.notifier);
 
   Future<void> joinGroup(String speakerId, String coordinatorId) => send(
     () => api.joinGroup(speakerId, coordinatorId),
     label: roomLabel(speakerId),
+    target: speakerId,
   );
 
-  Future<void> leaveGroup(String speakerId) =>
-      send(() => api.leaveGroup(speakerId), label: roomLabel(speakerId));
+  Future<void> leaveGroup(String speakerId) => send(
+    () => api.leaveGroup(speakerId),
+    label: roomLabel(speakerId),
+    target: speakerId,
+  );
 
-  void setGroupVolume(String groupId, int v) => _groupVolume.drag(groupId, v);
+  void setGroupVolume(String groupId, int v) {
+    _coordAtDrag.putIfAbsent(groupId, () => coordinatorOf(groupId));
+    _groupVolume.drag(groupId, v);
+  }
 
-  void setGroupVolumeEnd(String groupId, int v) => _groupVolume.end(groupId, v);
+  void setGroupVolumeEnd(String groupId, int v) {
+    _coordAtDrag.putIfAbsent(groupId, () => coordinatorOf(groupId));
+    _groupVolume.end(groupId, v);
+  }
 
   Future<void> setGroupMute(String groupId, bool muted) {
     final prev = ref.read(householdProvider).groups[groupId]?.groupMuted;
+    // Captured now, resolved at rollback time: a regroup can re-key the group
+    // while this command is in flight.
+    final coord = coordinatorOf(groupId);
     _h.setOptimisticGroupMuted(groupId, muted);
     return send(
       () => api.setGroupMute(groupId, muted),
       label: groupLabel(groupId),
+      target: groupId,
       // `prev` may be null (event-only field, no value seen yet) - restore it
       // as-is so a failed mute can't leave a fabricated value standing.
-      rollback: () => _h.restoreGroupMuted(groupId, prev),
+      rollback: () =>
+          _h.restoreGroupMuted(resolveGroupId(groupId, coord), prev),
     );
   }
 }

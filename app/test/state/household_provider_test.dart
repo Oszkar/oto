@@ -71,7 +71,7 @@ class _DrivableDiscovery extends Discovery {
 
   @override
   Future<Topology> build() async {
-    lastPublish = (topology: _initial, source: TopologySource.fullDiscovery);
+    lastPublish = (topology: _initial, source: TopologySource.userScan);
     return _initial;
   }
 
@@ -84,7 +84,7 @@ class _DrivableDiscovery extends Discovery {
   /// where a fast refresh lands between `build()` completing and Riverpod
   /// publishing its value.
   void publishWithStaleSource(Topology topo, Topology describes) {
-    lastPublish = (topology: describes, source: TopologySource.fullDiscovery);
+    lastPublish = (topology: describes, source: TopologySource.userScan);
     state = AsyncValue.data(topo);
   }
 }
@@ -162,19 +162,19 @@ void main() {
       return (container: container, discovery: discovery);
     }
 
-    test('a full-discovery publish clears it', () async {
+    test('a user-scan publish clears it', () async {
       final (:container, :discovery) = await seedWithOfflineKt();
 
-      discovery.publishAs(_topoV2(), TopologySource.fullDiscovery);
+      discovery.publishAs(_topoV2(), TopologySource.userScan);
       await pumpEventQueue();
 
       expect(container.read(householdProvider).rooms['KT']!.online, isTrue);
     });
 
-    test('a fast-refresh publish carries it forward', () async {
+    test('an automatic publish carries it forward', () async {
       final (:container, :discovery) = await seedWithOfflineKt();
 
-      discovery.publishAs(_topoV2(), TopologySource.fastRefresh);
+      discovery.publishAs(_topoV2(), TopologySource.automatic);
       await pumpEventQueue();
 
       expect(
@@ -187,7 +187,7 @@ void main() {
     });
 
     test('a source describing a different topology does NOT clear', () async {
-      // The race: `lastPublish` says full-discovery, but about some OTHER
+      // The race: `lastPublish` says user-scan, but about some OTHER
       // topology. Identity-matching must reject it and carry health forward -
       // a missed reset (the user can scan again) beats a spurious one.
       final (:container, :discovery) = await seedWithOfflineKt();

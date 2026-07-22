@@ -29,8 +29,8 @@ class HouseholdNotifier extends _$HouseholdNotifier {
     // preserving accumulated per-speaker/-group state via `previous: state`.
     ref.listen(discoveryProvider, (_, next) {
       next.whenData((topo) {
-        // A user-initiated scan resets stale unreachable flags; the automatic
-        // fast-refresh path carries them forward. See `TopologySource`.
+        // Only a user-requested scan resets stale unreachable flags; every
+        // automatic path carries them forward. See `TopologySource`.
         //
         // Identity-matched against the topology the source describes: `build()`
         // publishes some microtasks after it completes, so a `refreshTopology()`
@@ -41,7 +41,7 @@ class HouseholdNotifier extends _$HouseholdNotifier {
         final userScan =
             last != null &&
             identical(last.topology, topo) &&
-            last.source == TopologySource.fullDiscovery;
+            last.source == TopologySource.userScan;
         state = householdFromTopology(
           topo,
           previous: state,

@@ -284,4 +284,26 @@ void main() {
 
     expect(h.groupingCalls, contains('setGroupMute(G,true)'));
   });
+
+  testWidgets('group mute is disabled when the coordinator is unreachable', (
+    t,
+  ) async {
+    // A group command is dispatched to its coordinator; offering a control
+    // that is known to fail would contradict the per-room controls, which
+    // already gate on `online`.
+    final base = groupHousehold(3);
+    final offline = Household(
+      rooms: {
+        ...base.rooms,
+        'R0': base.rooms['R0']!.copyWith(online: false),
+      },
+      groups: base.groups,
+    );
+    final h = wrap(const GroupCard(groupId: 'G'), household: offline);
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('group-mute-G')), warnIfMissed: false);
+
+    expect(h.groupingCalls, isEmpty);
+  });
 }

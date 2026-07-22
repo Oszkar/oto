@@ -248,6 +248,13 @@ class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
     String groupId,
   ) {
     final oto = context.oto;
+    // See GroupCard._groupMaster: a group command goes to the coordinator, so
+    // an unreachable coordinator means it cannot land.
+    final coordinatorOnline = ref.watch(
+      householdProvider.select(
+        (h) => h.rooms[group.coordinatorId]?.online ?? true,
+      ),
+    );
     final hasVolume = group.groupVolume != null;
     final value = (group.groupVolume ?? 0) / 100;
     final ctrl = ref.read(groupingControllerProvider);
@@ -272,7 +279,7 @@ class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
               MuteButton(
                 key: Key('np-group-mute-$groupId'),
                 muted: group.groupMuted,
-                enabled: true,
+                enabled: coordinatorOnline,
                 size: 14,
                 color: oto.ink2,
                 label: 'group',

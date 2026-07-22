@@ -108,7 +108,7 @@ final class DiscoveryProvider
   Discovery create() => Discovery();
 }
 
-String _$discoveryHash() => r'f771e633e771100ac14e7901a2bfb3e99deb5929';
+String _$discoveryHash() => r'dc9cf374a56ddf9c9c8b41a8ae36f81affe8e7ef';
 
 /// LAN discovery + the v0.5.1 topology fast-path.
 ///
