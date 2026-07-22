@@ -71,7 +71,7 @@ class DeviceRow extends StatelessWidget {
   }
 
   String get _statusLabel {
-    if (!room.online) return 'Offline';
+    if (!room.online) return 'Unreachable';
 
     final group = this.group;
     if (group == null || group.memberIds.length <= 1) return 'Standalone';

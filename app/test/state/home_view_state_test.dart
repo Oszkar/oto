@@ -55,6 +55,64 @@ const _cachedHousehold = Household(
   },
 );
 
+
+/// [_cachedHousehold] with its only room unreachable - the "cached topology is
+/// still valid but nothing answers" case that used to render a healthy
+/// HomeReady with no rescan affordance anywhere on screen.
+const _unreachableHousehold = Household(
+  rooms: {
+    'RINCON_OFFICE': RoomState(
+      id: 'RINCON_OFFICE',
+      name: 'Office',
+      model: 'Move 2',
+      kind: RoomKind.speaker,
+      volume: 30,
+      online: false,
+      groupId: 'RINCON_OFFICE:0',
+    ),
+  },
+  groups: {
+    'RINCON_OFFICE:0': GroupState(
+      id: 'RINCON_OFFICE:0',
+      coordinatorId: 'RINCON_OFFICE',
+      memberIds: ['RINCON_OFFICE'],
+      transport: PlaybackState.stopped,
+    ),
+  },
+);
+
+/// Two rooms, one reachable - must stay [HomeReady]: a single dead speaker is
+/// the room card's problem, not a whole-household failure.
+const _partlyUnreachableHousehold = Household(
+  rooms: {
+    'RINCON_OFFICE': RoomState(
+      id: 'RINCON_OFFICE',
+      name: 'Office',
+      kind: RoomKind.speaker,
+      online: false,
+      groupId: 'RINCON_OFFICE:0',
+    ),
+    'RINCON_KITCHEN': RoomState(
+      id: 'RINCON_KITCHEN',
+      name: 'Kitchen',
+      kind: RoomKind.speaker,
+      groupId: 'RINCON_KITCHEN:0',
+    ),
+  },
+  groups: {
+    'RINCON_OFFICE:0': GroupState(
+      id: 'RINCON_OFFICE:0',
+      coordinatorId: 'RINCON_OFFICE',
+      memberIds: ['RINCON_OFFICE'],
+    ),
+    'RINCON_KITCHEN:0': GroupState(
+      id: 'RINCON_KITCHEN:0',
+      coordinatorId: 'RINCON_KITCHEN',
+      memberIds: ['RINCON_KITCHEN'],
+    ),
+  },
+);
+
 class _LoadingDiscovery extends Discovery {
   final _completer = Completer<rust_api.Topology>();
 
@@ -338,6 +396,63 @@ void main() {
       expect(
         HomeDiscoveringWithCache(_cachedHousehold),
         HomeDiscoveringWithCache(_cachedHousehold),
+      );
+    });
+  });
+
+  group('all-unreachable', () {
+    test('every cached room unreachable -> HomeAllUnreachable', () async {
+      final container = _container(
+        discovery: () => _DataDiscovery(_oneRoomTopology),
+        household: _unreachableHousehold,
+      );
+
+      final state = await _settledState(container);
+
+      expect(state, isA<HomeAllUnreachable>());
+      expect(
+        (state as HomeAllUnreachable).household,
+        _unreachableHousehold,
+        reason: 'Home still renders the cached rooms, plus a rescan banner',
+      );
+    });
+
+    test('a groups-only household is not "all unreachable"', () async {
+      // `every` is vacuously true on an empty room map, and `hasCache` passes
+      // on groups alone - so this would claim nothing is responding when there
+      // is simply nothing to report on.
+      final container = _container(
+        discovery: () => _DataDiscovery(_oneRoomTopology),
+        household: const Household(
+          groups: {
+            'RINCON_OFFICE:0': GroupState(
+              id: 'RINCON_OFFICE:0',
+              coordinatorId: 'RINCON_OFFICE',
+              memberIds: ['RINCON_OFFICE'],
+            ),
+          },
+        ),
+      );
+
+      final state = await _settledState(container);
+
+      expect(state, isNot(isA<HomeAllUnreachable>()));
+    });
+
+    test('one reachable room keeps it HomeReady', () async {
+      final container = _container(
+        discovery: () => _DataDiscovery(_oneRoomTopology),
+        household: _partlyUnreachableHousehold,
+      );
+
+      final state = await _settledState(container);
+
+      expect(
+        state,
+        isA<HomeReady>(),
+        reason:
+            'a single dead speaker is a per-card concern; the whole-household '
+            'banner would be over-claiming',
       );
     });
   });

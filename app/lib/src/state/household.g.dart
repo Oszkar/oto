@@ -41,7 +41,7 @@ final class HouseholdNotifierProvider
   }
 }
 
-String _$householdNotifierHash() => r'f1c98e4ab22bafc800bfa141fdd0d55f2debe282';
+String _$householdNotifierHash() => r'733b8d5551965f8a33f678d06dc5814f255c2eae';
 
 abstract class _$HouseholdNotifier extends $Notifier<Household> {
   Household build();

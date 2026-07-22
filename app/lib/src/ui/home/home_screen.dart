@@ -64,6 +64,20 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
+      // Cached rooms, none of them answering. Renders the normal Home content
+      // (the last known state is still the most useful thing to show) plus the
+      // retry banner - HomeStatusBanner defaults to showRetry, whose button
+      // runs a full rediscover, which is the path that clears stale health.
+      HomeAllUnreachable(:final household) => OtoScaffold(
+        detail: const NowPlayingPane(),
+        rail: const OtoNavRail(),
+        body: _HomeContent(
+          household: household,
+          banner: const HomeStatusBanner(
+            message: 'No speakers are responding. Showing the last known state.',
+          ),
+        ),
+      ),
       HomeReady(:final household) => OtoScaffold(
         detail: const NowPlayingPane(),
         rail: const OtoNavRail(),

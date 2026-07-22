@@ -21,7 +21,7 @@ import '../widgets/oto_slider.dart';
 /// States:
 /// - playing (group `hasActiveStream`): album art + track + a resume/pause button
 /// - idle (group not active): an "Idle" affordance, no play button
-/// - powered off (`online == false`): dimmed, no controls
+/// - unreachable (`online == false`): dimmed, no controls
 class RoomCard extends ConsumerWidget {
   const RoomCard({super.key, required this.speakerId});
 
@@ -87,7 +87,7 @@ class RoomCard extends ConsumerWidget {
       ),
     );
 
-    // Powered-off rooms are dimmed (matching the JSX `opacity: 0.55`).
+    // Unreachable rooms are dimmed (matching the JSX `opacity: 0.55`).
     return offline ? Opacity(opacity: 0.55, child: card) : card;
   }
 
@@ -195,7 +195,7 @@ class RoomCard extends ConsumerWidget {
           const SizedBox(width: Space.lg10),
           Expanded(
             child: Text(
-              offline ? 'Powered off' : 'Idle',
+              offline ? 'Unreachable' : 'Idle',
               style: TextStyles.caption.copyWith(color: oto.inkMute),
             ),
           ),

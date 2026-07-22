@@ -93,6 +93,26 @@ class HomeReady extends HomeViewState {
   int get hashCode => household.hashCode;
 }
 
+/// Cached rooms exist, but every one of them is unreachable.
+///
+/// Distinct from [HomeReady] so Home can offer a rescan. Discovery itself
+/// succeeded - the cached topology is "valid" - so the discovery-error state
+/// never fires, and before v0.6.4 that left a user whose whole system had gone
+/// quiet with no rescan affordance anywhere on screen.
+class HomeAllUnreachable extends HomeViewState {
+  const HomeAllUnreachable(this.household);
+
+  final Household household;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HomeAllUnreachable && household == other.household;
+
+  @override
+  int get hashCode => household.hashCode;
+}
+
 @riverpod
 HomeViewState homeViewState(Ref ref) {
   final discovery = ref.watch(discoveryProvider);
@@ -134,5 +154,15 @@ HomeViewState homeViewState(Ref ref) {
     return const HomeInitialLoading();
   }
 
-  return HomeReady(household);
+  // Rooms exist but nothing answers: offer the way out. Checked last so it
+  // never pre-empts loading / error / empty, which have their own affordances.
+  // `isNotEmpty` is load-bearing: `every` is vacuously true on no rooms, and
+  // `hasCache` above passes when only `groups` is populated - so without this a
+  // roomless household would claim "no speakers are responding".
+  final allUnreachable =
+      household.rooms.isNotEmpty &&
+      household.rooms.values.every((r) => !r.online);
+  return allUnreachable
+      ? HomeAllUnreachable(household)
+      : HomeReady(household);
 }

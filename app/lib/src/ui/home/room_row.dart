@@ -18,8 +18,8 @@ import '../widgets/oto_slider.dart';
 /// card (Task 9); this widget assumes a solo room.
 ///
 /// Line 1: speaker icon + name + subtitle (track when playing, else "Idle" /
-/// "Powered off") + a resume/pause transport (only when the group is active).
-/// Line 2: a full-width per-room volume slider (hidden when powered off).
+/// "Unreachable") + a resume/pause transport (only when the group is active).
+/// Line 2: a full-width per-room volume slider (hidden when unreachable).
 class RoomRow extends ConsumerWidget {
   const RoomRow({super.key, required this.speakerId});
 
@@ -163,7 +163,7 @@ class RoomRow extends ConsumerWidget {
   }
 
   String _subtitle(RoomState room, GroupState? group, bool offline) {
-    if (offline) return 'Powered off';
+    if (offline) return 'Unreachable';
     final track = group?.track;
     if ((group?.hasActiveStream ?? false) && track?.title != null) {
       final artist = track?.artist;
