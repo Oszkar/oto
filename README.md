@@ -157,6 +157,7 @@ Each pre-1.0 minor is one capability layer, proven end-to-end through the Rust�
 | v0.6.1 ✓ | **UI: room management** - group editor + room detail.                                                                                                                                                                    |
 | v0.6.2 ✓ | **UI: settings + states** - settings + empty / error / loading / offline.                                                                                                                                                |
 | v0.6.3 ✓ | **UI: responsive** - tablet master-detail, desktop three-pane.                                                                                                                                                           |
+| v0.6.4   | **UI: mute + honest failure** - the missing mute controls, command-failure surfacing, and a recovery path out of the unreachable state.                                                                                  |
 | v0.7     | **Hardening + polish** - SSDP hardening, cleanup TODOs, dogfooding finds.                                                                                                                                                |
 | v1.0     | **Stable** - externally tested, packaged (signed Android, Windows). Maintenance-only thereafter.                                                                                                                         |
 
