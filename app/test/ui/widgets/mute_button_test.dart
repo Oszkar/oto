@@ -63,4 +63,32 @@ void main() {
     expect(size.width, greaterThanOrEqualTo(Sizes.touchTarget44));
     expect(size.height, greaterThanOrEqualTo(Sizes.touchTarget44));
   });
+
+  testWidgets('the widget key resolves to the button itself', (t) async {
+    // MuteButton is a StatelessWidget wrapping exactly ONE IconButton, so its
+    // element has no RenderObject of its own and `find.byKey` resolves to the
+    // button's box - taps and size checks hit the real control. (Contrast
+    // PaneDismiss, which needs a separate `buttonKey` precisely because it
+    // renders either an IconButton OR a spacer.) Asserted rather than assumed,
+    // because a future refactor that wraps the button would silently break it.
+    await t.pumpWidget(_host(_button(muted: false)));
+
+    expect(
+      t.getRect(find.byKey(const Key('m'))),
+      t.getRect(find.byType(IconButton)),
+    );
+  });
+
+  testWidgets('exposes an accessible name, not just a tooltip', (t) async {
+    final handle = t.ensureSemantics();
+    await t.pumpWidget(_host(_button(muted: false)));
+
+    expect(
+      find.bySemanticsLabel('Mute Kitchen'),
+      findsOneWidget,
+      reason: 'a screen reader must be able to name the control',
+    );
+
+    handle.dispose();
+  });
 }

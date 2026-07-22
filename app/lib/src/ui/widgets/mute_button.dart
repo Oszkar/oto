@@ -44,15 +44,27 @@ class MuteButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMuted = muted ?? false;
     final action = isMuted ? 'Unmute $label' : 'Mute $label';
-    return IconButton(
-      tooltip: action,
-      onPressed: enabled ? onToggle : null,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(
-        minWidth: Sizes.touchTarget44,
-        minHeight: Sizes.touchTarget44,
+    // The tooltip alone gives the node a `tooltip` property but no accessible
+    // NAME, so a screen reader has nothing to announce the control by. Label it
+    // explicitly, matching how the Home header's gear button pairs a Tooltip
+    // with a Semantics label.
+    return Semantics(
+      label: action,
+      button: true,
+      child: IconButton(
+        tooltip: action,
+        onPressed: enabled ? onToggle : null,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(
+          minWidth: Sizes.touchTarget44,
+          minHeight: Sizes.touchTarget44,
+        ),
+        icon: OtoIcon(
+          isMuted ? 'volumeMute' : 'volume',
+          size: size,
+          color: color,
+        ),
       ),
-      icon: OtoIcon(isMuted ? 'volumeMute' : 'volume', size: size, color: color),
     );
   }
 }
