@@ -141,4 +141,28 @@ void main() {
 
     expect(find.byType(RoomDetailScreen), findsNothing);
   });
+
+  testWidgets('tapping the volume icon mutes the room', (t) async {
+    final h = wrap(
+      const RoomCard(speakerId: 'OF'),
+      household: playingHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('room-mute-OF')));
+
+    expect(h.calls, contains('setMute(OF,true)'));
+  });
+
+  testWidgets('a muted room unmutes on tap', (t) async {
+    final h = wrap(
+      const RoomCard(speakerId: 'OF'),
+      household: mutedHousehold(),
+    );
+    await t.pumpWidget(h.widget);
+
+    await t.tap(find.byKey(const Key('room-mute-OF')));
+
+    expect(h.calls, contains('setMute(OF,false)'));
+  });
 }

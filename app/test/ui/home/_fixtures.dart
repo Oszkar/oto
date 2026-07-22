@@ -67,6 +67,11 @@ class SpyPlayback extends PlaybackController {
   void setVolumeEnd(String speakerId, int v) {
     calls.add('setVolumeEnd($speakerId,$v)');
   }
+
+  @override
+  Future<void> setMute(String speakerId, bool muted) async {
+    calls.add('setMute($speakerId,$muted)');
+  }
 }
 
 /// A [GroupingController] that records group-volume commands instead of hitting
@@ -113,6 +118,33 @@ Household playingHousehold() {
         model: 'Move 2',
         kind: RoomKind.speaker,
         volume: 55,
+        online: true,
+        groupId: 'G_OF',
+      ),
+    },
+    groups: {
+      'G_OF': GroupState(
+        id: 'G_OF',
+        coordinatorId: 'OF',
+        memberIds: ['OF'],
+        transport: PlaybackState.playing,
+        track: Track(title: 'Strobe', artist: 'Deadmau5'),
+      ),
+    },
+  );
+}
+
+/// [playingHousehold] with room `OF` muted, for the mute-affordance tests.
+Household mutedHousehold() {
+  return const Household(
+    rooms: {
+      'OF': RoomState(
+        id: 'OF',
+        name: 'Office',
+        model: 'Move 2',
+        kind: RoomKind.speaker,
+        volume: 55,
+        muted: true,
         online: true,
         groupId: 'G_OF',
       ),

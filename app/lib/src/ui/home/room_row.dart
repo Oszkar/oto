@@ -9,6 +9,7 @@ import '../../state/model/room_state.dart';
 import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/nav.dart';
+import '../widgets/mute_button.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
@@ -175,6 +176,7 @@ class RoomRow extends ConsumerWidget {
   Widget _volumeRow(BuildContext context, WidgetRef ref, RoomState room) {
     final oto = context.oto;
     final hasVolume = room.volume != null;
+    final muted = room.muted ?? false;
     final value = (room.volume ?? 0) / 100;
     final ctrl = ref.read(playbackControllerProvider);
     return Padding(
@@ -182,17 +184,28 @@ class RoomRow extends ConsumerWidget {
       padding: const EdgeInsets.only(left: 30),
       child: Row(
         children: [
-          OtoIcon('volume', size: 14, color: oto.inkMute),
+          MuteButton(
+            key: Key('room-mute-$speakerId'),
+            muted: room.muted,
+            enabled: room.online,
+            size: 14,
+            color: oto.inkMute,
+            label: room.name,
+            onToggle: () => ctrl.setMute(speakerId, !muted),
+          ),
           const SizedBox(width: Space.lg10),
           Expanded(
-            child: OtoSlider(
-              value: value,
-              onChanged: hasVolume
-                  ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
-                  : null,
-              onChangeEnd: hasVolume
-                  ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
-                  : null,
+            child: Opacity(
+              opacity: muted ? 0.45 : 1,
+              child: OtoSlider(
+                value: value,
+                onChanged: hasVolume
+                    ? (v) => ctrl.setVolume(speakerId, (v * 100).round())
+                    : null,
+                onChangeEnd: hasVolume
+                    ? (v) => ctrl.setVolumeEnd(speakerId, (v * 100).round())
+                    : null,
+              ),
             ),
           ),
           const SizedBox(width: Space.lg10),

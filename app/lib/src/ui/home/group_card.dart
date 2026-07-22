@@ -10,6 +10,7 @@ import '../../theme/oto_colors.dart';
 import '../../theme/tokens.dart';
 import '../shell/nav.dart';
 import '../widgets/album_art.dart';
+import '../widgets/mute_button.dart';
 import '../widgets/oto_icon.dart';
 import '../widgets/oto_slider.dart';
 
@@ -242,7 +243,16 @@ class GroupCard extends ConsumerWidget {
       children: [
         Row(
           children: [
-            OtoIcon('volume', size: 14, color: oto.ink2),
+            MuteButton(
+              key: Key('group-mute-$groupId'),
+              muted: group.groupMuted,
+              enabled: true,
+              size: 14,
+              color: oto.ink2,
+              label: 'group',
+              onToggle: () =>
+                  ctrl.setGroupMute(groupId, !(group.groupMuted ?? false)),
+            ),
             const SizedBox(width: Space.md8),
             Text(
               'GROUP VOLUME',
@@ -264,16 +274,19 @@ class GroupCard extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 1),
-        OtoSlider(
-          key: Key('group-volume-$groupId'),
-          value: value,
-          // Group-master routes through the GroupingController, never per-room.
-          onChanged: hasVolume
-              ? (v) => ctrl.setGroupVolume(groupId, (v * 100).round())
-              : null,
-          onChangeEnd: hasVolume
-              ? (v) => ctrl.setGroupVolumeEnd(groupId, (v * 100).round())
-              : null,
+        Opacity(
+          opacity: (group.groupMuted ?? false) ? 0.45 : 1,
+          child: OtoSlider(
+            key: Key('group-volume-$groupId'),
+            value: value,
+            // Group-master routes through the GroupingController, never per-room.
+            onChanged: hasVolume
+                ? (v) => ctrl.setGroupVolume(groupId, (v * 100).round())
+                : null,
+            onChangeEnd: hasVolume
+                ? (v) => ctrl.setGroupVolumeEnd(groupId, (v * 100).round())
+                : null,
+          ),
         ),
       ],
     );
