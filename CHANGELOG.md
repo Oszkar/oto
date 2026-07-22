@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-## [0.6.3] - 2026-07-09
+## [0.6.3] - 2026-07-22
 
 v0.6.3 - Responsive layouts. oto now fills the window it is given: a tablet gets a master-detail layout and a Windows desktop a three-pane one, so the controls stop being phone-shaped on a large screen. The final phase of the v0.6 UI.
 
