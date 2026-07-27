@@ -1330,7 +1330,7 @@ mod tests {
             }
             assert!(
                 std::time::Instant::now() < deadline,
-                "manager still has {count} strong ref(s) 5s after EventPump::drop \
+                "manager still has {count} strong ref(s) 30s after EventPump::drop \
                  (want 1 - only this test's own clone) - the SDK event stack is leaking"
             );
             std::thread::sleep(std::time::Duration::from_millis(20));

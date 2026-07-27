@@ -831,8 +831,16 @@ mod tests {
             }
             let (lock, cvar) = &*self.release;
             let guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+            // Bounded, not `wait_while`: if the test's own "Drop never
+            // started within 2s" assertion panics before the release signal
+            // is sent, an unbounded wait here would leave this background
+            // thread parked forever, still holding DISCOVER_LOCK - turning
+            // a clean test failure into a hang for any other test sharing
+            // this process that calls discover_with. 30s is generous enough
+            // to never fire in the success path (the test releases within
+            // milliseconds of its own assertions).
             let _released = cvar
-                .wait_while(guard, |released| !*released)
+                .wait_timeout_while(guard, Duration::from_secs(30), |released| !*released)
                 .unwrap_or_else(|p| p.into_inner());
         }
     }
