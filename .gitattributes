@@ -1,5 +1,5 @@
-# Treat all text files as text. Line endings are normalized to LF in the repo.
-* text=auto
+# Treat all text files as text and keep LF in both the repo and working tree.
+* text=auto eol=lf
 
 # Force LF on files that must use it regardless of platform (Crucial for Mac/Windows switching).
 *.sh            text eol=lf

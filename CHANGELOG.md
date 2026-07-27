@@ -6,9 +6,59 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+v0.6.4 is in progress. The implemented work below is merged but not yet
+released.
+
+### Added
+
+- **Mute controls.** Every volume surface now exposes the mute capability that
+  was already present end-to-end: per-room mute on cards, rows, and room
+  detail; group mute on group cards and Now Playing. Muted sliders dim, and the
+  controls retain accessible names.
+- **Honest command failures.** Failed optimistic commands now roll back and
+  explain the failure in a non-modal SnackBar, distinguishing an unreachable
+  speaker, a Sonos rejection, and a stale topology identifier.
+- **Recovery when every room is unreachable.** Home keeps the cached household
+  visible and offers an explicit network rescan instead of leaving the user
+  with no route back to discovery.
+- **Room options on wide layouts.** A solo room shown in the persistent Now
+  Playing pane exposes the same grouping menu that room detail provides on a
+  phone.
+
+### Changed
+
+- Unreachable rooms are labelled "Unreachable," not "Powered off." A failed
+  network command does not reveal the device's power state.
+- User-requested scans clear carried health errors; automatic topology
+  refreshes preserve them until the relevant speaker actually recovers.
+- Commands to the same target are serialized, preventing an older failed
+  request from racing a newer successful one and leaving false unreachable
+  state behind.
+
+### Fixed
+
+- Closed event-pipeline lifecycle races across wire replacement: receivers are
+  paired atomically with their wire generation, stale consumers cannot drain
+  current events, and old-wire events no longer reach the new Rust cache or
+  Dart household.
+- Event-pump teardown now explicitly shuts down the SDK event manager before
+  stopping and joining oto's pump thread, breaking the SDK worker's self-owned
+  reference cycle.
+- Topology refresh has a bounded retry budget, does not mutate the installed
+  wire before replacement succeeds, and releases the global slot before the
+  replaced wire performs blocking teardown.
+- Topology seed suppression is time-bounded, and stale group-event filtering
+  self-heals if both fast refresh and full rediscovery fail.
+
+### Remaining
+
+- Settings' persisted default Home layout still mirrors the current session's
+  Cards/Stack toggle. Splitting those two states remains the final scoped
+  v0.6.4 item.
+
 ## [0.6.3] - 2026-07-22
 
-v0.6.3 - Responsive layouts. oto now fills the window it is given: a tablet gets a master-detail layout and a Windows desktop a three-pane one, so the controls stop being phone-shaped on a large screen. The final phase of the v0.6 UI.
+v0.6.3 - Responsive layouts. oto now fills the window it is given: a tablet gets a master-detail layout and a Windows desktop a three-pane one, so the controls stop being phone-shaped on a large screen. The final originally planned phase of the v0.6 UI.
 
 ### Added
 

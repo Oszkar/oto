@@ -57,7 +57,7 @@ The core abstraction is a **source**, not a speaker. A source is either a
   hand-authored - `sourcesFromHousehold` is the single guardrail (a screen
   can't claim a different source count than its rooms imply). See
   [`app/lib/src/state/model/source.dart`](../../app/lib/src/state/model/source.dart).
-- Idle / powered-off rooms are not sources.
+- Idle / unreachable rooms are not sources.
 
 ### Colour & type
 
