@@ -258,9 +258,17 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
     // stale SubscriptionError/Recovered can't surface on the NEW stream
     // after rediscover (review #65). Health just reset, so it'd be wrong.
     events::clear();
-    *slot()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(HeldWire { wire, generation });
+    let old = {
+        let mut guard = slot()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.replace(HeldWire { wire, generation })
+        // `guard` drops here, releasing SLOT, before `old` (the replaced
+        // wire) drops below. A `SonosWire`'s `EventPump::drop` blocks on
+        // `handle.join()` - that must not happen while SLOT is held, or
+        // every other SLOT-guarded call stalls for the same window.
+    };
+    drop(old);
     Ok(snapshot)
 }
 
@@ -674,8 +682,8 @@ mod tests {
     use crate::test_helpers::process_pending_events;
     use oto_core::{PlaybackState, Volume};
     use oto_mock::MockWire;
-    use std::sync::Mutex;
-    use std::time::Duration;
+    use std::sync::{Condvar, Mutex};
+    use std::time::{Duration, Instant};
 
     /// How long unit tests are willing to wait when draining MockWire
     /// events into the StateManager cache. MockWire emits synchronously
@@ -746,6 +754,94 @@ mod tests {
         }
         fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
             self.0.take_event_stream()
+        }
+    }
+
+    /// Test double whose `Drop` blocks until explicitly released, and signals
+    /// when its drop has actually started running. Reproduces the shape of a
+    /// real `SonosWire`'s `EventPump::drop` (which blocks on `handle.join()`)
+    /// generically, without needing the real SDK, so the SLOT-held-across-drop
+    /// regression can be pinned at the `oto-app` level.
+    struct BlockingDropWire {
+        inner: MockWire,
+        started: std::sync::Arc<(Mutex<bool>, Condvar)>,
+        release: std::sync::Arc<(Mutex<bool>, Condvar)>,
+    }
+
+    impl Wire for BlockingDropWire {
+        fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
+            self.inner.discover()
+        }
+        fn play(&self, g: &GroupId) -> Result<(), WireError> {
+            self.inner.play(g)
+        }
+        fn pause(&self, g: &GroupId) -> Result<(), WireError> {
+            self.inner.pause(g)
+        }
+        fn next(&self, g: &GroupId) -> Result<(), WireError> {
+            self.inner.next(g)
+        }
+        fn previous(&self, g: &GroupId) -> Result<(), WireError> {
+            self.inner.previous(g)
+        }
+        fn set_volume(&self, s: &SpeakerId, v: Volume) -> Result<(), WireError> {
+            self.inner.set_volume(s, v)
+        }
+        fn set_mute(&self, s: &SpeakerId, m: bool) -> Result<(), WireError> {
+            self.inner.set_mute(s, m)
+        }
+        fn set_group_volume(&self, g: &GroupId, v: Volume) -> Result<(), WireError> {
+            self.inner.set_group_volume(g, v)
+        }
+        fn set_group_mute(&self, g: &GroupId, m: bool) -> Result<(), WireError> {
+            self.inner.set_group_mute(g, m)
+        }
+        fn join_group(&self, s: &SpeakerId, c: &SpeakerId) -> Result<(), WireError> {
+            self.inner.join_group(s, c)
+        }
+        fn leave_group(&self, s: &SpeakerId) -> Result<(), WireError> {
+            self.inner.leave_group(s)
+        }
+        fn speaker_state(&self, s: &SpeakerId) -> Result<SpeakerState, WireError> {
+            self.inner.speaker_state(s)
+        }
+        fn track_position(&self, g: &GroupId) -> Result<TrackPosition, WireError> {
+            self.inner.track_position(g)
+        }
+        fn subscribe_speakers(&self) -> Result<(), WireError> {
+            self.inner.subscribe_speakers()
+        }
+        fn subscribe_topology(&self) -> Result<(), WireError> {
+            self.inner.subscribe_topology()
+        }
+        fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+            self.inner.refresh_topology()
+        }
+        fn take_event_stream(&self) -> Option<std::sync::mpsc::Receiver<ChangeEvent>> {
+            self.inner.take_event_stream()
+        }
+    }
+
+    impl Drop for BlockingDropWire {
+        fn drop(&mut self) {
+            {
+                let (lock, cvar) = &*self.started;
+                *lock.lock().unwrap_or_else(|p| p.into_inner()) = true;
+                cvar.notify_all();
+            }
+            let (lock, cvar) = &*self.release;
+            let guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+            // Bounded, not `wait_while`: if the test's own "Drop never
+            // started within 2s" assertion panics before the release signal
+            // is sent, an unbounded wait here would leave this background
+            // thread parked forever, still holding DISCOVER_LOCK - turning
+            // a clean test failure into a hang for any other test sharing
+            // this process that calls discover_with. 30s is generous enough
+            // to never fire in the success path (the test releases within
+            // milliseconds of its own assertions).
+            let _released = cvar
+                .wait_timeout_while(guard, Duration::from_secs(30), |released| !*released)
+                .unwrap_or_else(|p| p.into_inner());
         }
     }
 
@@ -1438,5 +1534,84 @@ mod tests {
             pos.duration.is_none(),
             "default mock has no current track - duration must be None"
         );
+    }
+
+    /// `discover_with`'s slot replacement must NOT hold the SLOT mutex while
+    /// the replaced wire's `Drop` runs. A real `SonosWire`'s
+    /// `EventPump::drop` blocks on `handle.join()` (up to one POLL_INTERVAL
+    /// plus SDK teardown); `BlockingDropWire` reproduces that blocking-drop
+    /// shape generically. If SLOT is held across the drop, every other
+    /// SLOT-guarded call (any command, `speaker_state`, `track_position`)
+    /// blocks for as long as the old wire's Drop is stalled.
+    #[test]
+    fn slot_is_not_held_across_replaced_wire_drop() {
+        let _guard = TEST_SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        clear_slot();
+
+        let started = std::sync::Arc::new((Mutex::new(false), Condvar::new()));
+        let release = std::sync::Arc::new((Mutex::new(false), Condvar::new()));
+
+        let wire1 = BlockingDropWire {
+            inner: MockWire::default(),
+            started: std::sync::Arc::clone(&started),
+            release: std::sync::Arc::clone(&release),
+        };
+        discover_with(move || Box::new(wire1)).expect("install wire 1");
+
+        // Replace wire1 with wire2 on a background thread. Dropping wire1
+        // (the replaced value) blocks inside BlockingDropWire::drop until
+        // released below.
+        let replace_handle = std::thread::spawn(|| {
+            discover_with(|| Box::new(MockWire::default())).expect("install wire 2");
+        });
+
+        // Wait until wire1's Drop has actually started - proves the replace
+        // thread is now inside the old-value-drop, not merely spawned.
+        {
+            let (lock, cvar) = &*started;
+            let guard = lock.lock().unwrap_or_else(|p| p.into_inner());
+            let (flag, timeout) = cvar
+                .wait_timeout_while(guard, Duration::from_secs(2), |s| !*s)
+                .unwrap_or_else(|p| p.into_inner());
+            assert!(
+                *flag && !timeout.timed_out(),
+                "wire1's Drop never started within 2s"
+            );
+        }
+
+        // While wire1's Drop is stalled, a concurrent SLOT-guarded read must
+        // return promptly - it must NOT wait for the stalled Drop. Run it on
+        // its own thread with a bounded wait so a real hang can't stall this
+        // test forever.
+        let (probe_tx, probe_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let started_at = Instant::now();
+            let _ = speaker_state(&SpeakerId::new("RINCON_KITCHEN"));
+            let _ = probe_tx.send(started_at.elapsed());
+        });
+        let probe_result = probe_rx.recv_timeout(Duration::from_millis(500));
+
+        // Release wire1's Drop unconditionally so the background thread and
+        // the probe can finish, regardless of the assertion outcome below.
+        {
+            let (lock, cvar) = &*release;
+            *lock.lock().unwrap_or_else(|p| p.into_inner()) = true;
+            cvar.notify_all();
+        }
+        replace_handle.join().expect("replace thread must finish");
+
+        match probe_result {
+            Ok(elapsed) => assert!(
+                elapsed < Duration::from_millis(200),
+                "speaker_state took {elapsed:?} while old wire's Drop was stalled - \
+                 SLOT must be released before dropping the replaced wire"
+            ),
+            Err(_) => panic!(
+                "speaker_state did not return within 500ms while old wire's Drop was \
+                 stalled - SLOT is held across the replaced wire's Drop"
+            ),
+        }
     }
 }

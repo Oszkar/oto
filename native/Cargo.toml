@@ -66,6 +66,13 @@ socket2 = "0.5"
 # Exact pin so no second ureq major enters the build.
 ureq = "=2.12.1"
 
+# Log-emission facade for oto-wire's own diagnostics (per AGENTS.md §3:
+# "oto-wire/oto-app may use anyhow at boundaries and tracing for logs").
+# ALREADY in the locked graph (transitive via the sonos-sdk-* crates, which
+# emit their own tracing calls); this only adds a direct edge to the
+# already-resolved 0.1.x version, same precedent as ureq/socket2 above.
+tracing = "0.1"
+
 # Root crate: the FRB-exposed cdylib. Lives outside [workspace.members] but is
 # implicitly a member because Cargo.toml is at the workspace root.
 [package]

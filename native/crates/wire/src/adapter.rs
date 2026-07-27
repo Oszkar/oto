@@ -19,6 +19,17 @@ use crate::{control, grouping, ssdp};
 
 const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Total budget for `refresh_topology`'s per-IP `GetZoneGroupState` retry
+/// loop. Each attempt can itself take up to ~15s (`sonos-sdk-soap-client`'s
+/// fixed 5s connect + 10s read timeout, outside oto's control) and the loop
+/// runs under `oto_app`'s global SLOT mutex - unbounded, a household with N
+/// cached-but-now-unreachable IPs would stall every other command for up to
+/// N x 15s. 30s (~2 full worst-case attempts) preserves the loop's purpose
+/// (fall through a sleeping speaker to a reachable one) while capping the
+/// pathological "whole household unreachable" case instead of letting it
+/// scale with household size.
+const TOPOLOGY_REFRESH_DEADLINE: Duration = Duration::from_secs(30);
+
 /// The wire's interior-mutable resolution caches, populated together by
 /// `discover()` / `refresh_topology()` and read by the command/read paths.
 ///
@@ -323,6 +334,33 @@ fn populate_models(snapshot: &mut DiscoverySnapshot) {
     }
 }
 
+/// Try each candidate IP for `GetZoneGroupState` until one succeeds or
+/// `deadline` elapses since the first attempt - whichever comes first.
+/// Extracted so tests can inject a short deadline instead of waiting out
+/// the real `TOPOLOGY_REFRESH_DEADLINE`; production always passes that
+/// constant. Bounding by elapsed time (not candidate count) is load-bearing:
+/// `refresh_topology` runs under `oto_app`'s global SLOT mutex, so trying
+/// every cached IP unconditionally would stall every other command for as
+/// long as it takes a dead household to exhaust its full candidate list.
+fn fetch_group_state_with_deadline(
+    client: &SonosClient,
+    ips: &[String],
+    deadline: Duration,
+) -> Result<Vec<ZoneGroupInfo>, WireError> {
+    let started = std::time::Instant::now();
+    let mut last_err = WireError::NoDevicesFound;
+    for ip in ips {
+        if started.elapsed() >= deadline {
+            break;
+        }
+        match crate::control::fetch_zone_group_state(client, ip) {
+            Ok(g) => return Ok(g),
+            Err(e) => last_err = e,
+        }
+    }
+    Err(last_err)
+}
+
 impl Wire for SonosWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
         // v0.5.1 fast-path: when seeded, skip the SSDP sweep entirely and use
@@ -507,29 +545,33 @@ impl Wire for SonosWire {
         if ips.is_empty() {
             return Err(WireError::NoSpeakersDiscovered);
         }
-        let mut last_err = WireError::NoDevicesFound;
-        let mut groups = None;
-        for ip in &ips {
-            match crate::control::fetch_zone_group_state(&self.client, ip) {
-                Ok(g) => {
-                    groups = Some(g);
-                    break;
-                }
-                Err(e) => last_err = e,
-            }
-        }
+        // Bounded by TOPOLOGY_REFRESH_DEADLINE, not by candidate count - this
+        // runs under oto_app's global SLOT mutex (see the constant's doc).
         // On total failure, leave every cache untouched and surface the
         // last error - the caller keeps its previous topology view.
-        let groups = groups.ok_or(last_err)?;
+        let groups =
+            fetch_group_state_with_deadline(&self.client, &ips, TOPOLOGY_REFRESH_DEADLINE)?;
         let mut snapshot = to_snapshot(groups);
         if snapshot.speakers.is_empty() {
             return Err(WireError::Backend(
                 "refresh_topology: ZoneGroupTopology yielded 0 usable speakers".into(),
             ));
         }
-        self.populate_caches(&snapshot);
-        // Same model repopulate as discover() - keep the refresh
-        // path consistent so a regroup re-pull doesn't drop `model`.
+        // Deliberately do NOT call `self.populate_caches(&snapshot)` here.
+        // The only production caller (`oto_app::refresh_topology`) treats
+        // this as a read-only stage-one probe: it uses the returned
+        // snapshot's IPs to seed a brand-new `SonosWire`, installed via the
+        // atomic `discover_with` wire-replacement path. If that second
+        // stage fails, `discover_with` leaves "the previously held wire -
+        // if any - intact" - but that previously-held wire is `self`. A
+        // self-mutation here would have already overwritten `self`'s
+        // resolve_speaker/resolve_group caches with the NEW topology before
+        // stage two is known to succeed, so a stage-two failure would leave
+        // the OLD wire installed but routing on NEW-topology caches while
+        // Dart still shows the OLD topology - installed wire and UI
+        // silently disagree. Mutation happens naturally, atomically with
+        // the generation bump, when/if stage two succeeds and installs a
+        // freshly-discovered wire instead.
         populate_models(&mut snapshot);
         Ok(snapshot)
     }
@@ -619,6 +661,38 @@ mod tests {
         assert_eq!(
             wire.refresh_topology(),
             Err(WireError::NoSpeakersDiscovered)
+        );
+    }
+
+    /// `refresh_topology` runs under `oto_app`'s global SLOT mutex, so an
+    /// unbounded per-IP retry loop stalls every other command for as long as
+    /// it takes to try every candidate. Drive the extracted retry helper
+    /// directly with a short injected deadline (rather than waiting out the
+    /// real `TOPOLOGY_REFRESH_DEADLINE`) against many unreachable candidates:
+    /// the FIRST attempt necessarily eats its own real connect-timeout cost
+    /// (an in-flight network call can't be interrupted early), but the loop
+    /// must check the deadline BEFORE starting each subsequent attempt and
+    /// stop - so total time stays close to one attempt's cost, not N.
+    #[test]
+    fn fetch_group_state_with_deadline_stops_at_deadline_not_candidate_count() {
+        // RFC 5737 TEST-NET-1 - guaranteed non-routable, so every attempt
+        // genuinely exercises the SOAP client's real connect timeout rather
+        // than getting an instant "connection refused". 10 candidates: an
+        // unbounded loop trying them all would take ~10x one attempt's cost.
+        let ips: Vec<String> = (10..20).map(|n| format!("192.0.2.{n}")).collect();
+        let client = SonosClient::new();
+
+        let started = std::time::Instant::now();
+        let result = fetch_group_state_with_deadline(&client, &ips, Duration::from_secs(1));
+        let elapsed = started.elapsed();
+
+        assert!(result.is_err(), "all candidates are unreachable");
+        assert!(
+            elapsed < Duration::from_secs(20),
+            "took {elapsed:?} against 10 unreachable candidates with a 1s \
+             deadline - the loop must stop checking new candidates once the \
+             deadline elapses, not try all 10 regardless (that would take \
+             roughly 10x a single attempt's real connect-timeout cost)"
         );
     }
 

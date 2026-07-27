@@ -57,6 +57,22 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// target LAN rather than tightening it. See `tests/live_topology_events.rs`.
 const SEED_WINDOW: Duration = Duration::from_secs(5);
 
+/// How long `TopologyFilter` stays `dirty` (dropping group-addressed events)
+/// with no self-heal. Normally a real regroup's `dirty` window is brief: the
+/// Dart `TopologyController` debounces and re-pulls, which spawns a fresh
+/// pump (and a fresh, non-dirty `TopologyFilter`) within a couple of
+/// seconds. But if BOTH the fast re-pull (`refresh_topology`) and the full
+/// re-discover fallback fail (e.g. the household is genuinely unreachable),
+/// no fresh pump is ever built, and without this timeout the installed
+/// wire would drop every `Playback`/`Track`/`GroupVolume`/`GroupMute` event
+/// for the rest of its life - silently and with no way to recover short of
+/// a manual re-discover. 60s gives normal regroup recovery generous margin
+/// (it should never fire in the common case) while still bounding the
+/// worst case. Self-healing here trades a bounded window of possibly-stale
+/// routing for never going permanently silent; a fresh, correctly-routed
+/// pump supersedes this filter the moment any re-discover does succeed.
+const DIRTY_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Inputs the pump needs from the wire's discover-built caches.
 ///
 /// Built by `SonosWire::snapshot_for_pump` from the wire's
@@ -102,6 +118,11 @@ pub(crate) struct EventPump {
     handle: Option<JoinHandle<()>>,
     /// Tells the pump thread to exit at its next poll boundary.
     stop: Arc<AtomicBool>,
+    /// Retained so `Drop` can call `.shutdown()` explicitly. Without this,
+    /// nothing ever breaks the SDK's internal self-referential Arc cycle
+    /// (its own state-event-worker thread holds a clone and only releases
+    /// it once `Command::Shutdown` has been processed) - see `Drop` below.
+    em: Arc<sonos_event_manager::SonosEventManager>,
 }
 
 impl EventPump {
@@ -191,12 +212,10 @@ impl EventPump {
 
         // Move `manager` into the pump thread. The thread owns the
         // manager for its entire lifetime; when the thread exits, the
-        // manager drops, which decrements the internal
-        // `Arc<SonosEventManager>` refcount, and the SDK's event
-        // worker shuts down naturally via its own `Drop` impl. The
-        // local `em` Arc above also goes out of scope at the end of
-        // this function - that's fine; the manager kept its own clone
-        // via `with_event_manager`.
+        // manager drops, releasing its `Arc<SonosEventManager>` clone.
+        // That alone does NOT tear down the SDK's event stack - see
+        // `Drop for EventPump` for why `em` is retained below instead of
+        // being allowed to go out of scope here.
         let coord_to_group = inputs.coord_to_group.clone();
         let speaker_to_coord = inputs.speaker_to_coord.clone();
         let stop = Arc::new(AtomicBool::new(false));
@@ -217,23 +236,38 @@ impl EventPump {
         let pump = EventPump {
             handle: Some(handle),
             stop,
+            em,
         };
         Ok((pump, rx))
+    }
+
+    /// Test-only accessor so the leak regression can observe the SDK
+    /// manager's strong-ref count from outside the pump. Not needed by
+    /// production code - `Drop` uses `self.em` directly.
+    #[cfg(test)]
+    pub(crate) fn event_manager(&self) -> &Arc<sonos_event_manager::SonosEventManager> {
+        &self.em
     }
 }
 
 impl Drop for EventPump {
     fn drop(&mut self) {
+        // Explicitly shut down the SDK's event stack. This is required,
+        // not an optimisation: the SDK's own state-event-worker thread
+        // holds its own `Arc<SonosEventManager>` clone and blocks forever
+        // in a loop over it; that clone is only released once the loop
+        // observes the channel closing, which only happens after
+        // `Command::Shutdown` is processed. Nothing else ever sends that
+        // command, so refcount-only teardown (dropping `manager` at the
+        // end of `pump_loop`) can never reach zero - a self-referential
+        // cycle that otherwise leaks the worker thread, its tokio runtime,
+        // its bound callback-server port, and every live GENA subscription
+        // (which keeps renewing) forever. `.shutdown()` is a non-blocking
+        // `&self` call (just a channel send), so this adds no latency here.
+        self.em.shutdown();
+
         // Signal the pump thread to exit at its next poll boundary
         // (≤ POLL_INTERVAL). Then join.
-        //
-        // We do NOT try to wake the pump faster by calling
-        // `event_manager().shutdown()` - the EventManager is owned by
-        // the StateManager, which is owned by the pump thread. The
-        // 250 ms worst-case join is well within any acceptable
-        // shutdown latency for a desktop discover() cycle, and not
-        // chasing the wake-up keeps the shutdown sequence simple and
-        // failure-mode-free (no double-shutdown races).
         //
         // Why this works where an earlier design didn't:
         // `StateManager::Clone` fans out independent `mpsc::Sender`s
@@ -247,8 +281,18 @@ impl Drop for EventPump {
         // recv_timeout polling avoids the trap entirely - the pump
         // thread is no longer waiting on its own sender.
         self.stop.store(true, Ordering::Release);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+        if let Some(handle) = self.handle.take()
+            && let Err(panic) = handle.join()
+        {
+            // A panicking pump thread would otherwise degrade silently to
+            // "events just stop" - nothing else observes pump-thread
+            // liveness. Surface it so an SDK-side panic is diagnosable.
+            let msg = panic
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "<non-string panic payload>".to_string());
+            tracing::error!("oto-wire-event-pump thread panicked: {msg}");
         }
     }
 }
@@ -489,6 +533,14 @@ struct TopologyFilter {
     /// Set once a real (post-seed) topology change is observed. While set,
     /// group-addressed events are dropped (stale routing).
     dirty: bool,
+    /// When `dirty` was set. `None` while not dirty. Used to self-heal past
+    /// [`DIRTY_TIMEOUT`] if no pump rebuild ever clears `dirty` the normal
+    /// way (see [`DIRTY_TIMEOUT`]'s doc for why this is needed).
+    dirty_since: Option<Instant>,
+    /// How long `dirty` may stay set with no self-heal. `new()` uses
+    /// [`DIRTY_TIMEOUT`]; tests inject a short window to drive the self-heal
+    /// path deterministically.
+    dirty_timeout: Duration,
     /// After this instant, a first-ever `group_membership` for a speaker is a
     /// real regroup, not a seed (see [`SEED_WINDOW`]). Anchored at pump
     /// spawn (when `TopologyFilter::new` runs in `pump_loop`).
@@ -502,18 +554,43 @@ impl TopologyFilter {
 
     /// Construct with an explicit seed window. `new()` uses [`SEED_WINDOW`];
     /// tests pass a zero/elapsed window to drive the post-window path
-    /// deterministically.
+    /// deterministically. Uses the real [`DIRTY_TIMEOUT`].
     fn with_seed_window(window: Duration) -> Self {
+        Self::with_windows(window, DIRTY_TIMEOUT)
+    }
+
+    /// Construct with explicit seed AND dirty windows. Test-only seam so the
+    /// dirty-self-heal path can be driven deterministically without waiting
+    /// out the real [`DIRTY_TIMEOUT`].
+    #[cfg(test)]
+    fn with_dirty_timeout(seed_window: Duration, dirty_timeout: Duration) -> Self {
+        Self::with_windows(seed_window, dirty_timeout)
+    }
+
+    fn with_windows(seed_window: Duration, dirty_timeout: Duration) -> Self {
         Self {
             seen_seed: HashSet::new(),
             dirty: false,
-            seed_deadline: Instant::now() + window,
+            dirty_since: None,
+            dirty_timeout,
+            seed_deadline: Instant::now() + seed_window,
         }
     }
 
     /// Decide whether to forward `event` (which originated from `speaker`).
     /// `None` = drop. Mutates seed/dirty state.
     fn admit(&mut self, speaker: &SpeakerId, event: ChangeEvent) -> Option<ChangeEvent> {
+        // Self-heal: if dirty has outlived DIRTY_TIMEOUT with no pump rebuild
+        // (both re-pull paths failed), stop dropping group-addressed events -
+        // see DIRTY_TIMEOUT's doc for why. Checked lazily on the next event
+        // rather than via a background timer, consistent with the rest of
+        // this poll-driven pipeline.
+        if let Some(since) = self.dirty_since
+            && since.elapsed() >= self.dirty_timeout
+        {
+            self.dirty = false;
+            self.dirty_since = None;
+        }
         match &event {
             ChangeEvent::TopologyChanged => {
                 // The FIRST `group_membership` per speaker is the subscribe
@@ -527,8 +604,10 @@ impl TopologyFilter {
                 if first_for_speaker && Instant::now() < self.seed_deadline {
                     return None;
                 }
-                // A real regroup: routing is now stale until pump rebuild.
+                // A real regroup: routing is now stale until pump rebuild
+                // (or DIRTY_TIMEOUT self-heals it - see that constant's doc).
                 self.dirty = true;
+                self.dirty_since = Some(Instant::now());
                 Some(event)
             }
             // Group-addressed events carry a GroupId routed via the frozen
@@ -982,6 +1061,32 @@ mod tests {
         );
     }
 
+    /// If both re-pull paths (fast `refresh_topology` + full re-discover
+    /// fallback) fail after a real regroup, no fresh pump is ever built to
+    /// clear `dirty` the normal way - without a self-heal, the installed
+    /// wire would drop every group-addressed event for the rest of its
+    /// life. `dirty` must clear once DIRTY_TIMEOUT elapses.
+    #[test]
+    fn dirty_flag_self_heals_after_timeout_with_no_pump_rebuild() {
+        let mut f = TopologyFilter::with_dirty_timeout(Duration::ZERO, Duration::from_millis(50));
+        // Past the (zero) seed window, so this first event is a real regroup.
+        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged);
+        assert!(
+            f.admit(&sid("RINCON_K"), playback_ev("G:1")).is_none(),
+            "group-addressed events must be dropped immediately after a real \
+             regroup (stale routing) - precondition for this test"
+        );
+
+        std::thread::sleep(Duration::from_millis(60));
+
+        assert!(
+            f.admit(&sid("RINCON_K"), playback_ev("G:1")).is_some(),
+            "dirty must self-heal once DIRTY_TIMEOUT elapses - otherwise a \
+             household where both re-pull paths keep failing stays \
+             permanently mute for group-addressed events"
+        );
+    }
+
     // ── map_playback_state ────────────────────────────────────────────
 
     #[test]
@@ -1177,6 +1282,60 @@ mod tests {
     // promptly, NOT that any events arrive. No network is required;
     // the SDK only binds its local callback-server port (default range
     // 3400-3500).
+
+    /// Drop must release every strong ref to the SDK's `SonosEventManager`
+    /// so its own `Drop` (which sends `Command::Shutdown`) can eventually
+    /// fire - otherwise the SDK's internal worker thread, its bound
+    /// callback-server port, and its GENA subscriptions all leak forever.
+    /// Root cause: the SDK's own state-event-worker thread holds its own
+    /// `Arc<SonosEventManager>` clone and blocks in a loop over it, only
+    /// releasing that clone once the loop ends - which only happens after
+    /// `Command::Shutdown` is processed. Nothing sends that command unless
+    /// something calls `.shutdown()` explicitly; refcount alone can never
+    /// reach zero (a self-referential cycle). `event_manager()` below is a
+    /// test-only accessor (see the `#[cfg(test)]` gate) added purely to
+    /// observe this from outside the pump.
+    #[test]
+    fn drop_releases_all_strong_refs_to_event_manager() {
+        let (pump, _rx) = EventPump::spawn(fake_inputs_one_speaker()).expect("spawn ok");
+        let em = std::sync::Arc::clone(pump.event_manager());
+        let count_before_drop = std::sync::Arc::strong_count(&em);
+        assert!(
+            count_before_drop >= 2,
+            "sanity: the manager must have at least one internal owner \
+             (StateManager and/or the SDK's own worker thread) while the \
+             pump is alive, plus this test's own clone; got {count_before_drop}"
+        );
+
+        drop(pump);
+
+        // Teardown crosses two SDK-internal threads (the manager's own async
+        // broker processing Shutdown, then the state-event-worker's blocking
+        // loop observing the closed channel) - not synchronous with
+        // EventPump::drop returning, so poll rather than assert immediately.
+        // Empirically ~15s against this unreachable fake IP: the broker's
+        // `command_rx` is FIFO behind the Subscribe backlog `register_watches`
+        // already queued, and (per `sonos-stream/src/config.rs`'s
+        // `enable_proactive_firewall_detection` + `firewall_event_wait_timeout:
+        // 15s`) it waits to see whether a callback NOTIFY ever arrives before
+        // falling back - it never does, against a documentation-range IP. 30s
+        // gives 2x margin over the observed convergence for CI variance; this
+        // is real SDK-internal latency against an unreachable device, not
+        // anything oto's own code controls.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let count = std::sync::Arc::strong_count(&em);
+            if count == 1 {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "manager still has {count} strong ref(s) 30s after EventPump::drop \
+                 (want 1 - only this test's own clone) - the SDK event stack is leaking"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
 
     fn fake_inputs_one_speaker() -> PumpInputs {
         let kitchen = sid("RINCON_FAKE_KITCHEN");
