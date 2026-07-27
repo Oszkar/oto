@@ -19,8 +19,7 @@ use std::{
 };
 
 use oto_core::{
-    ChangeEvent, DiscoverySnapshot, GroupId, PlaybackState, SpeakerId, SpeakerState, Track,
-    TransportState, Volume,
+    ChangeEvent, DiscoverySnapshot, GroupId, SpeakerId, SpeakerState, Track, TransportState, Volume,
 };
 
 /// Per-speaker cached property values (v0.4+). Playback / Track live on the
@@ -186,19 +185,20 @@ impl StateManager {
                 }
                 let entry = guard.entry(group.clone()).or_default();
                 entry.track = Some(track.clone());
-                // Keep cached transport.current_track coherent with
-                // the dedicated `track` field - otherwise a
-                // `speaker_state` read could surface a stale title
-                // on the transport while the freshest Track event
-                // sat in `entry.track`.
+                // Keep cached transport.current_track coherent with the
+                // dedicated `track` field IF a transport already exists
+                // (from a prior Playback event) - otherwise a `speaker_state`
+                // read could surface a stale title on the transport while the
+                // freshest Track event sat in `entry.track`. Do NOT fabricate
+                // a transport here if one doesn't exist yet: honest-partial
+                // (ARCHITECTURE.md § Live events) requires `transport` stay
+                // `None` until a real Playback event arrives - property order
+                // isn't guaranteed, so a Track-first group must not read as
+                // Stopped. The Playback arm below already falls back to
+                // `entry.track` when it first synthesizes a transport, so
+                // this loses no information.
                 if let Some(t) = entry.transport.as_mut() {
                     t.current_track = Some(track.clone());
-                } else {
-                    entry.transport = Some(TransportState {
-                        state: PlaybackState::Stopped,
-                        current_track: Some(track.clone()),
-                        position: None,
-                    });
                 }
             }
             ChangeEvent::GroupVolume { group, volume } => {
@@ -336,41 +336,74 @@ impl StateManager {
             .cloned()
     }
 
+    /// How many times `speaker_state` retries its 3-read snapshot if a
+    /// concurrent `bump_clear_and_install` is caught mid-flight (see that
+    /// method's doc). A retry is only needed on the rare re-discover-during-
+    /// read race; this is a safety cap against a pathological run of
+    /// back-to-back rediscovers, not an expected steady-state path.
+    const SPEAKER_STATE_MAX_RETRIES: u8 = 3;
+
     /// Read the cached state for `speaker`. Honest partial - fields
     /// for which no event has arrived yet (cold-start window, or the
     /// property never changed since subscribe) are `None`. Transport
     /// resolves via speaker → group lookup using the topology installed
     /// by `install_topology`; if no topology is installed or the
     /// speaker isn't a member of any known group, `transport` is `None`.
+    ///
+    /// Reads `speakers`, `topology`, and `groups` under three independent
+    /// lock acquisitions (not one spanning lock - see this module's doc on
+    /// why each cache has its own `RwLock`). A concurrent `bump_clear_and_install`
+    /// (a re-discover) can land between any of them, mixing an OLD-generation
+    /// value from one cache with a NEW-generation value from another. Re-check
+    /// the generation across the whole read and retry on a mismatch, so the
+    /// returned `SpeakerState` is always internally coherent - a single
+    /// generation's worth of data, never a torn mix of two.
     pub fn speaker_state(&self, speaker: &SpeakerId) -> SpeakerState {
-        let (volume, muted) = self
-            .speakers
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .get(speaker)
-            .map(|c| (c.volume, c.muted))
-            .unwrap_or((None, None));
+        for _ in 0..Self::SPEAKER_STATE_MAX_RETRIES {
+            let generation = self.generation.load(Ordering::Acquire);
 
-        let group = self
-            .topology
-            .read()
-            .unwrap_or_else(|p| p.into_inner())
-            .speaker_to_group
-            .get(speaker)
-            .cloned();
-
-        let transport = group.and_then(|g| {
-            self.groups
+            let (volume, muted) = self
+                .speakers
                 .read()
                 .unwrap_or_else(|p| p.into_inner())
-                .get(&g)
-                .and_then(|c| c.transport.clone())
-        });
+                .get(speaker)
+                .map(|c| (c.volume, c.muted))
+                .unwrap_or((None, None));
 
+            let group = self
+                .topology
+                .read()
+                .unwrap_or_else(|p| p.into_inner())
+                .speaker_to_group
+                .get(speaker)
+                .cloned();
+
+            let transport = group.and_then(|g| {
+                self.groups
+                    .read()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(&g)
+                    .and_then(|c| c.transport.clone())
+            });
+
+            if self.generation.load(Ordering::Acquire) == generation {
+                return SpeakerState {
+                    volume,
+                    muted,
+                    transport,
+                };
+            }
+            // Generation moved mid-read - a rediscover landed between two of
+            // the three locks above. Retry for a coherent snapshot.
+        }
+        // Exhausted retries under a pathological run of back-to-back
+        // rediscovers - fall through to the module-empty case rather than
+        // loop forever; callers already treat this identically to a
+        // cold-start read.
         SpeakerState {
-            volume,
-            muted,
-            transport,
+            volume: None,
+            muted: None,
+            transport: None,
         }
     }
 
@@ -504,7 +537,7 @@ impl StateManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oto_core::{GroupIdentity, SpeakerIdentity};
+    use oto_core::{GroupIdentity, PlaybackState, SpeakerIdentity};
     use std::net::{IpAddr, Ipv4Addr};
 
     fn fake_snapshot_two_speaker_group() -> DiscoverySnapshot {
@@ -634,7 +667,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_track_updates_both_track_field_and_transport_current_track() {
+    fn apply_track_updates_track_field() {
         let sm = StateManager::new();
         let g = GroupId::new("RINCON_K:1");
         let track = Track {
@@ -651,11 +684,44 @@ mod tests {
             group: g.clone(),
             track: track.clone(),
         });
-        assert_eq!(sm.track_of(&g), Some(track.clone()));
-        // transport must be synthesised with the same track so a
-        // `speaker_state` read of transport.current_track is coherent.
-        let t = sm.transport_of(&g).unwrap();
-        assert_eq!(t.current_track, Some(track));
+        assert_eq!(sm.track_of(&g), Some(track));
+    }
+
+    /// Honest-partial contract (ARCHITECTURE.md § Live events): a property
+    /// stays absent (`None`) until its first real event, never a fabricated
+    /// value. Initial property order is not guaranteed - a Track event can
+    /// arrive before any Playback event for a group. Regression: the Track
+    /// arm used to synthesize `TransportState { state: Stopped, .. }` in that
+    /// case, so an actively-playing group could read as Stopped purely
+    /// because Track happened to land first.
+    #[test]
+    fn track_before_any_playback_leaves_transport_none() {
+        let sm = StateManager::new();
+        let g = GroupId::new("RINCON_K:1");
+        let track = Track {
+            id: None,
+            title: Some("Belfast".into()),
+            artist: None,
+            album: None,
+            track_number: None,
+            duration: None,
+            art_uri: None,
+            uri: None,
+        };
+        sm.apply_event(&ChangeEvent::Track {
+            group: g.clone(),
+            track: track.clone(),
+        });
+        assert_eq!(
+            sm.track_of(&g),
+            Some(track),
+            "track_of must still carry the track independently of transport"
+        );
+        assert!(
+            sm.transport_of(&g).is_none(),
+            "transport must stay None (honest-partial) until a real Playback \
+             event arrives - it must not be fabricated as Stopped"
+        );
     }
 
     // ── v0.5.1 group volume/mute cache ───────────────────────────────────

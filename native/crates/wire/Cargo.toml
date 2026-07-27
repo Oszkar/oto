@@ -53,6 +53,11 @@ quick-xml = { workspace = true }
 # speaker's device_description.xml for `<modelName>`. Already in the locked
 # graph (transitive via sonos-api); direct edge only. See workspace dep.
 ureq = { workspace = true }
+# Log-emission facade for oto-wire's own diagnostics (e.g. a panicked event
+# pump thread - see events.rs). AGENTS.md §3 allows this at the oto-wire
+# boundary; production has no subscriber configured (the app's choice) -
+# see the tracing-subscriber dev-dependency below for hardware-test use.
+tracing = { workspace = true }
 
 # v0.4 reactive event stack. `oto-wire` is the only crate that
 # touches the Sonos SDK family (AGENTS.md §4). Pump thread in

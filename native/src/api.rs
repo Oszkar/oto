@@ -493,9 +493,16 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
     // dropped and `recv()` returns Err - correct, because the OLD
     // subscriber is the one listening on this sink.
     let Some((generation, rx)) = oto_app::take_event_stream_with_generation() else {
-        // No wire installed yet, or stream already taken. The Dart
-        // provider depends on `discoveryProvider`; once discover()
-        // succeeds, this fn will be called again against the new wire.
+        // No wire installed yet, or (rare race - see the doc above on
+        // stale-wire teardown) this generation's receiver was already taken
+        // by a subscribe call that raced ahead of this one. Signal the
+        // failure explicitly rather than silently returning: a bare return
+        // here completes the Dart stream with no data and no error, so
+        // `changeEvents` (keepAlive: true, per events.dart) never notices
+        // anything went wrong and stays dead until something else happens
+        // to bump the generation again. `add_error` lets the Dart side
+        // observe and react (e.g. invalidate + retry) instead.
+        let _ = sink.add_error("no wire installed, or event stream already taken".to_string());
         return;
     };
     // Apply one event to the cache, then forward it to Dart. Returns `false`
