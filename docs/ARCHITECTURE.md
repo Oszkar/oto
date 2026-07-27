@@ -218,7 +218,34 @@ The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when
 
 **Live events (v0.5 / v0.5.1).** Additions on the same single FRB stream:
 
-- **Topology events.** The pump also registers a per-speaker `GroupMembership` watch (ZoneGroupTopology is a *service*, not a watchable property - the change surfaces via the speaker-scoped `GroupMembership` property; see [sonos-notes § Topology change events](sonos-notes.md#topology-change-events---how-regrouping-surfaces-v05)). A regroup → payload-less `ChangeEvent::TopologyChanged`; the Dart `TopologyController` (implemented + unit-tested; the v0.6 home shell now watches it) debounces 250 ms then refreshes - **v0.5.1** via a no-SSDP fast `refresh_topology()` re-discover (a full ~3-5 s SSDP re-discover in v0.5), with a full re-discover as the error fallback. Two pump-side guards make this safe: (1) the **first** `GroupMembership` per speaker, when it arrives inside a short post-spawn *seed window*, is the subscribe *seed* and is suppressed - otherwise seed → re-discover → new pump → new seed would loop forever; a first event arriving *after* the window is treated as a real regroup (its seed was dropped or delayed), so a missed seed can't permanently swallow a later regroup; (2) once a real regroup is seen the pump marks its (now-stale, frozen-at-spawn) coordinator→group routing **dirty** and drops group-addressed `Playback`/`Track`/`GroupVolume`/`GroupMute` until the pump is rebuilt by re-discover. **Resolved in v0.5.1:** `refresh_topology` is a full wire replacement (a fresh seeded wire via `discover_with`), so the new pump starts with clean routing + a clean `TopologyFilter` - no in-place mutation of the frozen maps. The Dart re-subscribe is forced via a `wireGenerationProvider` invalidation even when the new topology is value-equal to the old (FRB `Topology` has value equality, which would otherwise suppress the provider transition).
+- **Topology events.** The pump also registers a per-speaker
+  `GroupMembership` watch. ZoneGroupTopology is a *service*, not a watchable
+  property; the change surfaces through the speaker-scoped `GroupMembership`
+  property (see
+  [sonos-notes § Topology change events](sonos-notes.md#topology-change-events---how-regrouping-surfaces-v05)).
+  A regroup produces a payload-less `ChangeEvent::TopologyChanged`; the Dart
+  `TopologyController` debounces 250 ms, then refreshes via the v0.5.1
+  no-SSDP `refresh_topology()` path, with full re-discovery as the fallback.
+  Two pump-side guards make this safe:
+
+  1. The first `GroupMembership` per speaker inside the short post-spawn seed
+     window is suppressed. Otherwise seed → re-discover → new pump → new seed
+     would loop forever. A first event after the window is treated as a real
+     regroup, so a missed seed cannot permanently swallow a later change.
+  2. A real regroup marks the pump's frozen coordinator→group routing `dirty`
+     and temporarily drops group-addressed
+     `Playback`/`Track`/`GroupVolume`/`GroupMute` events. Normally the debounced
+     fast refresh, or its full re-discover fallback, installs a fresh pump with
+     clean routing and clears `dirty`. If both paths fail, `DIRTY_TIMEOUT`
+     clears `dirty` after 60 s (checked lazily on the next event), bounding
+     suppression and accepting possibly stale routing rather than permanent
+     silence.
+
+  `refresh_topology` replaces the complete wire through `discover_with`, so the
+  new pump starts with a clean `TopologyFilter`; it never mutates the old
+  pump's frozen maps in place. Dart forces the event-stream re-subscribe by
+  invalidating `wireGenerationProvider`, even when the refreshed FRB
+  `Topology` is value-equal to the old value.
 - **Group volume/mute events (v0.5.1).** The pump also watches `GroupVolume` / `GroupMute` (GroupRenderingControl, `Scope::Group`, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}`. These are read from the SDK's group-property store via `get_group_property(GroupId)` - NOT the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike---hardware-confirmed-2026-06-04)).
 - **Subscription health.** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
 
