@@ -46,6 +46,8 @@ class _SpyApi extends CommandApi {
   CommandError? throwOn;
   bool deferVolume = false;
   final volumeCompleters = <Completer<void>>[];
+  bool deferPlay = false;
+  final playCompleters = <Completer<void>>[];
 
   void _maybeThrow() {
     final t = throwOn;
@@ -53,9 +55,15 @@ class _SpyApi extends CommandApi {
   }
 
   @override
-  Future<void> play(String groupId) async {
+  Future<void> play(String groupId) {
     calls.add('play($groupId)');
-    _maybeThrow();
+    if (deferPlay) {
+      final c = Completer<void>();
+      playCompleters.add(c);
+      return c.future;
+    }
+    final t = throwOn;
+    return t != null ? Future<void>.error(t) : Future<void>.value();
   }
 
   @override
@@ -193,6 +201,45 @@ void main() {
       reason: 'optimistic playing rolled back to paused on Sonos reject',
     );
   });
+
+  test(
+    'a regroup mid-flight re-keys togglePlay rollback to the new group id',
+    () async {
+      // #104: togglePlay used to roll back against the id captured at
+      // dispatch. A regroup between the optimistic write and the command's
+      // failure re-keys the group (same coordinator, new id), so a rollback
+      // against the stale id hit updateGroup's unknown-id no-op - the false
+      // optimistic transport stood on the new group while the failure notice
+      // claimed the command failed. Mirrors GroupingController.setGroupMute.
+      final spy = _SpyApi()..deferPlay = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container
+          .read(householdProvider.notifier)
+          .setOptimisticTransport('G1', PlaybackState.paused);
+
+      final future = container
+          .read(playbackControllerProvider)
+          .togglePlay('G1', PlaybackState.paused);
+
+      // Regroup mid-flight: G1 -> G2, same coordinator (LR) - as
+      // householdFromTopology would carry it across a real regroup.
+      final notifier = container.read(householdProvider.notifier);
+      final g1 = notifier.state.groups['G1']!;
+      notifier.state = notifier.state.copyWith(
+        groups: {'G2': g1.copyWith(id: 'G2')},
+      );
+
+      spy.playCompleters.single.completeError(const CommandError.sonos('x'));
+      await future;
+
+      expect(
+        container.read(householdProvider).groups['G2']!.transport,
+        PlaybackState.paused,
+        reason: 'rollback followed the coordinator to the re-keyed group',
+      );
+    },
+  );
 
   test('Sonos reject on volume rolls the slider back', () async {
     final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
