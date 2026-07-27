@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/services.dart'
+    show MissingPluginException, PlatformException;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../platform/android_multicast_lock.dart';
@@ -187,11 +188,18 @@ class DiscoveryRetrying extends _$DiscoveryRetrying {
 /// Run a multicast-lock op, swallowing a `PlatformException` (lock is
 /// best-effort). Returns whether it succeeded - so `release` is only
 /// attempted when `acquire` succeeded.
+///
+/// Also swallows `MissingPluginException` (#104): that's what a missing
+/// `MethodChannel` handler throws, distinct from `PlatformException` - without
+/// this, an unregistered handler would escape `build()` and turn the
+/// best-effort multicast lock into a hard discovery failure.
 Future<bool> _tryLock(Future<void> Function() op) async {
   try {
     await op();
     return true;
   } on PlatformException {
+    return false;
+  } on MissingPluginException {
     return false;
   }
 }

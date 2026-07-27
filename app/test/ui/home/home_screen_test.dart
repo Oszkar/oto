@@ -41,6 +41,7 @@ import 'package:oto/src/ui/home/home_states.dart';
 import 'package:oto/src/ui/home/room_card.dart';
 import 'package:oto/src/ui/home/room_row.dart';
 import 'package:oto/src/ui/now_playing/now_playing_screen.dart';
+import 'package:oto/src/ui/settings/settings_screen.dart';
 
 import '_fixtures.dart';
 
@@ -230,6 +231,50 @@ void main() {
     expect(find.byType(HomeErrorState), findsOneWidget);
     expect(find.text('Could not find your system'), findsOneWidget);
     expect(find.byType(BottomStrip), findsNothing);
+  });
+
+  /// Before v0.6.4 none of these no-cache states built HomeHeader (the
+  /// gear's only other home) or _HomeContent (the other gear owner), so a
+  /// user whose first scan failed had no way to reach theme/accent/the
+  /// version string (#104). Asserted per-state (not looped in one test) so
+  /// each gets its own fresh tester/ProviderScope/Navigator, matching every
+  /// other test in this file.
+  Future<void> expectSettingsReachable(
+    WidgetTester t, {
+    required Discovery Function() discovery,
+    bool settle = true,
+  }) async {
+    await _pump(t, const HomeScreen(), discovery: discovery, settle: settle);
+
+    expect(find.byKey(const Key('centered-state-settings')), findsOneWidget);
+    await t.tap(find.byKey(const Key('centered-state-settings')));
+    await t.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+  }
+
+  testWidgets('Settings is reachable from the initial loading state (#104)', (
+    t,
+  ) async {
+    await expectSettingsReachable(
+      t,
+      discovery: _LoadingDiscovery.new,
+      settle: false,
+    );
+  });
+
+  testWidgets('Settings is reachable from the empty state (#104)', (
+    t,
+  ) async {
+    await expectSettingsReachable(
+      t,
+      discovery: () => _DataDiscovery(_emptyTopology),
+    );
+  });
+
+  testWidgets('Settings is reachable from the no-cache error state (#104)', (
+    t,
+  ) async {
+    await expectSettingsReachable(t, discovery: _ErrorDiscovery.new);
   });
 
   testWidgets(

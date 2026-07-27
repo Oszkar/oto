@@ -324,6 +324,9 @@ class PlaybackController with _Reconciling {
     final next = current == PlaybackState.playing
         ? PlaybackState.paused
         : PlaybackState.playing;
+    // Captured now, resolved at rollback time: a regroup can re-key the group
+    // while this command is in flight (mirrors GroupingController.setGroupMute).
+    final coord = coordinatorOf(groupId);
     _h.setOptimisticTransport(groupId, next);
     await send(
       () => next == PlaybackState.playing
@@ -331,7 +334,8 @@ class PlaybackController with _Reconciling {
           : api.pause(groupId),
       label: groupLabel(groupId),
       target: groupId,
-      rollback: () => _h.setOptimisticTransport(groupId, current),
+      rollback: () =>
+          _h.setOptimisticTransport(resolveGroupId(groupId, coord), current),
     );
   }
 
