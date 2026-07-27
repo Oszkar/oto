@@ -78,10 +78,18 @@ class HomeScreen extends ConsumerWidget {
           ),
         ),
       ),
+      // A partial outage (some, not all, rooms unreachable) doesn't qualify
+      // for HomeAllUnreachable, but still needs a way out - see room_card.dart
+      // for the per-room recovery path this banner's retry complements (#104).
       HomeReady(:final household) => OtoScaffold(
         detail: const NowPlayingPane(),
         rail: const OtoNavRail(),
-        body: _HomeContent(household: household),
+        body: _HomeContent(
+          household: household,
+          banner: household.rooms.values.any((r) => !r.online)
+              ? const HomeStatusBanner(message: "Some rooms aren't responding.")
+              : null,
+        ),
       ),
     };
   }

@@ -133,15 +133,14 @@ fn health_tracker() -> &'static HealthTracker {
 ///
 /// `cmd_gen` is the wire generation the command actually ran under (captured
 /// under SLOT by [`with_wire_gen`]). If a rediscover has since replaced the
-/// wire - bumping the generation and resetting health to a clean slate - the
-/// observation belongs to a dead wire: applying it here would both pollute the
-/// fresh tracker with a stale transition AND stamp the event onto the new
-/// stream. The generation is re-checked **under the tracker's write lock**
-/// inside [`HealthTracker::observe`] (which shares that lock with `reset_all`),
+/// wire - bumping the generation - the observation belongs to a dead wire:
+/// applying it here would stamp a stale transition onto the new stream. The
+/// generation is re-checked **under the tracker's write lock** inside
+/// [`HealthTracker::observe`] (which shares that lock with `retain_known`),
 /// so the check and the health mutation are atomic w.r.t. a concurrent wire
-/// replacement - no stale transition can land in the new wire's fresh tracker.
-/// The event is also stamped with `cmd_gen` so the FRB consumer drops it if a
-/// bump slips in between the observe and the push.
+/// replacement - no stale transition can land against a speaker `retain_known`
+/// just GC'd. The event is also stamped with `cmd_gen` so the FRB consumer
+/// drops it if a bump slips in between the observe and the push.
 fn observe_speaker_health<R>(cmd_gen: u64, speaker: &SpeakerId, result: &Result<R, WireError>) {
     if let Some(event) = health_tracker().observe(
         cmd_gen,
@@ -250,13 +249,17 @@ pub fn discover_with(make: impl FnOnce() -> BoxedWire) -> Result<DiscoverySnapsh
     // (generation, receiver) pair atomically from the slot on entry
     // (`take_event_stream_with_generation`).
     let generation = state_manager().bump_clear_and_install(&snapshot);
-    // v0.5: a fresh wire starts with a clean health slate - drop any
-    // Errored marks from the old wire so the first command on the new wire
-    // is judged from Healthy (and a recovery on the new wire isn't masked).
-    health_tracker().reset_all();
+    // v0.6.4: garbage-collect health entries for speakers that dropped out
+    // of the new topology - NOT a blanket reset (#104). A speaker that
+    // survives the swap keeps its mark; see `HealthTracker::retain_known`.
+    let known_speakers: std::collections::HashSet<_> =
+        snapshot.speakers.iter().map(|s| s.id.clone()).collect();
+    health_tracker().retain_known(&known_speakers);
     // …and drop any app-bus event still queued against the OLD wire, so a
     // stale SubscriptionError/Recovered can't surface on the NEW stream
-    // after rediscover (review #65). Health just reset, so it'd be wrong.
+    // after rediscover (review #65). Any event for a speaker just GC'd above
+    // would be stale by construction; one for a surviving speaker belongs to
+    // the OLD generation and is superseded by whatever the NEW wire observes.
     events::clear();
     let old = {
         let mut guard = slot()
@@ -1269,7 +1272,17 @@ mod tests {
     }
 
     #[test]
-    fn health_state_resets_on_wire_replacement() {
+    fn health_state_persists_across_wire_replacement_for_surviving_speaker() {
+        // #104: `discover_with` used to blanket-reset every speaker's health
+        // on wire replacement, so a genuinely-still-unreachable speaker read
+        // back as Healthy after ANY automatic rediscover/regroup - Dart, which
+        // carries `online: false` forward across an automatic topology
+        // source, would then never see the SubscriptionRecovered that is its
+        // sole path to clearing that flag, stranding the room offline for the
+        // process lifetime. `retain_known` only GC's speakers ABSENT from the
+        // new topology; a surviving speaker keeps its Errored mark, so its
+        // next real successful command recovers it exactly as it would on the
+        // same wire.
         let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
         clear_slot();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
@@ -1281,16 +1294,23 @@ mod tests {
         let _ = set_volume(&kitchen, Volume::new(50).unwrap());
         assert_eq!(drain_app_events().len(), 1, "errored on wire 1");
 
-        // Rediscover (wire 2) → health reset. A successful command must NOT
-        // emit Recovered (the speaker is Healthy again, not Errored).
+        // Rediscover (wire 2). The fixture's kitchen speaker is present in
+        // both wires' topology, so its Errored mark survives the swap: a
+        // successful command against it now emits Recovered.
         let _mock2 = discover_with_held_mock();
         let _ = drain_app_events();
         let res = set_volume(&kitchen, Volume::new(60).unwrap());
         assert!(res.is_ok());
-        assert!(
-            drain_app_events().is_empty(),
-            "health reset on rediscover - no stale Recovered event"
+        let events = drain_app_events();
+        assert_eq!(
+            events.len(),
+            1,
+            "surviving speaker's Errored mark must carry across the wire swap"
         );
+        assert!(matches!(
+            &events[0],
+            ChangeEvent::SubscriptionRecovered { speaker } if *speaker == kitchen
+        ));
     }
 
     #[test]

@@ -21,7 +21,10 @@ import '../widgets/oto_slider.dart';
 /// States:
 /// - playing (group `hasActiveStream`): album art + track + a resume/pause button
 /// - idle (group not active): an "Idle" affordance, no play button
-/// - unreachable (`online == false`): dimmed, no controls
+/// - unreachable (`online == false`): dimmed; the mute button stays live so
+///   the room retains at least one command-issuing control (#104 - health
+///   recovery is only ever observed from a real command's result, so a fully
+///   disabled offline room could never recover in-session)
 class RoomCard extends ConsumerWidget {
   const RoomCard({super.key, required this.speakerId});
 
@@ -79,10 +82,8 @@ class RoomCard extends ConsumerWidget {
               ],
             ),
           ),
-          if (!offline) ...[
-            const SizedBox(height: Space.lg10),
-            _volumeRow(context, ref, room),
-          ],
+          const SizedBox(height: Space.lg10),
+          _volumeRow(context, ref, room),
         ],
       ),
     );
@@ -215,7 +216,10 @@ class RoomCard extends ConsumerWidget {
         MuteButton(
           key: Key('room-mute-$speakerId'),
           muted: room.muted,
-          enabled: room.online,
+          // Live even when offline (#104): the mute command is this card's
+          // one recovery path - health only clears from a real command's
+          // result, never from the topology snapshot alone.
+          enabled: true,
           size: 12,
           // NOT inkFaint (what the static icon used): this is an interactive
           // control now, so its colour is load-bearing. inkMute is the

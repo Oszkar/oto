@@ -289,6 +289,36 @@ void main() {
   );
 
   testWidgets(
+    'one unreachable room among several offers a rescan too (#104)',
+    (t) async {
+      // A partial outage doesn't qualify for HomeAllUnreachable (not every
+      // room is down), but a user with one dead speaker among four still
+      // needs a way to trigger a rediscover - not just the per-room mute
+      // button - so HomeReady grows the same banner.
+      final base = _twoRoomGroupPlusTwoSolos();
+      final partial = Household(
+        rooms: {
+          ...base.rooms,
+          'BR': base.rooms['BR']!.copyWith(online: false),
+        },
+        groups: base.groups,
+      );
+
+      await _pump(
+        t,
+        const HomeScreen(),
+        household: partial,
+        discovery: () => _DataDiscovery(_oneRoomTopology),
+      );
+
+      expect(find.byType(HomeStatusBanner), findsOneWidget);
+      expect(find.text("Some rooms aren't responding."), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.byType(HomeHeader), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'groups render as one group card, solo rooms as room cards (no dupes)',
     (t) async {
       await _pump(

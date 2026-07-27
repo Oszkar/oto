@@ -19,7 +19,10 @@ import '../widgets/oto_slider.dart';
 ///
 /// Line 1: speaker icon + name + subtitle (track when playing, else "Idle" /
 /// "Unreachable") + a resume/pause transport (only when the group is active).
-/// Line 2: a full-width per-room volume slider (hidden when unreachable).
+/// Line 2: a full-width per-room volume slider. Stays live even when
+/// unreachable (#104) - its mute button is this row's one command-issuing
+/// control, the only way an offline room's health can ever be observed to
+/// recover in-session.
 class RoomRow extends ConsumerWidget {
   const RoomRow({super.key, required this.speakerId});
 
@@ -56,10 +59,8 @@ class RoomRow extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _identityRow(context, ref, room, group, canResume, playing),
-            if (!offline) ...[
-              const SizedBox(height: Space.lg10),
-              _volumeRow(context, ref, room),
-            ],
+            const SizedBox(height: Space.lg10),
+            _volumeRow(context, ref, room),
           ],
         ),
       ),
@@ -187,7 +188,8 @@ class RoomRow extends ConsumerWidget {
           MuteButton(
             key: Key('room-mute-$speakerId'),
             muted: room.muted,
-            enabled: room.online,
+            // Live even when offline (#104) - see the class doc comment.
+            enabled: true,
             size: 14,
             color: oto.inkMute,
             label: room.name,
