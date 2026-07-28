@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-v0.6.4 is implemented and ready for release.
+## [0.6.4] - 2026-07-28
+
+v0.6.4 - Mute and honest failure. The v0.6 closer: mute reaches every volume surface, a failed command rolls back and explains itself instead of silently reverting, and Home offers a way back when every room looks unreachable. Also closes out the pipeline lifecycle hardening surfaced by dogfooding the v0.6 UI series.
 
 ### Added
 
@@ -247,7 +249,8 @@ v0.1 - Foundation + LAN discovery. Identity-only discovery proven end-to-end thr
 
 Known v0.1 limitations: discovery is identity-only (bonded speakers appear standalone - fixed in v0.3); verified on Windows; Android release discovery needs a `WifiManager.MulticastLock` (added in v0.5).
 
-[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/Oszkar/oto/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/Oszkar/oto/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/Oszkar/oto/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/Oszkar/oto/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Oszkar/oto/compare/v0.6.0...v0.6.1
