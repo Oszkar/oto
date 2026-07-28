@@ -310,9 +310,15 @@ class GroupCard extends ConsumerWidget {
     if (room == null) return const SizedBox.shrink();
 
     final hasVolume = room.volume != null;
-    // Offline member: it can carry a stale last-known volume, but its speaker is
-    // unreachable -> disable its slider (mirrors RoomCard/RoomRow's online gate).
-    final enabled = hasVolume && room.online;
+    // Live even when the member is offline (#104): this slider targets that
+    // exact speaker id, so it is this row's one command-issuing control - the
+    // only way an offline member's health can be observed to recover
+    // in-session (mirrors RoomCard/RoomRow). Unlike the group-master mute
+    // above, which is gated on the COORDINATOR's health because a group
+    // command can only ever land there, a per-room command genuinely targets
+    // this member and can succeed even while its coordinator or siblings are
+    // still down.
+    final enabled = hasVolume;
     final value = (room.volume ?? 0) / 100;
     final ctrl = ref.read(playbackControllerProvider);
     return Row(

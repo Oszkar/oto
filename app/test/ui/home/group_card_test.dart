@@ -142,10 +142,13 @@ void main() {
     expect(h.calls.any((c) => c.startsWith('setVolumeEnd(R1,')), isTrue);
   });
 
-  testWidgets('offline group member has a disabled level slider', (t) async {
-    // 2-member group: R0 (coordinator) online, R1 offline. R1 can carry a
-    // stale last-known volume, but its speaker is unreachable -> its level
-    // slider must be disabled (mirrors RoomCard/RoomRow's online gate).
+  testWidgets('offline group member keeps a live level slider (#104)', (
+    t,
+  ) async {
+    // 2-member group: R0 (coordinator) online, R1 offline. R1's level slider
+    // targets R1 directly, so it stays live even offline - it's this row's
+    // one command-issuing control, the only way R1's health can be observed
+    // to recover in-session (mirrors RoomCard/RoomRow).
     final household = Household(
       rooms: {
         'R0': const RoomState(
@@ -187,8 +190,8 @@ void main() {
     );
     expect(
       t.widget<OtoSlider>(sliders.at(2)).onChanged,
-      isNull,
-      reason: 'offline member R1 slider disabled',
+      isNotNull,
+      reason: 'offline member R1 slider stays live (#104)',
     );
   });
 

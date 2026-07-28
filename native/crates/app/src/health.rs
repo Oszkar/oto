@@ -14,7 +14,10 @@
 //! reachability one) leave health untouched. Emission is **edge-triggered**:
 //! repeated failures or successes after the first do not re-emit.
 
-use std::{collections::HashMap, sync::RwLock};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::RwLock,
+};
 
 use oto_core::{ChangeEvent, SpeakerId, WireError};
 
@@ -26,7 +29,7 @@ pub(crate) enum HealthState {
 
 pub(crate) struct HealthTracker {
     /// Absent ↔ `Healthy` (the default). Only `Errored` speakers occupy a
-    /// slot, so `reset_all` is a `clear()`.
+    /// slot.
     states: RwLock<HashMap<SpeakerId, HealthState>>,
 }
 
@@ -37,13 +40,42 @@ impl HealthTracker {
         }
     }
 
-    /// Reset every speaker to `Healthy`. Called by `discover_with` on wire
-    /// replacement so a fresh wire starts with a clean health slate.
+    /// Reset every speaker to `Healthy`. Test-only: unlike `retain_known`,
+    /// this is a genuine blanket clear, used to isolate `cfg(test)` runs
+    /// from each other in the same process - never call it from production
+    /// wire-replacement code (#104: it would erase a still-Errored mark on
+    /// a speaker with no evidence it recovered).
+    #[cfg(test)]
     pub(crate) fn reset_all(&self) {
         self.states
             .write()
             .unwrap_or_else(|p| p.into_inner())
             .clear();
+    }
+
+    /// Drop health entries for speakers absent from `known` (the speakers in
+    /// a freshly installed topology). Called by `discover_with` on wire
+    /// replacement.
+    ///
+    /// Deliberately NOT a blanket reset (#104). A speaker that survives the
+    /// swap keeps whatever mark it had: the wire-generation guard in
+    /// `observe` already stops a stale command from mutating it, so the only
+    /// legitimate way for it to leave `Errored` is a genuine successful
+    /// command against it under the new generation, which emits
+    /// `SubscriptionRecovered` normally. Clearing every mark here would flap
+    /// a still-unreachable speaker back to `Healthy` on every automatic
+    /// regroup, since a topology snapshot is not proof of reachability - a
+    /// single speaker's `ZoneGroupState` answer can list a peer that never
+    /// responded (see `householdFromTopology`'s `clearHealth` doc comment on
+    /// the Dart side). A speaker that drops out of the topology entirely
+    /// can never receive another command to clear its slot naturally, so it
+    /// is dropped here instead - pure garbage collection, not a recovery
+    /// signal.
+    pub(crate) fn retain_known(&self, known: &HashSet<SpeakerId>) {
+        self.states
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .retain(|speaker, _| known.contains(speaker));
     }
 
     /// Observe a command's `Result` for `speaker` and return the event to
@@ -56,12 +88,13 @@ impl HealthTracker {
     ///
     /// `cmd_gen` is the wire generation the command ran under; `current_gen`
     /// reads the live generation. Both are re-checked UNDER the states write
-    /// lock: `reset_all` (called by `discover_with` on wire replacement) takes
-    /// this same lock, so once we hold it AND the generation still matches, no
-    /// replacement can have interleaved between the check and the mutation
-    /// below. This closes the race where a stale command's observation lands in
-    /// the freshly-reset tracker of a NEW wire (which would surface a spurious
-    /// `SubscriptionRecovered` on the next successful command).
+    /// lock: `retain_known` (called by `discover_with` on wire replacement)
+    /// takes this same lock, so once we hold it AND the generation still
+    /// matches, no replacement can have interleaved between the check and the
+    /// mutation below. This closes the race where a stale command's
+    /// observation lands after a concurrent wire replacement (which could
+    /// otherwise surface a spurious transition against a GC'd or reassigned
+    /// slot).
     pub(crate) fn observe<R>(
         &self,
         cmd_gen: u64,
@@ -190,6 +223,30 @@ mod tests {
         // After reset the speaker is Healthy again: an Ok must NOT emit
         // Recovered (no transition from the default).
         assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
+    }
+
+    #[test]
+    fn retain_known_drops_only_absent_speakers() {
+        let t = HealthTracker::new();
+        let a = SpeakerId::new("RINCON_A");
+        let b = SpeakerId::new("RINCON_B");
+        assert!(t.observe(0, || 0, &a, &net()).is_some()); // A → Errored
+        assert!(t.observe(0, || 0, &b, &net()).is_some()); // B → Errored
+
+        // B dropped out of the new topology; A survived the swap.
+        let known: HashSet<_> = [a.clone()].into_iter().collect();
+        t.retain_known(&known);
+
+        // A is still Errored: a real Ok now recovers it, exactly as if no
+        // wire swap had happened.
+        assert!(matches!(
+            t.observe(1, || 1, &a, &ok()),
+            Some(ChangeEvent::SubscriptionRecovered { .. })
+        ));
+        // B's slot was GC'd, so it reads back as the default Healthy - an Ok
+        // for it is a no-op (no spurious Recovered for a speaker that was
+        // never proven to have recovered).
+        assert!(t.observe(1, || 1, &b, &ok()).is_none());
     }
 
     #[test]

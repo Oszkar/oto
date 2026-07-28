@@ -55,20 +55,31 @@ void main() {
     expect(h.calls.any((c) => c.startsWith('setVolumeEnd(OF,')), isTrue);
   });
 
-  testWidgets('offline room is dimmed with no slider or controls', (t) async {
-    final h = wrap(
-      const RoomRow(speakerId: 'PT'),
-      household: offlineHousehold(),
-    );
-    await t.pumpWidget(h.widget);
+  testWidgets(
+    'offline room is dimmed but keeps a live mute button (#104)',
+    (t) async {
+      final h = wrap(
+        const RoomRow(speakerId: 'PT'),
+        household: offlineHousehold(),
+      );
+      await t.pumpWidget(h.widget);
 
-    expect(find.byType(OtoSlider), findsNothing);
-    expect(find.byKey(const Key('room-play-PT')), findsNothing);
-    expect(find.byType(Opacity), findsWidgets);
-  });
+      // A disabled OtoSlider still renders, so drag it to prove it actually
+      // dispatches, not just draws.
+      expect(find.byType(OtoSlider), findsOneWidget);
+      expect(find.byKey(const Key('room-play-PT')), findsNothing);
+      await t.drag(find.byType(OtoSlider), const Offset(40, 0));
+      await t.pumpAndSettle();
+      expect(h.calls.any((c) => c.startsWith('setVolume(PT,')), isTrue);
+      expect(h.calls.any((c) => c.startsWith('setVolumeEnd(PT,')), isTrue);
+      await t.tap(find.byKey(const Key('room-mute-PT')));
+      expect(h.calls, contains('setMute(PT,true)'));
+      expect(find.byType(Opacity), findsWidgets);
+    },
+  );
 
   testWidgets(
-    'offline room with a stale active stream shows no play button or slider',
+    'offline room with a stale active stream shows no play button but keeps its slider',
     (t) async {
       final h = wrap(
         const RoomRow(speakerId: 'OS'),
@@ -77,7 +88,7 @@ void main() {
       await t.pumpWidget(h.widget);
 
       expect(find.byKey(const Key('room-play-OS')), findsNothing);
-      expect(find.byType(OtoSlider), findsNothing);
+      expect(find.byType(OtoSlider), findsOneWidget);
       expect(find.byType(Opacity), findsWidgets);
     },
   );
