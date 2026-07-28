@@ -16,7 +16,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.6.1 | released | **UI: room management** - group editor + room detail |
 | v0.6.2 | released | **UI: settings + states** - settings plus a Home presentation state model |
 | v0.6.3 | released | **UI: responsive** - tablet master-detail, desktop three-pane |
-| v0.6.4 | in progress | **UI: mute + honest failure** - implementation merged; default-vs-session Home layout split remains before release |
+| v0.6.4 | released | **UI: mute + honest failure** - mute controls, command-failure surfacing, recovery from unreachable state |
 | v0.7.0 | planned | **Hardening + polish** - SSDP hardening, cleanup TODOs, dogfooding finds |
 | v1.0   | future | Stable - externally tested, packaged |
 
@@ -106,12 +106,11 @@ Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0
 
 The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.
 
-## v0.6.4 - Mute + honest failure (in progress)
+## v0.6.4 - Mute + honest failure (released)
 
-The v0.6 closer. The main work is implemented on `main`; the version remains
-unreleased until release checks are complete.
+The v0.6 closer.
 
-### Shipped to `main`
+### Shipped
 
 - ✅ **Mute controls.** Per-room mute is available on room cards, rows, and room
   detail; group-master mute is available on group cards and Now Playing.
