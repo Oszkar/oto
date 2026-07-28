@@ -6,8 +6,7 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
-v0.6.4 is in progress. The implemented work below is merged but not yet
-released.
+v0.6.4 is implemented and ready for release.
 
 ### Added
 
@@ -34,6 +33,9 @@ released.
 - Commands to the same target are serialized, preventing an older failed
   request from racing a newer successful one and leaving false unreachable
   state behind.
+- Settings' "Default home layout" now sets only the startup default. The Home
+  header's Cards/Stack toggle changes the current session and no longer
+  overwrites that persisted default.
 
 ### Fixed
 
@@ -49,12 +51,6 @@ released.
   replaced wire performs blocking teardown.
 - Topology seed suppression is time-bounded, and stale group-event filtering
   self-heals if both fast refresh and full rediscovery fail.
-
-### Remaining
-
-- Settings' persisted default Home layout still mirrors the current session's
-  Cards/Stack toggle. Splitting those two states remains the final scoped
-  v0.6.4 item.
 
 ## [0.6.3] - 2026-07-22
 

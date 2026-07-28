@@ -56,6 +56,59 @@ void main() {
     },
   );
 
+  test('current Home layout changes without changing the default', () async {
+    SharedPreferences.setMockInitialValues({'homeLayout': 'cards'});
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [
+        prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    expect(container.read(currentHomeLayoutProvider), HomeLayout.cards);
+
+    container
+        .read(currentHomeLayoutProvider.notifier)
+        .setLayout(HomeLayout.stack);
+
+    expect(container.read(currentHomeLayoutProvider), HomeLayout.stack);
+    expect(
+      PrefsRepository(prefs).homeLayout,
+      HomeLayout.cards,
+      reason: 'the Home toggle is session-only',
+    );
+  });
+
+  test('default applies on the next provider session only', () async {
+    SharedPreferences.setMockInitialValues({'homeLayout': 'cards'});
+    final prefs = await SharedPreferences.getInstance();
+    final repo = PrefsRepository(prefs);
+    final currentSession = ProviderContainer(
+      overrides: [prefsRepositoryProvider.overrideWithValue(repo)],
+    );
+
+    expect(currentSession.read(currentHomeLayoutProvider), HomeLayout.cards);
+
+    await currentSession
+        .read(settingsProvider.notifier)
+        .setHomeLayout(HomeLayout.stack);
+
+    expect(repo.homeLayout, HomeLayout.stack);
+    expect(
+      currentSession.read(currentHomeLayoutProvider),
+      HomeLayout.cards,
+      reason: 'changing the default does not change the current session',
+    );
+    currentSession.dispose();
+
+    final nextSession = ProviderContainer(
+      overrides: [prefsRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(nextSession.dispose);
+    expect(nextSession.read(currentHomeLayoutProvider), HomeLayout.stack);
+  });
+
   test(
     'unknown/legacy stored accent falls back to teal (does not throw)',
     () async {

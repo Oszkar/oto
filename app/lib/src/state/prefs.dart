@@ -92,3 +92,16 @@ class SettingsNotifier extends _$SettingsNotifier {
     } catch (_) {}
   }
 }
+
+/// Home layout for the current app session.
+///
+/// The persisted setting is read once when this provider is first created.
+/// Subsequent Home toggles update only this state, while Settings continues to
+/// manage the default used by the next root provider scope.
+@Riverpod(keepAlive: true)
+class CurrentHomeLayout extends _$CurrentHomeLayout {
+  @override
+  HomeLayout build() => ref.read(settingsProvider).layout;
+
+  void setLayout(HomeLayout layout) => state = layout;
+}

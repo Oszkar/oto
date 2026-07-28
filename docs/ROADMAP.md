@@ -109,7 +109,7 @@ The genuinely-novel work is concentrated in v0.6.0's state architecture; the res
 ## v0.6.4 - Mute + honest failure (in progress)
 
 The v0.6 closer. The main work is implemented on `main`; the version remains
-unreleased until the final scoped item and release checks are complete.
+unreleased until release checks are complete.
 
 ### Shipped to `main`
 
@@ -134,14 +134,10 @@ unreleased until the final scoped item and release checks are complete.
   their generation; stale Rust and Dart consumers are gated out; topology
   refresh is bounded and transactional; and event-pump teardown explicitly
   shuts down the SDK manager before joining oto's pump.
-
-### Remaining before release
-
-- **[#105](https://github.com/Oszkar/oto/issues/105) - default vs. current Home
-  layout.** Split the persisted startup default (Settings) from the session
-  layout (Home header toggle). Both still write the same `homeLayout`
-  preference, so Settings mirrors the live toggle. This remains the final
-  scoped v0.6.4 item.
+- ✅ **[#105](https://github.com/Oszkar/oto/issues/105) - default vs. current
+  Home layout.** Settings persists the startup default, while the Home header
+  toggle changes only the current app session. A new session initializes from
+  the saved default.
 
 ### Explicit non-goals
 
