@@ -35,7 +35,7 @@ flowchart TD
     APP -.ChangeEvent.-> FRB
 ```
 
-Solid arrows are command-direction (UI → FRB → … → speakers); dashed arrows are event-direction (speakers → … → UI). v0.4 added the event path: GENA NOTIFY → SDK reactive layer → `oto-wire` pump thread → `oto-app` StateManager cache + FRB stream → Dart `ChangeEventDto` stream.
+Solid arrows are command-direction (UI → FRB → ... → speakers); dashed arrows are event-direction (speakers → ... → UI). v0.4 added the event path: GENA NOTIFY → SDK reactive layer → `oto-wire` pump thread → `oto-app` StateManager cache + FRB stream → Dart `ChangeEventDto` stream.
 
 ## Crates
 
@@ -95,11 +95,21 @@ sequenceDiagram
     B-->>U: Future resolves
 ```
 
+**Frontend command reconciliation (v0.6.4).** Dart applies volume, mute, and
+transport changes optimistically, then reconciles the FRB `Future`. Commands to
+the same target are chained in dispatch order (different targets may proceed
+independently at this layer), which prevents an older failure from racing a
+newer success. A `CommandError` rolls the current optimistic value back and is
+reported through the keep-alive `commandFailuresProvider`; the app-lifetime
+`CommandFailureListener` renders one non-modal SnackBar per report. `NotFound`
+also invalidates discovery because it means the captured topology identifier is
+stale. The Rust slot still serializes all actual `Wire` calls globally.
+
 ## Concurrency model
 
 `sonos-api` command calls are sync-first at oto's boundary; event subscriptions add an upstream-managed runtime internally, but no async runtime is exposed at the FRB or `Wire` command surface.
 
-Commands are non-sync FRB fns (Dart `Future`) into blocking `sonos_api` SOAP calls. `oto-app` holds its `Mutex<Option<…>>` **locked across the SOAP call** - deliberate: commands are user-initiated and low-frequency; serializing all commands is the LAN-politeness story (no command storms against the user's speakers). Revisit only if v0.4 event threads and commands contend on the lock.
+Commands are non-sync FRB fns (Dart `Future`) into blocking `sonos_api` SOAP calls. `oto-app` holds its `Mutex<Option<...>>` **locked across the SOAP call** - deliberate: commands are user-initiated and low-frequency; serializing all commands is the LAN-politeness story (no command storms against the user's speakers). Revisit only if v0.4 event threads and commands contend on the lock.
 
 No async/await in oto's own surface code. `sonos-api` uses async internally, and v0.4's reactive event stack pulls a tokio runtime transitively via the upstream event manager. The architectural rule is that commands stay sync/blocking at the `Wire` boundary and event delivery is pumped by dedicated threads; tokio in the lockfile is not itself a violation.
 
@@ -168,11 +178,25 @@ pub trait Wire {
 
 `DiscoverySnapshot` is built from lean identity types (`SpeakerIdentity` / `GroupIdentity`).
 
-**Discovery.** `oto-wire` runs its own multi-interface SSDP to collect responder IPs, then issues a direct `sonos_api` `GetZoneGroupState` SOAP call to any responding speaker to retrieve the full household topology. The snapshot is built from ZoneGroupTopology members; `<Satellite Invisible="1">` children are folded into their primary speaker and never surfaced as standalone players (the v0.1 bonded-as-standalone bug is fixed by construction); `<VanishedDevices>` are ignored. The direct discovery/control path uses `sonos-api =0.5.2` (+ `quick-xml =0.31.0` for DIDL-Lite); v0.4 events add the upstream reactive state/event crates. Protocol detail: [sonos-notes.md § SSDP discovery](sonos-notes.md#ssdp-discovery), [§ Topology](sonos-notes.md#topology--getzonegroupstate-soap).
+**Discovery.** `oto-wire` runs its own multi-interface SSDP to collect responder IPs, then issues a direct `sonos_api` `GetZoneGroupState` SOAP call to any responding speaker to retrieve the full household topology. The snapshot is built from ZoneGroupTopology members; `<Satellite Invisible="1">` children are folded into their primary speaker and never surfaced as standalone players (the v0.1 bonded-as-standalone bug is fixed by construction); `<VanishedDevices>` are ignored. The direct discovery/control path uses `sonos-api =0.5.2` (+ `quick-xml =0.31.0` for DIDL-Lite); v0.4 events add the upstream reactive state/event crates. Protocol detail: [sonos-notes.md § SSDP discovery](sonos-notes.md#ssdp-discovery), [§ Topology](sonos-notes.md#topology---getzonegroupstate-soap).
 
 **Playback control.** `oto-wire` holds an interior-mutable id→addr / group→coordinator / speaker→coordinator cache (populated by `discover()`). Commands issue direct `sonos_api::SonosClient::execute_enhanced(ip, op)` SOAP calls. `quick-xml` is used for DIDL-Lite track-metadata parsing.
 
-**Live events (v0.4).** `oto-wire` runs a dedicated pump thread per active wire (`crates/wire/src/events.rs`). The pump wraps the upstream SDK's `StateManager` + `SonosEventManager` + `EventBroker` stack (`sonos-sdk-state` / `sonos-sdk-event-manager` / `sonos-sdk-stream` / `sonos-sdk-callback-server`, all pinned `=0.5.2`), registers a per-property `watch_property_with_subscription` for every known speaker, and converts each upstream property change into an `oto_core::ChangeEvent` that it sends down an unbounded `std::sync::mpsc` channel. The pump thread terminates cleanly when the wire is dropped via an `Arc<AtomicBool>` stop flag (the SDK's `StateManager::Clone` fans out independent senders, so dropping a clone does not close the channel - the stop flag is load-bearing).
+**Live events (v0.4).** `oto-wire` runs a dedicated pump thread per active wire
+(`crates/wire/src/events.rs`). The pump wraps the upstream SDK's `StateManager` +
+`SonosEventManager` + `EventBroker` stack (`sonos-sdk-state` /
+`sonos-sdk-event-manager` / `sonos-sdk-stream` /
+`sonos-sdk-callback-server`, all pinned `=0.5.2`), registers a per-property
+`watch_property_with_subscription` for every known speaker, and converts each
+upstream property change into an `oto_core::ChangeEvent` that it sends down an
+unbounded `std::sync::mpsc` channel. Dropping the wire performs two distinct
+shutdown steps. First, `EventPump::Drop` explicitly calls
+`SonosEventManager::shutdown()` to break the SDK worker's self-owned `Arc` cycle
+and let its reactive stack release asynchronously. It then sets an
+`Arc<AtomicBool>` stop flag and joins oto's pump thread within one polling
+interval. Both steps are load-bearing: `StateManager::Clone` fans out independent
+senders, so dropping a clone neither closes the pump channel nor asks the SDK
+worker to stop.
 
 ```mermaid
 sequenceDiagram
@@ -194,11 +218,38 @@ The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when
 
 **Live events (v0.5 / v0.5.1).** Additions on the same single FRB stream:
 
-- **Topology events.** The pump also registers a per-speaker `GroupMembership` watch (ZoneGroupTopology is a *service*, not a watchable property - the change surfaces via the speaker-scoped `GroupMembership` property; see [sonos-notes § Topology change events](sonos-notes.md#topology-change-events--how-regrouping-surfaces-p0c-finding-v05)). A regroup → payload-less `ChangeEvent::TopologyChanged`; the Dart `TopologyController` (implemented + unit-tested; the v0.6 home shell now watches it) debounces 250 ms then refreshes - **v0.5.1** via a no-SSDP fast `refresh_topology()` re-discover (a full ~3-5 s SSDP re-discover in v0.5), with a full re-discover as the error fallback. Two pump-side guards make this safe: (1) the **first** `GroupMembership` per speaker, when it arrives inside a short post-spawn *seed window*, is the subscribe *seed* and is suppressed - otherwise seed → re-discover → new pump → new seed would loop forever; a first event arriving *after* the window is treated as a real regroup (its seed was dropped or delayed), so a missed seed can't permanently swallow a later regroup; (2) once a real regroup is seen the pump marks its (now-stale, frozen-at-spawn) coordinator→group routing **dirty** and drops group-addressed `Playback`/`Track`/`GroupVolume`/`GroupMute` until the pump is rebuilt by re-discover. **Resolved in v0.5.1:** `refresh_topology` is a full wire replacement (a fresh seeded wire via `discover_with`), so the new pump starts with clean routing + a clean `TopologyFilter` - no in-place mutation of the frozen maps. The Dart re-subscribe is forced via a `wireGenerationProvider` invalidation even when the new topology is value-equal to the old (FRB `Topology` has value equality, which would otherwise suppress the provider transition).
-- **Group volume/mute events (v0.5.1).** The pump also watches `GroupVolume` / `GroupMute` (GroupRenderingControl, `Scope::Group`, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}`. These are read from the SDK's group-property store via `get_group_property(GroupId)` - NOT the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike--hardware-confirmed-2026-06-04)).
+- **Topology events.** The pump also registers a per-speaker
+  `GroupMembership` watch. ZoneGroupTopology is a *service*, not a watchable
+  property; the change surfaces through the speaker-scoped `GroupMembership`
+  property (see
+  [sonos-notes § Topology change events](sonos-notes.md#topology-change-events---how-regrouping-surfaces-v05)).
+  A regroup produces a payload-less `ChangeEvent::TopologyChanged`; the Dart
+  `TopologyController` debounces 250 ms, then refreshes via the v0.5.1
+  no-SSDP `refresh_topology()` path, with full re-discovery as the fallback.
+  Two pump-side guards make this safe:
+
+  1. The first `GroupMembership` per speaker inside the short post-spawn seed
+     window is suppressed. Otherwise seed → re-discover → new pump → new seed
+     would loop forever. A first event after the window is treated as a real
+     regroup, so a missed seed cannot permanently swallow a later change.
+  2. A real regroup marks the pump's frozen coordinator→group routing `dirty`
+     and temporarily drops group-addressed
+     `Playback`/`Track`/`GroupVolume`/`GroupMute` events. Normally the debounced
+     fast refresh, or its full re-discover fallback, installs a fresh pump with
+     clean routing and clears `dirty`. If both paths fail, `DIRTY_TIMEOUT`
+     clears `dirty` after 60 s (checked lazily on the next event), bounding
+     suppression and accepting possibly stale routing rather than permanent
+     silence.
+
+  `refresh_topology` replaces the complete wire through `discover_with`, so the
+  new pump starts with a clean `TopologyFilter`; it never mutates the old
+  pump's frozen maps in place. Dart forces the event-stream re-subscribe by
+  invalidating `wireGenerationProvider`, even when the refreshed FRB
+  `Topology` is value-equal to the old value.
+- **Group volume/mute events (v0.5.1).** The pump also watches `GroupVolume` / `GroupMute` (GroupRenderingControl, `Scope::Group`, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}`. These are read from the SDK's group-property store via `get_group_property(GroupId)` - NOT the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike---hardware-confirmed-2026-06-04)).
 - **Subscription health.** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
 
-## Frontend shell (responsive, v0.6.3)
+## Frontend shell (responsive, v0.6.3-v0.6.4)
 
 The Flutter shell is responsive over the same providers (no backend change). Layout keys off three width tiers from one helper - `LayoutTier` in `app/lib/src/state/breakpoints.dart`, read from `MediaQuery` so `OtoScaffold` and the leaf widgets share a single source of truth: compact (`<840`), tablet (`840-1200`), desktop (`>=1200`).
 
@@ -206,6 +257,19 @@ The Flutter shell is responsive over the same providers (no backend change). Lay
 - **Selection.** `selectedSourceProvider` (the explicit pick) + `resolvedSourceProvider` (default = first active source, self-healing when a regroup drops the chosen id) drive the pane. On wide, tapping a room/group selects it in place; on phone the existing route pushes are kept. A single tier-aware `nav.dart` helper makes that choice per width.
 - **Routing architecture decision.** Imperative routing (`Navigator.of(context).push`) is used for phone detail screens. Using `go_router` was deliberately decided against due to refactoring complexity, YAGNI (no deep linking or web browser history requirements), and to keep the codebase simple. Dynamically popped routes handle dynamic window resizing instead.
 - **`*Body` / `*Screen` split.** Detail screens split into a chrome-free `*Body` (embeddable in the pane or a dialog) and a thin `*Screen` route wrapper for phone. On wide, Now Playing renders in the pane, Settings and the group editor open as dialogs, and Room detail is folded away - a wide room tap selects its group into the pane, so the room screen is unreachable there.
+- **Mute surfaces (v0.6.4).** One shared `MuteButton` fronts the existing
+  per-speaker and group-master command paths wherever a volume control appears:
+  room cards/rows/detail, group cards, and Now Playing. It consumes the
+  event-fed nullable mute state and follows the same reachability gate as the
+  adjacent volume control.
+- **Unreachable recovery (v0.6.4).** `HomeAllUnreachable` keeps the cached
+  household visible but adds a rescan affordance. A user-requested scan clears
+  carried health errors; automatic topology refresh preserves them. UI copy
+  says "Unreachable" because command-time network failure cannot establish
+  device power state.
+- **Room options on wide (v0.6.4).** A solo room shown in the persistent Now
+  Playing pane exposes the shared `RoomOptionsButton`; group controls no longer
+  disappear merely because Room detail is folded away.
 - **Window bounds.** On desktop the window's size/position persists across launches via `window_manager` (best-effort, desktop-guarded; a no-op on Android).
 
 ## Scope
@@ -217,6 +281,16 @@ The Flutter shell is responsive over the same providers (no backend change). Lay
 ## Known constraints
 
 - **Watch-after-fetch event suppression (resolved in v0.4).** Upstream change-detection suppresses the initial `.watch()` notification if a prior `.fetch()` already cached the same value. v0.4 sidesteps this by using `.watch()` itself as the reachability/seed probe - the initial SUBSCRIBE NOTIFY populates the cache and any code path that wants a current value reads from `StateManager` (which the pump thread fills). The fetch-then-subscribe pattern is now an anti-pattern in `oto-wire`; the production wire only calls `watch_property_with_subscription`. Detail: [sonos-notes.md § Event model](sonos-notes.md#event-model-v04-load-bearing).
-- **`manager.initialize(topology)` is non-optional** for AVTransport routing. Without it, `add_devices` + `register_watches` succeed without error but per-group Playback/Track NOTIFYs route to the wrong worker and silently disappear. `oto-wire`'s pump always calls `initialize(topology)` between `add_devices` and `register_watches`. The SDK's `StateManager::Clone` fans out independent `mpsc::Sender`s - dropping a clone does not close the channel; the pump's `Drop` uses an `Arc<AtomicBool>` stop flag + `recv_timeout` polling so it can shut down without depending on sender-close semantics.
+- **`manager.initialize(topology)` is non-optional** for AVTransport routing.
+  Without it, `add_devices` + `register_watches` succeed without error but
+  per-group Playback/Track NOTIFYs route to the wrong worker and silently
+  disappear. `oto-wire`'s pump always calls `initialize(topology)` between
+  `add_devices` and `register_watches`. Teardown is also explicit:
+  `EventPump::Drop` calls `SonosEventManager::shutdown()` because the SDK worker
+  retains its own `Arc`, then stops oto's pump with an `Arc<AtomicBool>` flag +
+  `recv_timeout` polling and joins it. The SDK may finish draining already
+  queued subscription work after `EventPump::Drop` returns; the teardown
+  regression test verifies that its final strong references are eventually
+  released.
 - **Android `MulticastLock` (resolved in v0.5).** SSDP multicast on the Android *release* build needs a held `WifiManager.MulticastLock` (perms are declared in the manifest); debug builds happen to work because the developer build flow keeps the radio active. A Kotlin `MulticastLockHandler` (over the `me.oszkar.oto/multicast_lock` MethodChannel) is now held around `discover()`'s SSDP window, acquired/released on the Dart side in `discoveryProvider` - best-effort (a lock failure doesn't abort discovery). v0.4 GENA events are **unicast TCP** and work without the lock; it is the SSDP in `discover()` (and any re-discover) that needs it.
 - **SSDP responses are trusted (accepted risk, v0.5).** Discovery accepts any datagram carrying a `LOCATION` header - it does not validate the status line / `ST`, match the LOCATION host to the responder's source IP, or cap the candidate count. A hostile device on the user's LAN could therefore redirect discovery's follow-up `GetZoneGroupState` SOAP to an arbitrary host (port 1400 only). LAN-local and low-impact: a non-Sonos host fails to parse and is skipped, and `discover()` stops at the first responder that returns a parseable topology. Hardening (200 + `ST` + sender-IP match + candidate cap) is tracked for v0.7 (the hardening + polish bucket) - see the SSDP-hardening `TODO` in `native/crates/wire/src/ssdp.rs`.

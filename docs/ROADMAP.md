@@ -16,7 +16,7 @@ Milestone status and forward plan. Sibling docs: [ARCHITECTURE.md](ARCHITECTURE.
 | v0.6.1 | released | **UI: room management** - group editor + room detail |
 | v0.6.2 | released | **UI: settings + states** - settings plus a Home presentation state model |
 | v0.6.3 | released | **UI: responsive** - tablet master-detail, desktop three-pane |
-| v0.6.4 | planned | **UI: mute + honest failure** - the missing mute controls, command-failure surfacing, and a recovery path out of the unreachable state |
+| v0.6.4 | in progress | **UI: mute + honest failure** - implementation merged; default-vs-session Home layout split remains before release |
 | v0.7.0 | planned | **Hardening + polish** - SSDP hardening, cleanup TODOs, dogfooding finds |
 | v1.0   | future | Stable - externally tested, packaged |
 
@@ -29,7 +29,16 @@ Reactive state via GENA: Rust → Dart event stream, no oto-owned polling. **Pro
 ### Shipped
 
 - `StateManager` in `oto-app` caching per-speaker (Volume / Mute) and per-group (Playback / Track) properties. Mutated by `apply_event_at_generation` from the FRB-worker consumer loop in `api.rs::subscribe_change_events`; read by the cache-backed `oto-app::speaker_state`.
-- One multiplexed event-pump thread per active wire in `oto-wire` (not per-speaker, per the [event-model design note](sonos-notes.md#opt-in-via-watch--one-multiplexed-pump-thread)). Per-property watches via `watch_property_with_subscription`; coordinator-only AVTransport filter so Playback events carry a `GroupId`. Drop-safe via `Arc<AtomicBool>` stop flag + `recv_timeout` polling - the SDK's `StateManager::Clone` fans out independent senders, so sender-close is not a viable shutdown signal.
+- One multiplexed event-pump thread per active wire in `oto-wire` (not
+  per-speaker, per the
+  [event-model design note](sonos-notes.md#opt-in-via-watch---one-multiplexed-pump-thread)).
+  Per-property watches via `watch_property_with_subscription`;
+  coordinator-only AVTransport filter so Playback events carry a `GroupId`.
+  Drop-safe through two explicit steps: call
+  `SonosEventManager::shutdown()` to break the SDK worker's self-owned `Arc`
+  cycle, then stop and join oto's pump via an `Arc<AtomicBool>` flag +
+  `recv_timeout` polling. `StateManager::Clone` fans out independent senders,
+  so sender-close is not a viable signal for either step.
 - Single FRB stream surface `subscribe_change_events(sink: StreamSink<ChangeEventDto>)` with `ChangeEventDto::{Volume, Mute, Playback, Track, SubscriptionError, SubscriptionRecovered}`. Riverpod `subscribeChangeEventsProvider` depends on `discoveryProvider` and auto-rebuilds on re-discovery; the FRB stream completes cleanly when the wire is replaced.
 - `Wire::speaker_state` impl swaps SOAP-per-call → `StateManager` cache read. The `Wire` *signature* is unchanged; the trait method is kept for hardware-baseline reads (used by `live_events` tests) and `MockWire` unit tests, but `oto-app::speaker_state` no longer dispatches it in production.
 - Generation token (`AtomicU64`) on `StateManager` makes the `discover_with` wire replacement race-free: bump-and-clear runs before slot swap, OLD-wire consumer's in-flight applies fail the gen check and no-op against the freshly-cleared cache.
@@ -97,21 +106,42 @@ Shipped as phased, independently-runnable sub-releases (matching the v0.5 → v0
 
 The genuinely-novel work is concentrated in v0.6.0's state architecture; the rest is faithful translation of an already-complete visual design.
 
-## v0.6.4 - Mute + honest failure (planned)
+## v0.6.4 - Mute + honest failure (in progress)
 
-The v0.6 closer: one release, no new capability-layer work, everything below already backed by the shipped `Wire` surface. Two themes.
+The v0.6 closer. The main work is implemented on `main`; the version remains
+unreleased until the final scoped item and release checks are complete.
 
-**Mute - an oversight, not a deferral.** Mute is the one capability that is plumbed end-to-end and rendered nowhere. `set_mute` / `set_group_mute` shipped in v0.2 / v0.5.1, `ChangeEventDto::{Mute, GroupMute}` flow through `household_reducer.dart`, `RoomState.muted` and `GroupState.groupMuted` are in the model, and `commands.dart` has optimistic setters with tests - but `app/lib/src/ui` contains no mute control at all (the showcase's `setMute` fixture is a no-op stub). Unlike shuffle/repeat/seek/queue/EQ, nothing about mute is deferred-with-its-backend; it simply fell off the phase list. Add the per-room and group-master controls that the existing state already feeds.
+### Shipped to `main`
 
-**Honest failure + a way out.** Today a failed command is silent - there is no `SnackBar` anywhere in the app, so an optimistic update just reverts and the control bounces back with no explanation. That compounds into the trap in [#104](https://github.com/Oszkar/oto/issues/104): a command failure marks a speaker offline, offline disables its controls, and a successful command is the only thing that clears the flag - so the recovery path disables itself. Because cached topology still counts as a successful discovery, the full-screen discovery-error state and its `Scan network` button never appear either, and every speaker can end up unreachable with no rescan affordance on screen.
+- ✅ **Mute controls.** Per-room mute is available on room cards, rows, and room
+  detail; group-master mute is available on group cards and Now Playing.
+  Controls use the existing optimistic command/event path, dim muted sliders,
+  and retain accessible labels.
+- ✅ **Honest command failures.** A failed optimistic command rolls back and
+  reports a non-modal SnackBar through the app-lifetime
+  `commandFailuresProvider` listener. Messages distinguish network
+  unreachability, a Sonos rejection, and a stale topology identifier.
+- ✅ **A way out of unreachable state.** User-requested scans clear carried
+  health errors, and Home presents a rescan affordance when every cached room is
+  unreachable. Automatic topology refreshes preserve health state rather than
+  falsely declaring recovery.
+- ✅ **Honest device wording.** UI copy says "Unreachable," not "Powered off":
+  a failed network command cannot reveal the speaker's power state.
+- ✅ **[#129](https://github.com/Oszkar/oto/issues/129) - room options on
+  wide.** A solo room in the persistent Now Playing pane exposes the shared
+  `RoomOptionsButton`, so grouping remains reachable without resizing.
+- ✅ **Pipeline lifecycle hardening.** Wire receivers are paired atomically with
+  their generation; stale Rust and Dart consumers are gated out; topology
+  refresh is bounded and transactional; and event-pump teardown explicitly
+  shuts down the SDK manager before joining oto's pump.
 
-Scoped items:
+### Remaining before release
 
-- **Surface command failures.** A non-silent, non-modal signal when a command fails, so the reverted optimistic update is explained rather than mysterious.
-- **Never disable the way out.** An unreachable room keeps whatever control can clear its own health flag, and a rescan is always reachable when every controllable speaker is unreachable - not gated on the global discovery state.
-- **Stop over-claiming.** `Powered off` is a claim the app cannot support - the only signal behind it is a command that failed with a network error. Reword to what is actually known (unreachable). **Genuinely distinguishing power state from network unreachability needs backend and is explicitly out of scope** - recorded below.
-- **[#129](https://github.com/Oszkar/oto/issues/129) - room options on wide.** v0.6.3 folded Room detail away on wide, taking its join/leave-group kebab with it; a wide-window user cannot ungroup a solo room without resizing. Needs one design call first (kebab in the pane header vs. embedding a chrome-free `RoomDetailBody`).
-- **[#105](https://github.com/Oszkar/oto/issues/105) - default vs. current Home layout.** Split the persisted startup default (Settings) from the session layout (Home header toggle); today both write the same `homeLayout` pref, so Settings mirrors the live toggle. Already carried as a known issue in the 0.6.2 changelog.
+- **[#105](https://github.com/Oszkar/oto/issues/105) - default vs. current Home
+  layout.** Split the persisted startup default (Settings) from the session
+  layout (Home header toggle). Both still write the same `homeLayout`
+  preference, so Settings mirrors the live toggle. This remains the final
+  scoped v0.6.4 item.
 
 ### Explicit non-goals
 

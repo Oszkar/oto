@@ -66,7 +66,7 @@ test ... ok
 
 ```text
 double_discover_does_not_hang ........................ ok (7.1 s)
-operator_play_pause_emits_per_group_event ............ ok - Playback …:3426502567 → Paused (per-group GroupId), 4.6 s
+operator_play_pause_emits_per_group_event ............ ok - Playback ...:3426502567 → Paused (per-group GroupId), 4.6 s
 operator_volume_change_emits_event ................... ok - Volume RINCON_542A1B9463A801400 → 6 (baseline 5), 6.9 s
 renewal_cycle_observation ............................ ok (1713 s ≈ 28.5 min)
   events_seen=44; renewals fired clean ~1542 s:

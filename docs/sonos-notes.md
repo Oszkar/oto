@@ -62,7 +62,7 @@ A bonded HT/stereo set surfaces as **one** `ZoneGroupMember` (the primary) with 
 
 **Surface only the primary.** Satellites share the primary's `RoomName`, are not standalone players, and are not separately commandable. This is also what fixed the v0.1 bug of bonded surrounds appearing as standalone players - because v0.1 used raw SSDP device descriptions; v0.3+ uses topology, which folds them by construction.
 
-The `HTSatChanMapSet` attribute encodes channel role (e.g. `…BE01400:RR`) for surround layout. Not surfaced; revisit only if a UI shows surround layout.
+The `HTSatChanMapSet` attribute encodes channel role (e.g. `...BE01400:RR`) for surround layout. Not surfaced; revisit only if a UI shows surround layout.
 
 ### Vanished devices
 
@@ -78,7 +78,7 @@ In all hardware runs the coordinator UUID appeared in the member list. Defensive
 
 ### Identifiers
 
-- `SpeakerId` = bare `RINCON_…` (no `uuid:` prefix, unlike the device-description UDN path).
+- `SpeakerId` = bare `RINCON_...` (no `uuid:` prefix, unlike the device-description UDN path).
 - `GroupId` = `RINCON_<coord_uuid>:N`, e.g. `RINCON_542A1B9463A801400:3426502563`. `N` is opaque; the household assigns it.
 - App-side regrouping **changes `N`**. Stale `GroupId` → `WireError::NotFound` (the existing precondition error). This is the freshness contract: caches are populated by `discover()` only; commands using a stale ID error out cleanly.
 
@@ -108,10 +108,10 @@ Operation table (hardware-verified - Run 1 stopped/empty queue, Run 2 playing Sp
 
 | Operation | Builder | Response type | Observed (Run 1 / Run 2) |
 |---|---|---|---|
-| `play` | `play(speed: String)` | `()` | `Err(NetworkError(…500))` / `Ok(())` |
-| `pause` | `pause()` | `()` | `Err(NetworkError(…500))` / `Ok(())` |
-| `next` | `next()` | `()` | `Err(NetworkError(…500))` / `Ok(())` |
-| `previous` | `previous()` | `()` | `Err(NetworkError(…500))` / `Err(NetworkError(…500))` |
+| `play` | `play(speed: String)` | `()` | `Err(NetworkError(...500))` / `Ok(())` |
+| `pause` | `pause()` | `()` | `Err(NetworkError(...500))` / `Ok(())` |
+| `next` | `next()` | `()` | `Err(NetworkError(...500))` / `Ok(())` |
+| `previous` | `previous()` | `()` | `Err(NetworkError(...500))` / `Err(NetworkError(...500))` |
 | `get_transport_info` | `get_transport_info()` | `GetTransportInfoResponse { current_transport_state, current_transport_status, current_speed }` | `"STOPPED","OK","1"` / `"PLAYING","OK","1"` |
 | `get_position_info` | `get_position_info()` | `GetPositionInfoResponse { track, track_duration, track_meta_data, track_uri, rel_time, abs_time, rel_count, abs_count }` | all-zero/empty / DIDL - see below |
 | `get_volume` | `get_volume(channel: String)` | `GetVolumeResponse { current_volume: u8 }` | `33` / `21` |
@@ -155,7 +155,9 @@ This means we cannot cleanly distinguish "device reached, rejected command" from
 | `DeviceError(msg)` | - | `Backend(msg)` |
 | `SubscriptionError(msg)` | - | `Network(msg)` |
 
-**Fragile.** Depends on `sonos-api`'s error message format remaining stable. The call site carries a `TODO(v0.X): replace the "status code" string-sniff with structured error if sonos-api gains one`. Don't paper over it silently.
+**Fragile.** Depends on `sonos-api`'s error message format remaining stable. The
+call site carries a `TODO(v0.7): replace the "status code" string-sniff with
+structured error if sonos-api gains one`. Don't paper over it silently.
 
 ## DIDL-Lite track metadata
 
@@ -192,7 +194,7 @@ Parser: `oto-wire::control::parse_track_didl(xml: &str) -> Option<oto_core::Trac
 | `<upnp:albumArtURI>` text | namespace `upnp:` | `art_uri: Option<String>` |
 | `<res>` text content | entity-unescape `&amp;`→`&` | `uri: Option<String>` |
 | `<res duration="H:MM:SS">` attribute | parsed to `Duration` | `duration: Option<Duration>` |
-| `<item id="…">` attribute | treat `-1` as absent | `id: Option<TrackId>` |
+| `<item id="...">` attribute | treat `-1` as absent | `id: Option<TrackId>` |
 | (not present in DIDL) | - | `track_number: None` |
 
 Missing fields → `None`. Empty/blank `track_meta_data` → don't attempt parse, `current_track: None`.
@@ -252,7 +254,7 @@ LAN-politeness cost of polling: ~0.5 events/sec/playing-speaker. Trivial in abso
 UPnP `LastChange` semantics: each service bundles all changed properties into one NOTIFY's `<LastChange>` element. Observed bundles:
 
 - **RenderingControl** NOTIFY: Volume (Master / LF / RF), Mute (Master / LF / RF), Bass, Treble, Loudness, OutputFixed, SpeakerSize, SubGain, SubCrossover.
-- **AVTransport** NOTIFY: TransportState, CurrentTrack, CurrentTrackURI, CurrentTrackDuration, CurrentTrackMetaData (DIDL-Lite), CurrentPlayMode, NumberOfTracks, CurrentSection, …
+- **AVTransport** NOTIFY: TransportState, CurrentTrack, CurrentTrackURI, CurrentTrackDuration, CurrentTrackMetaData (DIDL-Lite), CurrentPlayMode, NumberOfTracks, CurrentSection, ...
 
 If a raw-callback-server implementation is ever written, decompose one NOTIFY into N typed property events before emitting to the rest of the stack.
 
@@ -269,7 +271,7 @@ SEQ: <n>
 
 <e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
   <e:property>
-    <LastChange>&lt;Event …&gt;&lt;InstanceID val="0"&gt;…&lt;/Event&gt;</LastChange>
+    <LastChange>&lt;Event ...&gt;&lt;InstanceID val="0"&gt;...&lt;/Event&gt;</LastChange>
   </e:property>
 </e:propertyset>
 ```
@@ -339,7 +341,15 @@ em.ensure_service_subscribed(speaker_ip, Volume::SERVICE)?;
 Non-obvious SDK detail with no upstream README. `StateManager` implements `Clone`, and cloning produces a manager whose event channel uses an **independent** `mpsc::Sender` - not a shared `Arc<Sender>`. Two consequences:
 
 1. **Dropping a clone does not close the channel.** The channel only closes when *every* outstanding clone is dropped. This makes "sender-close as shutdown signal" impossible for any pump thread that holds its own clone of the manager.
-2. **Pump-thread shutdown must be out-of-band.** v0.4's pump in `oto-wire::events` uses `Arc<AtomicBool>` + `recv_timeout(POLL_INTERVAL)` so a parent-side `Drop` can flip the flag and the pump exits at the next poll boundary. An earlier design held a "keepalive" manager clone and expected dropping it to close the pump's channel - that broke the second `discover_with` in a row (the pump thread was self-deadlocked, waiting on its own sender clone to close).
+2. **Pump-thread shutdown must be out-of-band and two-stage.** The pump in
+   `oto-wire::events` first calls `SonosEventManager::shutdown()` to break the
+   SDK worker's self-owned `Arc` cycle, then flips an `Arc<AtomicBool>` stop flag
+   and joins oto's thread after its next `recv_timeout(POLL_INTERVAL)` boundary.
+   Dropping manager clones alone does neither job. An earlier design held a
+   "keepalive" clone and expected sender-close to stop the pump; that
+   self-deadlocked on the second `discover_with`. A later version stopped only
+   oto's thread and leaked the SDK worker; v0.6.4 fixed that second lifecycle
+   hole with explicit SDK shutdown.
 
 Verified in the SDK source around `state.rs:855` at the time of v0.4 implementation. If the SDK pin moves off `=0.5.2`, re-verify this invariant - `Clone` semantics aren't part of the SDK's public contract.
 
@@ -365,13 +375,19 @@ Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe -
 
 **Seed NOTIFY on subscribe (load-bearing).** The subscription emits one `group_membership` event **per speaker at startup, before any user action** - the same "the initial SUBSCRIBE NOTIFY *is* the seed" behaviour the property events have (see § Cold-start). In the hardware run, 2 of the observed events were these startup seeds (they arrived *after* the probe's 3 s drain window, so seed latency for `GroupMembership` can exceed 3 s - consistent with § "Per-speaker seed NOTIFY behavior is non-uniform"); the rest were the actual regroup.
 
-  **Outcome (shipped).** `subscribe_topology` runs inside `discover_with` right after `discover()`, so each speaker's subscription emits its seed `group_membership` almost immediately. Rather than let those seeds drive a redundant post-discovery `refresh_topology()`, the **pump suppresses the first `group_membership` per speaker** (`TopologyFilter` in `oto-wire/src/events.rs`). This is not merely an optimisation: a `TopologyChanged` triggers a full re-discover → new pump → fresh seeds, so an *un*-suppressed seed would loop forever. The seed therefore never reaches Dart and no redundant refresh is scheduled.
+  **Outcome (shipped, refined in v0.6.4).** `subscribe_topology` runs inside
+  `discover_with` right after `discover()`. `TopologyFilter` suppresses the
+  first `group_membership` per speaker only inside a bounded five-second seed
+  window. That prevents the seed → rediscover → new seed loop, while a
+  first-ever membership event arriving after the window is treated as a real
+  regroup rather than swallowed forever. Once a real regroup makes the pump's
+  frozen group-routing maps stale, group-addressed events are dropped until a
+  fresh pump is installed; that dirty state also has a bounded self-heal so
+  failed fast-refresh and rediscovery cannot suppress group events for the
+  wire's remaining lifetime. The stale-`GroupId` → `WireError::NotFound`
+  rediscovery path remains the final fallback.
 
-  **Known limitation (seed vs. real regroup).** Because the *first* `group_membership` per speaker is always treated as the seed, a real regroup that lands before a given speaker's seed is swallowed *for that speaker* - and seed latency for `GroupMembership` can exceed 3 s (above). In practice a regroup fires on multiple speakers, so an already-seeded speaker still forwards the change and a regroup is rarely missed wholesale; the stale-`GroupId` → `NotFound` fallback (below) covers the residual. An authoritative post-subscribe topology re-confirm (compare the first membership event against the discovered topology) is a candidate refinement for v0.6.
-
-**Fallback if this ever goes quiet:** the v0.4 stale-`GroupId` → `WireError::NotFound` contract still holds; the UI re-discovers on `NotFound`. Degraded UX, not broken.
-
-### Reactive event stack: reliability (settled through v0.5.1)
+### Reactive event stack: reliability evidence through v0.5.1
 
 The v0.3-era notes flagged `sonos-state` / `sonos-stream` / `sonos-event-manager` as the only known live-correctness concern (intermittent `position` updates, no upstream hardware CI). It did not pan out:
 
@@ -439,11 +455,11 @@ To make speaker X join coordinator C's group: `av_transport::set_av_transport_ur
 
 ### Break / leave - `BecomeCoordinatorOfStandaloneGroup`
 
-`av_transport::become_coordinator_of_standalone_group()` (no args) on **the leaving speaker's** IP. Returns a **structured** response `{ delegated_group_coordinator_id, new_group_id }` (NOT `()`). Sent to the **coordinator** of a 2-member group (Kitchen) → OK, `delegated_group_coordinator_id=Living Room`, `new_group_id=…:386373683`: the leaver delegates the old group's coordination to a remaining member and forms its own new standalone group. **`leave_group(speaker)` is uniform** - same primitive whether or not the speaker coordinates; firmware delegates coordination; no oto-side branch. The 3+-member re-election path is firmware-handled and untested on this 2-zone LAN.
+`av_transport::become_coordinator_of_standalone_group()` (no args) on **the leaving speaker's** IP. Returns a **structured** response `{ delegated_group_coordinator_id, new_group_id }` (NOT `()`). Sent to the **coordinator** of a 2-member group (Kitchen) → OK, `delegated_group_coordinator_id=Living Room`, `new_group_id=...:386373683`: the leaver delegates the old group's coordination to a remaining member and forms its own new standalone group. **`leave_group(speaker)` is uniform** - same primitive whether or not the speaker coordinates; firmware delegates coordination; no oto-side branch. The 3+-member re-election path is firmware-handled and untested on this 2-zone LAN.
 
 ### ⚠ Topology settle latency (load-bearing for the refresh design)
 
-The probe's **immediate** post-BCOS `GetZoneGroupState` re-poll returned a **transitional** state (old group `…682`, coordinator flipped to Living Room, Kitchen still listed - the split had not propagated). The post-JOIN re-poll happened to catch the settled state; the post-leave one did not. **Lesson: do not trust an immediate post-mutation topology re-pull.** Drive the view refresh off the settled `GroupMembership` event (debounced 250 ms), which fires after the household settles. Consequence for v0.5.1: a Dart-side *self-triggered* refresh right after a form/break command would race the settle - so form/break relies on the existing topology-event path instead (the mutation fires `GroupMembership` NOTIFYs exactly like a Sonos-app regroup). Integration/live tests must assert the **settled** topology by **polling `refresh_topology` until the expected state** (with a generous cap), never an immediate re-poll and never a single *fixed* delay - settle latency is variable: a 3 s fixed wait flaked once on real hardware (`leave` not yet propagated) and passed on retry, which is why `live_grouping.rs` polls.
+The probe's **immediate** post-BCOS `GetZoneGroupState` re-poll returned a **transitional** state (old group `...682`, coordinator flipped to Living Room, Kitchen still listed - the split had not propagated). The post-JOIN re-poll happened to catch the settled state; the post-leave one did not. **Lesson: do not trust an immediate post-mutation topology re-pull.** Drive the view refresh off the settled `GroupMembership` event (debounced 250 ms), which fires after the household settles. Consequence for v0.5.1: a Dart-side *self-triggered* refresh right after a form/break command would race the settle - so form/break relies on the existing topology-event path instead (the mutation fires `GroupMembership` NOTIFYs exactly like a Sonos-app regroup). Integration/live tests must assert the **settled** topology by **polling `refresh_topology` until the expected state** (with a generous cap), never an immediate re-poll and never a single *fixed* delay - settle latency is variable: a 3 s fixed wait flaked once on real hardware (`leave` not yet propagated) and passed on retry, which is why `live_grouping.rs` polls.
 
 ### Group volume / mute - `GroupRenderingControl`
 

@@ -87,15 +87,3 @@ This is **not on oto's roadmap.** oto is explicitly bounded at v1.0 - maintenanc
 That said, **the spike-callback-server.rs binary is unintentionally a working starting point** for anyone who wants to build a Path-B Rust library (call it `sonos-events-rs` or whatever): add renewal logic, write the doubly-escaped `LastChange` XML parser, add a public API. The spike commits survive in this PR's git history.
 
 Recorded here so the work isn't lost. The case for that crate gets stronger if/when upstream `sonos-sdk-*` stops being maintained or the documented weak spots actually bite users in production. Neither is true today.
-
-## Updates landing in this PR
-
-- This findings doc.
-- Raw evidence under `2026-05-22-v0.4-spike-evidence/`.
-- `docs/sonos-notes.md § Event model` - full rewrite per the durable findings above.
-- `docs/superpowers/specs/2026-05-21-v0.4-live-property-events-design.md`:
-  - § 2 watched-property list: drop `Position`; derive locally instead.
-  - § 6 cold-start handling: placeholder replaced - "Probe 1 (watch-only) via `watch_property_with_subscription`; the initial SUBSCRIBE NOTIFY seeds the cache."
-  - § 8.1 latency target: confirmed sub-second on both paths; the ≤ 500 ms target is comfortable.
-  - § 9 known issues: intermittent-position concern downgraded per finding #7; bare-`new()` footgun added.
-  - § 12 out-of-scope: passive forward-reference to the alternative-crate possibility.
