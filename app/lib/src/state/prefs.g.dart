@@ -169,3 +169,77 @@ abstract class _$SettingsNotifier
     element.handleCreate(ref, build);
   }
 }
+
+/// Home layout for the current app session.
+///
+/// The persisted setting is read once when this provider is first created.
+/// Subsequent Home toggles update only this state, while Settings continues to
+/// manage the default used by the next root provider scope.
+
+@ProviderFor(CurrentHomeLayout)
+final currentHomeLayoutProvider = CurrentHomeLayoutProvider._();
+
+/// Home layout for the current app session.
+///
+/// The persisted setting is read once when this provider is first created.
+/// Subsequent Home toggles update only this state, while Settings continues to
+/// manage the default used by the next root provider scope.
+final class CurrentHomeLayoutProvider
+    extends $NotifierProvider<CurrentHomeLayout, HomeLayout> {
+  /// Home layout for the current app session.
+  ///
+  /// The persisted setting is read once when this provider is first created.
+  /// Subsequent Home toggles update only this state, while Settings continues to
+  /// manage the default used by the next root provider scope.
+  CurrentHomeLayoutProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'currentHomeLayoutProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$currentHomeLayoutHash();
+
+  @$internal
+  @override
+  CurrentHomeLayout create() => CurrentHomeLayout();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(HomeLayout value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<HomeLayout>(value),
+    );
+  }
+}
+
+String _$currentHomeLayoutHash() => r'65fe17df02af7e5227a5275e944dbc41cdfef307';
+
+/// Home layout for the current app session.
+///
+/// The persisted setting is read once when this provider is first created.
+/// Subsequent Home toggles update only this state, while Settings continues to
+/// manage the default used by the next root provider scope.
+
+abstract class _$CurrentHomeLayout extends $Notifier<HomeLayout> {
+  HomeLayout build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<HomeLayout, HomeLayout>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<HomeLayout, HomeLayout>,
+              HomeLayout,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

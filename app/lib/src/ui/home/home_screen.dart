@@ -119,7 +119,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 
   @override
   Widget build(BuildContext context) {
-    final layout = ref.watch(settingsProvider.select((s) => s.layout));
+    final layout = ref.watch(currentHomeLayoutProvider);
     final groups = _sortedGroups(widget.household);
     final hasActiveStream = groups.any((g) => g.hasActiveStream);
     // On wide the persistent detail pane replaces the floating strip; only the

@@ -31,4 +31,30 @@ void main() {
     expect(app.themeMode, ThemeMode.dark);
     expect(app.darkTheme!.extension<OtoColors>()!.accent, Accent.indigo.dark);
   });
+
+  testWidgets('OtoApp snapshots the Home default at session startup', (
+    t,
+  ) async {
+    SharedPreferences.setMockInitialValues({'homeLayout': 'cards'});
+    final prefs = await SharedPreferences.getInstance();
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [
+          prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
+        ],
+        child: const OtoApp(),
+      ),
+    );
+    await t.pump();
+
+    final container = ProviderScope.containerOf(t.element(find.byType(OtoApp)));
+    expect(container.read(currentHomeLayoutProvider), HomeLayout.cards);
+
+    await container
+        .read(settingsProvider.notifier)
+        .setHomeLayout(HomeLayout.stack);
+
+    expect(container.read(settingsProvider).layout, HomeLayout.stack);
+    expect(container.read(currentHomeLayoutProvider), HomeLayout.cards);
+  });
 }

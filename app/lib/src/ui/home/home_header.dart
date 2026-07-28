@@ -30,7 +30,7 @@ class HomeHeader extends ConsumerWidget {
       householdProvider.select((h) => h.rooms.length),
     );
     final playingCount = ref.watch(householdProvider.select(_activeGroupCount));
-    final layout = ref.watch(settingsProvider.select((s) => s.layout));
+    final layout = ref.watch(currentHomeLayoutProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -83,7 +83,7 @@ class HomeHeader extends ConsumerWidget {
               _LayoutToggle(
                 value: layout,
                 onChanged: (l) =>
-                    ref.read(settingsProvider.notifier).setHomeLayout(l),
+                    ref.read(currentHomeLayoutProvider.notifier).setLayout(l),
               ),
               // On desktop the nav rail owns Settings, so the header gear would
               // be a second cogwheel - drop it there. Tablet (no rail) and phone

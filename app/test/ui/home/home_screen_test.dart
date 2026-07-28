@@ -1,8 +1,8 @@
 // Composition tests for the assembled HomeScreen (Task 11b).
 //
-// HomeScreen is the integration point: it watches `settingsProvider` for the
-// layout and `householdProvider` for the body, then composes HomeHeader + the
-// group/solo body + BottomStrip, wiring strip taps to the Now Playing route.
+// HomeScreen is the integration point: it watches `currentHomeLayoutProvider`
+// for the layout and `householdProvider` for the body, then composes HomeHeader
+// + the group/solo body + BottomStrip, wiring strip taps to Now Playing.
 //
 // The load-bearing invariant under test is the spec §6 composition rule: every
 // room belongs to a group, so we iterate `household.groups` and a multi-member
@@ -11,10 +11,10 @@
 // standalone card -- no duplicates.
 //
 // This test owns its own `_wrap`/`_settle` helpers (rather than the leaf-widget
-// `_fixtures.wrap`) because HomeScreen pulls in HomeHeader, which watches
-// `settingsProvider`; that needs `prefsRepositoryProvider` overridden with a
-// loaded SharedPreferences, and a real Navigator (not a bare Scaffold) so the
-// strip tap can push the Now Playing route.
+// `_fixtures.wrap`) because HomeScreen pulls in HomeHeader, which watches the
+// current layout. It initializes from `settingsProvider`, so
+// `prefsRepositoryProvider` needs a loaded SharedPreferences override. A real
+// Navigator (not a bare Scaffold) lets strip taps push the Now Playing route.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -151,12 +151,12 @@ class _ErrorDiscovery extends Discovery {
 }
 
 /// Build [child] inside a ProviderScope seeded with [household] + a loaded
-/// SharedPreferences (so `settingsProvider` resolves for the header/layout),
+/// SharedPreferences (so the current layout resolves from the saved default),
 /// the oto theme, and spy playback/grouping controllers. Uses a real
 /// MaterialApp Navigator so a strip tap can push the Now Playing route.
 ///
-/// [layout] seeds the persisted home layout (Cards vs Stack) via the prefs
-/// override pattern (`prefs_test.dart`), driving `settingsProvider.layout`.
+/// [layout] seeds the persisted default (Cards vs Stack) via the prefs override
+/// pattern (`prefs_test.dart`), initializing `currentHomeLayoutProvider`.
 Future<void> _pump(
   WidgetTester t,
   Widget child, {

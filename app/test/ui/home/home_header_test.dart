@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '_fixtures.dart';
 
 /// Pump the header with a seeded household and a real (mock-backed)
-/// [settingsProvider] so the layout toggle round-trips through prefs.
+/// [settingsProvider] so the current layout starts from the persisted default.
 Future<SharedPreferences> _pumpHeader(WidgetTester t) async {
   SharedPreferences.setMockInitialValues({'homeLayout': 'cards'});
   final prefs = await SharedPreferences.getInstance();
@@ -43,19 +43,21 @@ void main() {
     expect(find.text('Speakers'), findsOneWidget);
   });
 
-  testWidgets('tapping the Stack toggle writes setHomeLayout(stack)', (
-    t,
-  ) async {
+  testWidgets('tapping Stack changes only the current layout', (t) async {
     final prefs = await _pumpHeader(t);
     expect(PrefsRepository(prefs).homeLayout, HomeLayout.cards);
 
     await t.tap(find.byKey(const Key('layout-toggle-stack')));
     await t.pumpAndSettle();
 
+    final container = ProviderScope.containerOf(
+      t.element(find.byType(HomeHeader)),
+    );
+    expect(container.read(currentHomeLayoutProvider), HomeLayout.stack);
     expect(
       PrefsRepository(prefs).homeLayout,
-      HomeLayout.stack,
-      reason: 'toggle wrote through setHomeLayout',
+      HomeLayout.cards,
+      reason: 'the Home toggle must not replace the persisted default',
     );
   });
 

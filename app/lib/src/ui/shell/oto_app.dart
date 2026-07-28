@@ -13,6 +13,10 @@ class OtoApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    // Snapshot the persisted Home default at root-scope startup. Home can open
+    // Settings from loading/error states before its content watches the layout;
+    // eager creation keeps those changes limited to the next app session.
+    ref.read(currentHomeLayoutProvider);
     return MaterialApp(
       title: 'oto',
       debugShowCheckedModeBanner: false,
