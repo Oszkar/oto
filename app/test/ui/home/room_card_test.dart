@@ -73,11 +73,16 @@ void main() {
       await t.pumpWidget(h.widget);
 
       // No transport control (nothing is playing), but the volume row -
-      // and specifically the mute button - stays live: it is this card's
+      // the slider and the mute button - stays live: it is this card's
       // one command-issuing control, the only way an offline room's health
-      // can be observed to recover in-session.
+      // can be observed to recover in-session. A disabled OtoSlider still
+      // renders, so drag it to prove it actually dispatches, not just draws.
       expect(find.byType(OtoSlider), findsOneWidget);
       expect(find.byKey(const Key('room-play-PT')), findsNothing);
+      await t.drag(find.byType(OtoSlider), const Offset(40, 0));
+      await t.pumpAndSettle();
+      expect(h.calls.any((c) => c.startsWith('setVolume(PT,')), isTrue);
+      expect(h.calls.any((c) => c.startsWith('setVolumeEnd(PT,')), isTrue);
       await t.tap(find.byKey(const Key('room-mute-PT')));
       expect(h.calls, contains('setMute(PT,true)'));
       expect(

@@ -64,8 +64,14 @@ void main() {
       );
       await t.pumpWidget(h.widget);
 
+      // A disabled OtoSlider still renders, so drag it to prove it actually
+      // dispatches, not just draws.
       expect(find.byType(OtoSlider), findsOneWidget);
       expect(find.byKey(const Key('room-play-PT')), findsNothing);
+      await t.drag(find.byType(OtoSlider), const Offset(40, 0));
+      await t.pumpAndSettle();
+      expect(h.calls.any((c) => c.startsWith('setVolume(PT,')), isTrue);
+      expect(h.calls.any((c) => c.startsWith('setVolumeEnd(PT,')), isTrue);
       await t.tap(find.byKey(const Key('room-mute-PT')));
       expect(h.calls, contains('setMute(PT,true)'));
       expect(find.byType(Opacity), findsWidgets);
