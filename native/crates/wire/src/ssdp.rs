@@ -103,7 +103,11 @@ fn bind_multicast_sender(ip: Ipv4Addr) -> std::io::Result<UdpSocket> {
 /// many quiet adapters cannot starve a responder bound to a later
 /// socket. Each ready socket is drained to `WouldBlock` so a burst of
 /// replies on one interface doesn't require another `poll()` round-trip.
-fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> BTreeSet<String> {
+fn collect_until(
+    poll: &mut Poll,
+    sockets: &[UdpSocket],
+    deadline: Instant,
+) -> Result<BTreeSet<String>, WireError> {
     let mut found = BTreeSet::new();
     // Capacity tracks socket count so a single `poll` call can surface
     // every ready socket without growing the buffer mid-loop. `.max(8)`
@@ -115,13 +119,18 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
         // (some BSDs / older platforms) - retry within the bounded window.
         // Any other error means the poller itself is wedged (e.g. EBADF
         // after a registration we no longer own); retrying would
-        // tight-spin until the deadline and silently mask the failure.
-        // Stop the wait loop and return what we have already collected;
-        // discover() will surface NoDevicesFound if `found` is empty,
-        // and the next discover_with() call constructs a fresh Poll.
+        // tight-spin until the deadline. Stop the wait loop either way: if
+        // we already collected replies, return them (a late poll failure
+        // doesn't invalidate what real devices already answered); if we
+        // collected nothing, surface the poll error as `WireError::Network`
+        // so a wedged poller is not misreported as an empty LAN. The next
+        // discover_with() call constructs a fresh Poll.
         match poll.poll(&mut events, Some(remaining)) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) if found.is_empty() => {
+                return Err(WireError::Network(format!("mio::Poll::poll: {e}")));
+            }
             Err(_) => break,
         }
         for event in events.iter() {
@@ -170,7 +179,7 @@ fn collect_until(poll: &mut Poll, sockets: &[UdpSocket], deadline: Instant) -> B
             }
         }
     }
-    found
+    Ok(found)
 }
 
 /// SSDP across every usable IPv4 interface. Returns unique LOCATION URLs.
@@ -253,8 +262,11 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
         )));
     }
 
-    // Phase 2 - receive across ALL sockets until the single deadline.
-    let found = collect_until(&mut poll, &sockets, deadline);
+    // Phase 2 - receive across ALL sockets until the single deadline. A
+    // poll() failure with nothing collected yet surfaces as
+    // WireError::Network (see collect_until) rather than being conflated
+    // with a genuinely empty LAN.
+    let found = collect_until(&mut poll, &sockets, deadline)?;
     Ok(found.into_iter().collect())
 }
 
@@ -350,7 +362,8 @@ mod tests {
             &mut poll,
             &[sock_a, sock_b],
             Instant::now() + Duration::from_millis(400),
-        );
+        )
+        .expect("collect_until");
         sender.join().expect("join sender thread");
 
         assert!(
@@ -376,7 +389,8 @@ mod tests {
         let (sock, _addr) = bind_and_register(&mut poll, 0);
 
         let start = Instant::now();
-        let found = collect_until(&mut poll, &[sock], start + Duration::from_millis(300));
+        let found = collect_until(&mut poll, &[sock], start + Duration::from_millis(300))
+            .expect("collect_until");
         let elapsed = start.elapsed();
 
         assert!(
@@ -432,7 +446,8 @@ mod tests {
             &mut poll,
             &sockets,
             Instant::now() + Duration::from_millis(600),
-        );
+        )
+        .expect("collect_until");
         sender.join().expect("join sender thread");
 
         assert!(

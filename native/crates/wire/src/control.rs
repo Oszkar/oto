@@ -73,8 +73,12 @@ pub(crate) fn map_sdk_err(e: ApiError) -> WireError {
 
 /// Parse an `"H:MM:SS"` string into a `Duration`.
 ///
-/// Returns `None` for `"NOT_IMPLEMENTED"`, empty strings, or any format that
-/// does not parse.
+/// Returns `None` for `"NOT_IMPLEMENTED"`, empty strings, an out-of-range
+/// `MM`/`SS` (>= 60), an `H` too large to convert to seconds without
+/// overflow, or any format that does not parse. `H:MM:SS` is read off a
+/// SOAP response from whichever device answered discovery (see the
+/// LOCATION-trust note in `deny.toml`/`ssdp.rs`), so the components are
+/// untrusted and must not be fed to unchecked arithmetic.
 pub(crate) fn parse_hms(s: &str) -> Option<Duration> {
     let s = s.trim();
     if s.is_empty() || s == "NOT_IMPLEMENTED" {
@@ -87,7 +91,11 @@ pub(crate) fn parse_hms(s: &str) -> Option<Duration> {
     // Truncate fractional seconds if present (e.g. "03:17.000")
     let s_str = sec_part.split('.').next()?;
     let s_val: u64 = s_str.parse().ok()?;
-    Some(Duration::from_secs(h * 3600 + m * 60 + s_val))
+    if m >= 60 || s_val >= 60 {
+        return None;
+    }
+    let total = h.checked_mul(3600)?.checked_add(m * 60 + s_val)?;
+    Some(Duration::from_secs(total))
 }
 
 /// Current playback position from a `GetPositionInfo` response.
@@ -589,6 +597,22 @@ mod tests {
     #[test]
     fn parse_hms_zeros() {
         assert_eq!(parse_hms("0:00:00"), Some(Duration::from_secs(0)));
+    }
+
+    #[test]
+    fn parse_hms_minutes_out_of_range() {
+        assert_eq!(parse_hms("0:60:00"), None);
+    }
+
+    #[test]
+    fn parse_hms_seconds_out_of_range() {
+        assert_eq!(parse_hms("0:00:60"), None);
+    }
+
+    #[test]
+    fn parse_hms_hours_overflow_does_not_panic() {
+        assert_eq!(parse_hms("99999999999999999999:00:00"), None);
+        assert_eq!(parse_hms("18446744073709551615:00:00"), None);
     }
 
     #[test]
