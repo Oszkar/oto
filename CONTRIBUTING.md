@@ -59,6 +59,8 @@ Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `ap
 
 `main` is protected: a PR cannot merge until the `ci` workflow's checks pass - `Generated source freshness`, `Rust (lint + test)`, `Rust (supply-chain)`, `Android cross-compile (oto_native)`, and `Flutter (analyze + test)`. This gates manual merges (including Dependabot PRs) so nothing lands red. Configured under **Settings → Branches** (or via the `gh api .../branches/main/protection` call).
 
+The `build` workflow's `Debug APK` job also runs on PRs that touch Android-relevant paths (see its `pull_request` trigger), but is **not** a required check - it is informational for now. Promote it to required once it has a track record of staying green.
+
 ## Commit messages
 
 Conventional Commits, lowercase scope when relevant. Enforced locally by the lefthook `commit-msg` hook and in CI on PR titles (`.github/workflows/pr-title.yml`); allowed types: feat, fix, chore, docs, style, refactor, perf, test, build, ci, revert.
@@ -75,4 +77,4 @@ Keep the subject under ~72 chars and let the body explain _why_.
 
 - Run `just check` and `just test` locally before opening.
 - Generated source must be regenerated and committed if any input changed.
-- CI runs five jobs in parallel (`generated`, `rust`, `deny`, `android-rust`, `flutter`); all must pass before merge.
+- CI runs five jobs in parallel (`generated`, `rust`, `deny`, `android-rust`, `flutter`); all must pass before merge. PRs touching Android-relevant paths additionally build the debug APK (~8 min, not required).

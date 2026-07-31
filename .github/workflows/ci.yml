@@ -14,6 +14,9 @@ jobs:
   generated:
     name: Generated source freshness
     runs-on: ubuntu-latest
+    # Backstop against a hung job, not a budget: this one is dominated by
+    # `cargo install flutter_rust_bridge_codegen` (~4 min warm, no rust-cache).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -49,6 +52,9 @@ jobs:
   rust:
     name: Rust (lint + test)
     runs-on: ubuntu-latest
+    # Sized for a cold `Swatinem/rust-cache` miss (full workspace rebuild),
+    # well above the ~1 min warm run.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: native
@@ -64,28 +70,35 @@ jobs:
         with:
           workspaces: native
 
+      # Pinned to the action's major tag (not the mutable `@nextest` tool
+      # branch) so Dependabot tracks it like every other `uses:` ref.
       - name: Install nextest
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
 
       - name: cargo fmt
         run: cargo fmt --all --check
 
+      # `--locked` on every dep-resolving command: without it CI can silently
+      # resolve a graph that differs from the committed Cargo.lock.
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       # Compile-only guard for the hardware-gated live tests so they can't
       # bit-rot under a Wire/ChangeEvent refactor. This never RUNS them:
       # clippy doesn't execute tests, and there's no `--run-ignored`, so
       # the LAN is never touched in CI.
       - name: cargo clippy (live-tests, compile-only)
-        run: cargo clippy -p oto-wire --features live-tests --tests -- -D warnings
+        run: cargo clippy -p oto-wire --features live-tests --tests --locked -- -D warnings
 
       - name: cargo nextest
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --locked
 
   deny:
     name: Rust (supply-chain)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: native
@@ -95,11 +108,17 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.94.0
 
+      # Major tag, not the mutable `@cargo-deny` tool branch - see the
+      # nextest install above.
       - name: Install cargo-deny
-        uses: taiki-e/install-action@cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
 
+      # `--locked` is a cargo-deny GLOBAL option: it must precede the
+      # `check` subcommand, not follow it.
       - name: cargo deny check
-        run: cargo deny check
+        run: cargo deny --locked check
 
   android-rust:
     # Lightweight pre-merge guard: cross-compiles only the oto_native
@@ -109,6 +128,7 @@ jobs:
     # which build.yml only surfaced post-merge on main.
     name: Android cross-compile (oto_native)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: native
@@ -132,11 +152,12 @@ jobs:
       - name: Cross-compile oto_native for Android
         run: |
           export ANDROID_NDK_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
-          cargo ndk -t arm64-v8a -t x86_64 build -p oto_native
+          cargo ndk -t arm64-v8a -t x86_64 build -p oto_native --locked
 
   flutter:
     name: Flutter (analyze + test)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: app

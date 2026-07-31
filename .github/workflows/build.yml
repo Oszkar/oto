@@ -3,6 +3,20 @@ name: build
 on:
   push:
     branches: [main]
+  # Also run pre-merge, but only for changes that can actually break the
+  # Android app layer. ci.yml's `android-rust` job cross-compiles the
+  # oto_native cdylib alone; everything above it - MulticastLockHandler.kt,
+  # the manifest, minSdk, the patched cargokit Gradle - was first compiled
+  # post-merge here, so a break landed red on main and had to be fixed
+  # forward. Doc-only and pure-Dart-UI PRs still skip this (~8 min).
+  pull_request:
+    paths:
+      - "app/android/**"
+      - "app/rust_builder/**"
+      - "app/pubspec.yaml"
+      - "native/**"
+      - ".fvmrc"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +27,9 @@ jobs:
   android-apk:
     name: Debug APK
     runs-on: ubuntu-latest
+    # Backstop only: the heaviest job in the repo (Java + Flutter + Rust +
+    # Gradle), ~8 min warm.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 

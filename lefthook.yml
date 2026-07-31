@@ -3,7 +3,17 @@
 pre-commit:
   parallel: true
   commands:
+    # Only the inputs that can change generated output: FRB codegen reads
+    # native/src/api.rs (and mirrors types it references), build_runner reads
+    # the annotated Dart plus pubspec. Without a glob a README typo paid a
+    # full FRB codegen + build_runner build. CI's `Generated source freshness`
+    # job remains the unconditional server-side backstop.
     generated:
+      glob:
+        - "native/**/*.rs"
+        - "native/Cargo.toml"
+        - "app/lib/**/*.dart"
+        - "app/pubspec.yaml"
       run: dart scripts/verify_generated.dart
     # Mirrors CI's `cargo fmt` gate so formatting drift never reaches a PR.
     rustfmt:
