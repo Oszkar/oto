@@ -1271,6 +1271,146 @@ mod tests {
         );
     }
 
+    // ── v0.5.1 group commands: health attribution ────────────────────────
+    //
+    // `play` above was the only command proving group-addressed health
+    // attribution. The four v0.5.1 group commands were never driven through
+    // oto-app by any test, and they do NOT all attribute the same way:
+    // set_group_volume/set_group_mute are group-addressed (→ coordinator),
+    // while join_group/leave_group are speaker-addressed - the SOAP goes to
+    // the joiner/leaver, so health belongs to that speaker, not the
+    // coordinator. These lock in that split.
+
+    #[test]
+    fn set_group_volume_failure_attributes_to_coordinator() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let coord = SpeakerId::new("RINCON_KITCHEN");
+        let group = GroupId::new("RINCON_KITCHEN:1");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&coord, WireError::Network("unreachable".into()));
+
+        let res = set_group_volume(&group, Volume::new(42).expect("42 in range"));
+        assert!(matches!(res, Err(WireError::Network(_))));
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "one SubscriptionError");
+        assert!(
+            matches!(&events[0], ChangeEvent::SubscriptionError { speaker, .. } if *speaker == coord),
+            "set_group_volume is group-addressed → attributed to the coordinator"
+        );
+    }
+
+    #[test]
+    fn set_group_mute_failure_attributes_to_coordinator() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let coord = SpeakerId::new("RINCON_KITCHEN");
+        let group = GroupId::new("RINCON_KITCHEN:1");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&coord, WireError::Network("unreachable".into()));
+
+        let res = set_group_mute(&group, true);
+        assert!(matches!(res, Err(WireError::Network(_))));
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "one SubscriptionError");
+        assert!(
+            matches!(&events[0], ChangeEvent::SubscriptionError { speaker, .. } if *speaker == coord),
+            "set_group_mute is group-addressed → attributed to the coordinator"
+        );
+    }
+
+    /// The discriminating case: the joiner and the coordinator are different
+    /// speakers, and the join SOAP goes to the joiner. Attributing this to
+    /// the coordinator would mark the wrong room offline in the UI.
+    #[test]
+    fn join_group_failure_attributes_to_the_joiner_not_the_coordinator() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let joiner = SpeakerId::new("RINCON_OFFICE");
+        let coordinator = SpeakerId::new("RINCON_KITCHEN");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        // The unreachable device is the JOINER, not the coordinator.
+        mock.set_command_error(&joiner, WireError::Network("unreachable".into()));
+
+        let res = join_group(&joiner, &coordinator);
+        assert!(matches!(res, Err(WireError::Network(_))));
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "one SubscriptionError");
+        assert!(
+            matches!(&events[0], ChangeEvent::SubscriptionError { speaker, .. } if *speaker == joiner),
+            "join_group health belongs to the joiner (the speaker the SOAP is sent to), \
+             not the coordinator it is joining - got {:?}",
+            events[0]
+        );
+    }
+
+    /// Same split for the detach direction: `RINCON_DINING` is a member of
+    /// the kitchen group, so leaver != coordinator here too.
+    #[test]
+    fn leave_group_failure_attributes_to_the_leaving_speaker() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let leaver = SpeakerId::new("RINCON_DINING");
+        let coordinator = SpeakerId::new("RINCON_KITCHEN");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+        mock.set_command_error(&leaver, WireError::Network("unreachable".into()));
+
+        let res = leave_group(&leaver);
+        assert!(matches!(res, Err(WireError::Network(_))));
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "one SubscriptionError");
+        let named = match &events[0] {
+            ChangeEvent::SubscriptionError { speaker, .. } => speaker.clone(),
+            other => panic!("expected SubscriptionError, got {other:?}"),
+        };
+        assert_eq!(named, leaver, "leave_group health belongs to the leaver");
+        assert_ne!(
+            named, coordinator,
+            "and explicitly NOT to the coordinator it detached from"
+        );
+    }
+
+    /// The recovery direction closes the loop: a group command that succeeds
+    /// after the coordinator was Errored must clear it, or the room stays
+    /// offline in the UI for the process lifetime.
+    #[test]
+    fn successful_group_command_recovers_the_coordinator() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let coord = SpeakerId::new("RINCON_KITCHEN");
+        let group = GroupId::new("RINCON_KITCHEN:1");
+
+        let mock = discover_with_held_mock();
+        let _ = drain_app_events();
+
+        mock.set_command_error(&coord, WireError::Network("unreachable".into()));
+        assert!(set_group_mute(&group, true).is_err());
+        assert_eq!(drain_app_events().len(), 1, "precondition: now Errored");
+
+        mock.clear_command_error(&coord);
+        set_group_mute(&group, false).expect("device back → command succeeds");
+
+        let events = drain_app_events();
+        assert_eq!(events.len(), 1, "one SubscriptionRecovered");
+        assert!(
+            matches!(&events[0], ChangeEvent::SubscriptionRecovered { speaker } if *speaker == coord),
+            "recovery is attributed to the coordinator too - got {:?}",
+            events[0]
+        );
+    }
+
     #[test]
     fn health_state_persists_across_wire_replacement_for_surviving_speaker() {
         // #104: `discover_with` used to blanket-reset every speaker's health
