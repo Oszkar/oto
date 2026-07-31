@@ -18,15 +18,19 @@ ignore = [
     # quadratic duplicate-attribute check; RUSTSEC-2026-0195 unbounded
     # namespace-declaration allocation), both fixed in >=0.41.0. quick-xml is
     # pinned =0.31.0 transitively via sonos-api =0.5.2 (DIDL-Lite parsing), so
-    # there is no local upgrade path while that pin holds. Practical exposure is
-    # low: oto only parses XML returned by the user's own Sonos devices on the
-    # LAN (SOAP/DIDL-Lite), never arbitrary untrusted input. This LAN-local
-    # exposure is consistent with the accepted-risk trust stance ARCHITECTURE
-    # records for discovery input (Known constraints: "SSDP responses are
-    # trusted"). Revisit when the sonos-api pin is bumped to a release that
-    # depends on quick-xml >=0.41.0.
-    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-only XML input from the user's own devices" },
-    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-only XML input from the user's own devices" },
+    # there is no local upgrade path while that pin holds. Practical exposure:
+    # discovery does not validate the SSDP LOCATION host (accepted risk,
+    # tracked as v0.7 hardening - see ARCHITECTURE.md "SSDP responses are
+    # trusted" and the TODO in native/crates/wire/src/ssdp.rs), so the
+    # follow-up SOAP/DIDL-Lite XML this parser sees can come from any LAN
+    # peer that answers SSDP on port 1400, not only the user's genuine Sonos
+    # devices. The exposure is therefore LAN-local untrusted input, but
+    # bounded to DoS (parser panic / excess allocation) - not RCE or memory
+    # unsafety - and requires the attacker to already be on the LAN. Revisit
+    # alongside the v0.7 SSDP hardening work and when the sonos-api pin is
+    # bumped to a release that depends on quick-xml >=0.41.0.
+    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
+    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
     # RUSTSEC-2025-0134 (rustls-pemfile v1) formerly ignored here: it came
     # in via sonos-sdk-discovery's default-tls reqwest feature. Retired
     # 2026-07-01 when that feature was dropped (LOCAL_PATCHES.md #2) and
