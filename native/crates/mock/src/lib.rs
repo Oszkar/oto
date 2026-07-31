@@ -6,6 +6,30 @@
 //! `MockWire::default()` seeds a stateful per-speaker model (volume, mute,
 //! transport) from the fixture topology. Commands (`set_volume`, `pause`, ...)
 //! mutate that model; `speaker_state` reads it back - no real Sonos required.
+//!
+//! # Deliberate divergences from `SonosWire`
+//!
+//! The mock models the *command and state* contract faithfully - error
+//! shapes, coordinator routing, auto-emit on success. It deliberately does
+//! NOT model the event pump's timing behavior, because that behavior is
+//! covered where it lives and duplicating it here would mean maintaining a
+//! second copy that can drift:
+//!
+//! - **No post-regroup "dirty" drop.** The real pump's `TopologyFilter`
+//!   marks itself dirty on a genuine regroup and drops group-addressed
+//!   events until the pump rebuilds, because the frozen routing maps are
+//!   stale (`oto-wire`'s `events.rs`, ~28 tests including the seed-burst and
+//!   dirty-self-heal paths). Group events keep flowing on the mock.
+//! - **One `TopologyChanged` per regroup, not one per speaker.** The real
+//!   pump maps a `group_membership` NOTIFY from EVERY speaker, so a regroup
+//!   fans out. The Dart side coalesces that with a 250 ms debounce, which is
+//!   covered directly by `app/test/topology_controller_test.dart` (N events
+//!   in, one re-pull out) - far cheaper than making the mock fan out to
+//!   exercise the same thing.
+//!
+//! Both were considered and declined on those grounds; the point of noting
+//! them is so a mock-driven test is never read as evidence about pump
+//! timing. If you need that, test the pump.
 
 use std::{
     collections::HashMap,
@@ -505,6 +529,14 @@ impl Wire for MockWire {
 
     fn set_volume(&self, speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
         let mut guard = lock!(self);
+        // Existence FIRST, then the injected error. A speaker that isn't in
+        // the topology is `NotFound` on the real wire regardless of
+        // reachability; checking the injected error first would report an
+        // unknown speaker as `Network` and quietly train tests on an error
+        // shape production never produces.
+        if !guard.speakers.contains_key(speaker) {
+            return Err(WireError::NotFound(speaker.to_string()));
+        }
         if let Some(err) = guard.command_errors.get(speaker) {
             return Err(err.clone());
         }
@@ -525,6 +557,10 @@ impl Wire for MockWire {
 
     fn set_mute(&self, speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
         let mut guard = lock!(self);
+        // Existence before the injected error - see `set_volume`.
+        if !guard.speakers.contains_key(speaker) {
+            return Err(WireError::NotFound(speaker.to_string()));
+        }
         if let Some(err) = guard.command_errors.get(speaker) {
             return Err(err.clone());
         }
@@ -554,6 +590,12 @@ impl Wire for MockWire {
             .get(group)
             .cloned()
             .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        // The coordinator must still exist, exactly as `play`/`pause` check.
+        // A group whose coordinator has left the topology resolves to an id
+        // the real wire can't turn into an IP - `NotFound`, not success.
+        if !guard.speakers.contains_key(&coord) {
+            return Err(WireError::NotFound(coord.to_string()));
+        }
         if let Some(err) = guard.command_errors.get(&coord) {
             return Err(err.clone());
         }
@@ -578,6 +620,10 @@ impl Wire for MockWire {
             .get(group)
             .cloned()
             .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        // Coordinator-existence stage - see `set_group_volume`.
+        if !guard.speakers.contains_key(&coord) {
+            return Err(WireError::NotFound(coord.to_string()));
+        }
         if let Some(err) = guard.command_errors.get(&coord) {
             return Err(err.clone());
         }
@@ -676,6 +722,13 @@ impl Wire for MockWire {
             .get(group)
             .cloned()
             .ok_or_else(|| WireError::NotFound(group.to_string()))?;
+        // Coordinator-existence stage - see `set_group_volume`. Without it a
+        // group pointing at a departed coordinator returned an all-`None`
+        // position instead of `NotFound`, which reads as "playing, no
+        // metadata" rather than "gone".
+        if !guard.speakers.contains_key(&coord) {
+            return Err(WireError::NotFound(coord.to_string()));
+        }
         let transport = guard.speakers.get(&coord).and_then(|s| s.transport.clone());
         Ok(TrackPosition {
             position: transport.as_ref().and_then(|t| t.position),
@@ -720,10 +773,11 @@ impl Wire for MockWire {
         // tests' sake. Tests that need a track use
         // `MockWire::push_event` (or the dev_push seam in api.rs).
         let mut seeds: Vec<ChangeEvent> = Vec::with_capacity(
-            // 2 per speaker (Volume + Mute) + 1 per group (Playback);
-            // 8 events total for the 3-speaker / 2-group fixture.
+            // 2 per speaker (Volume + Mute) + 3 per group (Playback +
+            // GroupVolume + GroupMute); 12 events total for the
+            // 3-speaker / 2-group fixture.
             // Capacity is a hint; re-allocation is fine.
-            guard.speakers.len() * 2 + guard.cache.coords.len(),
+            guard.speakers.len() * 2 + guard.cache.coords.len() * 3,
         );
         for (sid, st) in &guard.speakers {
             if let Some(v) = st.volume {
@@ -753,6 +807,30 @@ impl Wire for MockWire {
                 group: gid.clone(),
                 state,
             });
+            // GroupRenderingControl seeds. Real Sonos NOTIFYs a group's
+            // volume/mute on subscribe just like the per-speaker services;
+            // without these, `cached_group_volume`/`cached_group_muted` read
+            // `None` on a freshly-discovered mock forever (they are event-fed
+            // with no other source), so any mock-driven test of the group
+            // volume UI was testing the empty state by accident.
+            //
+            // Value comes from the coordinator's own cached volume/mute -
+            // there is no separate group field in `Model` (group volume is
+            // event-fed; see `set_group_volume`), and the coordinator is the
+            // speaker the GroupRenderingControl service actually lives on.
+            let coord_state = guard.speakers.get(coord);
+            if let Some(v) = coord_state.and_then(|s| s.volume) {
+                seeds.push(ChangeEvent::GroupVolume {
+                    group: gid.clone(),
+                    volume: v,
+                });
+            }
+            if let Some(m) = coord_state.and_then(|s| s.muted) {
+                seeds.push(ChangeEvent::GroupMute {
+                    group: gid.clone(),
+                    muted: m,
+                });
+            }
         }
         for ev in seeds {
             // Pre-pump send - receiver is buffered, so this can't fail.
@@ -781,6 +859,16 @@ impl Wire for MockWire {
     }
 
     fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError> {
+        // Match the real-wire contract: a re-pull needs a prior successful
+        // `discover()`, exactly as `subscribe_speakers`/`subscribe_topology`
+        // above require one. SonosWire returns `NoSpeakersDiscovered` when it
+        // has no speaker to ask (adapter.rs); without this gate the mock
+        // happily synthesized a snapshot from the pre-seeded fixture, so a
+        // caller that skipped discovery got success from the mock and an
+        // error in production.
+        if !self.discovered.load(Ordering::SeqCst) {
+            return Err(WireError::NoSpeakersDiscovered);
+        }
         // Re-pull authoritative topology reflecting any join/leave mutations
         // since the last commit - mirrors SonosWire's GetZoneGroupState re-pull.
         // Commits the device grouping into the routing cache and synthesizes the
@@ -997,12 +1085,16 @@ mod tests {
         let seeds = drain_seeds(&rx);
 
         // Fixture: 3 speakers + 2 groups. Expect:
-        //   3 Volume   (one per speaker, all SEED_VOLUME)
-        //   3 Mute     (one per speaker, all false)
-        //   2 Playback (one per group, all Stopped)
+        //   3 Volume      (one per speaker, all SEED_VOLUME)
+        //   3 Mute        (one per speaker, all false)
+        //   2 Playback    (one per group, all Stopped)
+        //   2 GroupVolume (one per group, from the coordinator)
+        //   2 GroupMute   (one per group, from the coordinator)
         let mut volume_speakers = std::collections::HashSet::new();
         let mut mute_speakers = std::collections::HashSet::new();
         let mut playback_groups = std::collections::HashSet::new();
+        let mut group_volume_groups = std::collections::HashSet::new();
+        let mut group_mute_groups = std::collections::HashSet::new();
         for ev in &seeds {
             match ev {
                 ChangeEvent::Volume { speaker, .. } => {
@@ -1016,6 +1108,13 @@ mod tests {
                     assert_eq!(*state, PlaybackState::Stopped, "seed playback is Stopped");
                     playback_groups.insert(group.clone());
                 }
+                ChangeEvent::GroupVolume { group, .. } => {
+                    group_volume_groups.insert(group.clone());
+                }
+                ChangeEvent::GroupMute { group, muted } => {
+                    assert!(!muted, "seed group mute starts unmuted");
+                    group_mute_groups.insert(group.clone());
+                }
                 other => panic!("unexpected seed event: {other:?}"),
             }
         }
@@ -1023,8 +1122,14 @@ mod tests {
         assert_eq!(mute_speakers.len(), 3, "one Mute seed per speaker");
         assert_eq!(playback_groups.len(), 2, "one Playback seed per group");
         assert_eq!(
+            group_volume_groups.len(),
+            2,
+            "one GroupVolume seed per group"
+        );
+        assert_eq!(group_mute_groups.len(), 2, "one GroupMute seed per group");
+        assert_eq!(
             seeds.len(),
-            3 + 3 + 2,
+            3 + 3 + 2 + 2 + 2,
             "no extra (e.g. Track) seeds emitted by default"
         );
     }
@@ -1240,7 +1345,80 @@ mod tests {
     #[test]
     fn refresh_topology_errors_on_failing_mock() {
         let w = MockWire::failing(WireError::NoDevicesFound);
-        assert_eq!(w.refresh_topology(), Err(WireError::NoDevicesFound));
+        // The pre-discovery gate fires BEFORE the configured outcome, and
+        // that ordering is the production-true one: a failing mock never
+        // completes a discover, so there are no speakers to re-pull from and
+        // SonosWire answers `NoSpeakersDiscovered` regardless of what the
+        // SOAP call would have returned. The configured-outcome propagation
+        // is covered where it can actually be reached - `discover()` itself.
+        assert_eq!(w.refresh_topology(), Err(WireError::NoSpeakersDiscovered));
+    }
+
+    // ── Real-wire fidelity: error precedence and the pre-discovery gate ────
+
+    #[test]
+    fn refresh_topology_requires_a_prior_discover() {
+        let w = MockWire::default();
+        // The pre-seeded fixture is NOT discovery - same contract as
+        // subscribe_speakers / subscribe_topology.
+        assert_eq!(w.refresh_topology(), Err(WireError::NoSpeakersDiscovered));
+        w.discover().unwrap();
+        assert!(w.refresh_topology().is_ok(), "allowed once discovered");
+    }
+
+    /// An unknown speaker is `NotFound` even when an error was injected for
+    /// that id. Checking the injected error first would report a speaker that
+    /// isn't in the topology as `Network`, which production never does.
+    #[test]
+    fn unknown_speaker_is_not_found_even_with_an_injected_error() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        let ghost = SpeakerId::new("RINCON_GHOST");
+        w.set_command_error(&ghost, WireError::Network("unreachable".into()));
+
+        assert!(
+            matches!(
+                w.set_volume(&ghost, Volume::new(SEED_VOLUME).unwrap()),
+                Err(WireError::NotFound(_))
+            ),
+            "existence is checked before the injected error"
+        );
+        assert!(matches!(
+            w.set_mute(&ghost, true),
+            Err(WireError::NotFound(_))
+        ));
+    }
+
+    /// A group whose coordinator has left the topology must fail like
+    /// `play`/`pause` do, not silently succeed (or return an empty position).
+    #[test]
+    fn group_commands_fail_when_the_coordinator_is_gone() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        let group = GroupId::new("RINCON_KITCHEN:1");
+        // Evict the coordinator while the routing cache still points at it -
+        // models a speaker dropping off between topology pulls.
+        {
+            let mut guard = lock!(w);
+            guard.speakers.remove(&SpeakerId::new("RINCON_KITCHEN"));
+        }
+
+        assert!(
+            matches!(w.play(&group), Err(WireError::NotFound(_))),
+            "baseline: play already behaved this way"
+        );
+        assert!(matches!(
+            w.set_group_volume(&group, Volume::new(SEED_VOLUME).unwrap()),
+            Err(WireError::NotFound(_))
+        ));
+        assert!(matches!(
+            w.set_group_mute(&group, true),
+            Err(WireError::NotFound(_))
+        ));
+        assert!(
+            matches!(w.track_position(&group), Err(WireError::NotFound(_))),
+            "track_position must report gone, not an all-None position"
+        );
     }
 
     /// refresh_topology must reflect a post-discover regroup (mirrors
@@ -1338,6 +1516,8 @@ mod tests {
     #[test]
     fn join_group_updates_membership() {
         let w = MockWire::default();
+        // refresh_topology requires a prior discover(), same as the real wire.
+        w.discover().unwrap();
         let office = SpeakerId::new("RINCON_OFFICE"); // solo group coordinator
         let kitchen = SpeakerId::new("RINCON_KITCHEN"); // another group's coordinator
 
@@ -1359,6 +1539,8 @@ mod tests {
     #[test]
     fn join_group_dissolves_empty_source_group() {
         let w = MockWire::default();
+        // refresh_topology requires a prior discover(), same as the real wire.
+        w.discover().unwrap();
         let office = SpeakerId::new("RINCON_OFFICE");
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         w.join_group(&office, &kitchen).unwrap();
@@ -1377,6 +1559,8 @@ mod tests {
     #[test]
     fn leave_group_makes_standalone() {
         let w = MockWire::default();
+        // refresh_topology requires a prior discover(), same as the real wire.
+        w.discover().unwrap();
         let dining = SpeakerId::new("RINCON_DINING"); // member of Kitchen group, not coordinator
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
 
@@ -1623,6 +1807,8 @@ mod tests {
         // the remaining member must be re-homed (off Kitchen) - never left
         // pointing at the departed coordinator (an impossible topology).
         let w = MockWire::default();
+        // refresh_topology requires a prior discover(), same as the real wire.
+        w.discover().unwrap();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         let dining = SpeakerId::new("RINCON_DINING");
 
@@ -1651,6 +1837,8 @@ mod tests {
         // group, the left-behind Dining must be re-homed - not left pointing
         // at Kitchen, which now follows Office.
         let w = MockWire::default();
+        // refresh_topology requires a prior discover(), same as the real wire.
+        w.discover().unwrap();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         let dining = SpeakerId::new("RINCON_DINING");
         let office = SpeakerId::new("RINCON_OFFICE");
