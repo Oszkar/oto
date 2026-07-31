@@ -49,7 +49,8 @@ oto/
 │  ├─ Cargo.toml         # workspace root + FRB-exposed cdylib package (oto_native)
 │  ├─ src/api.rs         # FRB-exposed API surface - keep small, delegate inward
 │  ├─ src/map.rs         # domain → FRB-DTO map (off the bridged surface, so testable)
-│  ├─ src/lib.rs         # mounts api + map + frb_generated
+│  ├─ src/consumer.rs    # v0.4 event-consumer loop (off the bridged surface, so testable)
+│  ├─ src/lib.rs         # mounts api + consumer + map + frb_generated
 │  ├─ crates/core/       # oto-core: pure domain types + Wire trait
 │  ├─ crates/wire/       # oto-wire: production Wire - own SSDP + direct sonos-api SOAP + event subscriptions
 │  ├─ crates/mock/       # oto-mock: deterministic fake speakers for tests

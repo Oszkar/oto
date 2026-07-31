@@ -505,82 +505,13 @@ pub fn subscribe_change_events(sink: StreamSink<ChangeEventDto>) {
         let _ = sink.add_error("no wire installed, or event stream already taken".to_string());
         return;
     };
-    // Apply one event to the cache, then forward it to Dart. Returns `false`
-    // to tell the caller to exit the loop, for either reason: the Dart
-    // subscriber has cancelled (`sink.add` failed) OR our captured `generation`
-    // is no longer current (the wire was replaced; see the stale-wire guard
-    // below, which withholds the stale DTO and exits).
-    let emit = |event: oto_core::ChangeEvent| -> bool {
-        oto_app::apply_event_at_generation(generation, &event);
-        // Stale-wire guard for the Dart side. This consumer's `rx` is paired
-        // with `generation`; once a rediscover/refresh bumps the StateManager
-        // past it, every remaining event on this OLD-wire channel is stale by
-        // construction. The cache apply above already no-ops on the gen
-        // mismatch, but the DTO must ALSO be withheld from Dart: the Dart
-        // `applyEvent`/`householdProvider` fold has NO generation awareness, so
-        // in the window between the Rust bump and the Dart stream re-subscribe
-        // a stale Volume/Playback/Track would otherwise land in the UI state.
-        // Returning `false` here withholds the stale DTO AND exits the consumer
-        // loop immediately (the caller returns on `!emit`), rather than
-        // lingering on `recv_timeout` until the old Sender drops. The Dart
-        // provider re-subscribes on the new generation, so there is nothing
-        // more to deliver on this stream; exiting now also restores prompt
-        // cancellation semantics (the loop no longer depends on `sink.add` to
-        // notice teardown once the generation has moved).
-        if generation != oto_app::current_generation() {
-            return false;
-        }
+    // The loop itself lives in `crate::consumer` so it can be tested without
+    // a `StreamSink`; this closure is the only FRB-shaped part. `is_ok()` is
+    // the cancel signal - `sink.add` fails once the Dart subscriber drops
+    // (FRB pre-check § 3).
+    crate::consumer::run_event_consumer(generation, &rx, crate::consumer::POLL_SPAN, |event| {
         sink.add(crate::map::to_change_event_dto(event)).is_ok()
-    };
-    loop {
-        // Exit as soon as our wire is replaced, even if no event arrives to
-        // trip the `emit` guard above. Without this, an idle old-wire channel
-        // would keep this FRB worker parked on `recv_timeout` (one 250 ms poll
-        // at a time) until the old pump joins and drops its Sender. The Dart
-        // provider re-subscribes on the new generation, so there is nothing
-        // left for this consumer to do once the generation has moved.
-        if generation != oto_app::current_generation() {
-            return;
-        }
-        // Drain TWO sources onto the one FRB stream (v0.5):
-        //   1. oto-app's sibling bus - SubscriptionError/Recovered emitted
-        //      on command-dispatch health transitions,
-        //   2. the wire's v0.4 channel (`rx`) - property events from the
-        //      pump; its `Disconnected` is the teardown signal (wire
-        //      replaced on discover() → stream completes → Dart rebuilds).
-        //
-        // Drain the app bus FIRST, fully, every iteration - otherwise a
-        // busy wire channel could starve app events indefinitely (review
-        // #65). Drain at OUR generation so a stale event from an old wire
-        // is dropped, not forwarded onto this stream (review #67-followup
-        // #3). The app bus never disconnects (it's process-global), so only
-        // the wire channel drives loop exit.
-        while let Some(event) =
-            oto_app::try_recv_app_event(generation, oto_app::current_generation())
-        {
-            if !emit(event) {
-                return;
-            }
-        }
-        // Then block on the wire channel with a coarse poll so an idle
-        // stream doesn't busy-wake (review #67-followup #6: a 10 ms poll
-        // span at 100 Hz when nothing's happening). 250 ms bounds both the
-        // app-bus re-drain cadence and teardown-detection latency - fine,
-        // app events are degraded-state flags, not real-time, and teardown
-        // is not latency-critical. When events flow the inner drains + the
-        // Ok arm keep the loop hot regardless.
-        match rx.recv_timeout(std::time::Duration::from_millis(250)) {
-            Ok(event) => {
-                if !emit(event) {
-                    return;
-                }
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-            // Wire's Sender dropped - wire was replaced (discover() ran).
-            // Return cleanly; FRB stream completes; Dart rebuilds.
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
-        }
-    }
+    });
 }
 
 /// The current wire generation - bumped by `discover_with` on every

@@ -203,7 +203,7 @@ sequenceDiagram
     participant K as Sonos speaker
     participant SDK as SDK reactive layer<br/>(state + event-manager + stream)
     participant WP as oto-wire pump thread
-    participant AP as oto-app FRB consumer<br/>(api.rs)
+    participant AP as oto-app FRB consumer<br/>(consumer.rs)
     participant SM as StateManager cache
     participant U as Flutter UI
 
