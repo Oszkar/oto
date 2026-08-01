@@ -60,9 +60,24 @@ jobs:
       - name: flutter pub get
         run: flutter pub get
 
-      # Builds the Windows app (cargokit compiles the oto_native cdylib under
-      # MSVC on the way through) and runs every integration_test/ file against
-      # it. `-d windows` picks the desktop target explicitly rather than
-      # relying on device auto-selection.
-      - name: flutter test integration_test
-        run: flutter test integration_test/ -d windows
+      # One `flutter test` invocation PER FILE, not one for the directory.
+      # A directory-wide run launches a fresh app per file into the same
+      # invocation, and on Windows desktop only the first one gets a debug
+      # connection - the rest die with "Error waiting for a debug connection:
+      # The log reader stopped unexpectedly, or never started." Each file
+      # passes when run on its own, so this is an invocation limitation, not
+      # a test failure. Costs an app rebuild per file (cached after the
+      # first, ~20 s each).
+      #
+      # Runs every file even if an earlier one fails, so a single stale test
+      # doesn't mask the state of the rest, then fails the job at the end.
+      - name: flutter test integration_test (one invocation per file)
+        shell: bash
+        run: |
+          status=0
+          for f in integration_test/*_test.dart; do
+            echo "::group::$f"
+            flutter test "$f" -d windows || status=1
+            echo "::endgroup::"
+          done
+          exit $status

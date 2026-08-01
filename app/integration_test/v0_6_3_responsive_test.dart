@@ -4,9 +4,13 @@
 /// follows real bridge state: the persistent `NowPlayingPane` (no floating
 /// `BottomStrip`), the desktop `OtoNavRail`, playing a group filling the
 /// pane, select-in-place on a group card, and the Settings dialog opening
-/// from the rail. Mirrors the boot/seam/polling mechanics of
-/// `v0_6_0_ui_test.dart`; standalone (integration tests do not import each
-/// other), so the mock/boot/wait helpers are copied rather than shared.
+/// from the rail. Standalone (integration tests do not import each other),
+/// so the mock/boot/wait helpers are inlined rather than shared.
+///
+/// This is the surviving UI end-to-end: the v0.6.0 one asserted the
+/// pre-v0.6.3 layout contract (`BottomStrip` always composed) that the
+/// responsive work deliberately replaced with `!wide && hasActiveStream`,
+/// and was deleted rather than retrofitted.
 ///
 /// Run on a connected Windows desktop:
 ///
@@ -54,8 +58,8 @@ class _MockDiscovery extends Discovery {
 }
 
 /// Wait for `condition()` to become true, polling each event-loop turn.
-/// Mirrors `_waitFor` in `v0_6_0_ui_test.dart`: when the Rust side emits an
-/// event the test resumes promptly instead of sleeping a fixed interval.
+/// When the Rust side emits an event the test resumes promptly instead of
+/// sleeping a fixed interval.
 /// Pumps the widget tree each turn so provider rebuilds settle into the
 /// rendered frame.
 Future<void> _waitFor(
