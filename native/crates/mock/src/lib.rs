@@ -762,6 +762,10 @@ impl Wire for MockWire {
         //   - per-group   Playback (one event per group, state from
         //     the coordinator's cached transport - defaults to
         //     PlaybackState::Stopped from the seeded fixture)
+        //   - per-group   GroupVolume + GroupMute (one each per group,
+        //     from the coordinator - GroupRenderingControl lives there)
+        //
+        // 12 events total for the 3-speaker / 2-group fixture.
         //
         // Track is intentionally NOT seeded: `oto_core::Track` carries
         // optional metadata fields and the fixture has no media
@@ -1140,8 +1144,8 @@ mod tests {
         w.discover().unwrap();
         w.subscribe_speakers().unwrap();
         let rx = w.take_event_stream().unwrap();
-        // Drain the seeds (now 8 events: 3 Volume + 3 Mute + 2 Playback)
-        // without hardcoding the count.
+        // Drain the seeds (12 events: 3 Volume + 3 Mute + 2 Playback +
+        // 2 GroupVolume + 2 GroupMute) without hardcoding the count.
         let _ = drain_seeds(&rx);
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         w.set_volume(&kitchen, Volume::new(70).unwrap()).unwrap();

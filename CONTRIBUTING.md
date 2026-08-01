@@ -79,4 +79,4 @@ Keep the subject under ~72 chars and let the body explain _why_.
 
 - Run `just check` and `just test` locally before opening.
 - Generated source must be regenerated and committed if any input changed.
-- CI runs five jobs in parallel (`generated`, `rust`, `deny`, `android-rust`, `flutter`); all must pass before merge. PRs touching Android-relevant paths additionally build the debug APK (~8 min, not required).
+- CI runs five jobs in parallel (`generated`, `rust`, `deny`, `android-rust`, `flutter`). Four of them block the merge - `android-rust` is informational (see [Branch protection](#branch-protection)). PRs touching Android-relevant paths additionally build the debug APK (~8 min, also not required).

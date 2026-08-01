@@ -94,7 +94,8 @@ void main() {
 
       await h.seedComplete.future.timeout(const Duration(seconds: 5));
 
-      // Seed shape: 3 Volume + 3 Mute + 2 Playback.
+      // Seed shape: 3 Volume + 3 Mute + 2 Playback + 2 GroupVolume
+      // + 2 GroupMute (see _expectedSeedCount).
       final volumeSeeds = h.events
           .whereType<api.ChangeEventDto_Volume>()
           .toList();

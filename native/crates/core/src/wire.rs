@@ -114,7 +114,8 @@ pub trait Wire {
     /// `DiscoverySnapshot`. Network errors leave all existing caches
     /// unchanged.
     ///
-    /// Requires a prior successful `discover()` to have a cached IP.
+    /// Requires a prior successful `discover()` to have a cached IP (else
+    /// `NoSpeakersDiscovered`).
     fn refresh_topology(&self) -> Result<DiscoverySnapshot, WireError>;
 
     /// Take the unified event-stream receiver. Returns `None` if
@@ -140,7 +141,11 @@ pub enum WireError {
     /// or no discovery has populated the wire yet. A precondition error,
     /// distinct from a transport failure.
     NotFound(String),
-    /// `subscribe_speakers` was called before a successful `discover()`.
+    /// A lifecycle operation was attempted before a successful `discover()`,
+    /// so the wire has no speaker to act against: `subscribe_speakers`,
+    /// `subscribe_topology`, or `refresh_topology`. Distinct from
+    /// `NotFound`, which is about a specific id missing from a snapshot the
+    /// wire does have.
     NoSpeakersDiscovered,
     /// `subscribe_speakers` was called more than once on the same wire.
     AlreadySubscribed,
