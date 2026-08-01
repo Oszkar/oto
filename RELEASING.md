@@ -10,6 +10,7 @@
 
 ## Cutting a release
 
+0. Run the integration gate: the **integration-gate** workflow (Actions → integration-gate → Run workflow), or locally with `just test-integration` on a Windows desktop. It drives the full Dart → Rust → Dart event loop through the real FRB bridge against MockWire - coverage `ci.yml` cannot provide, because `flutter test` there picks up `app/test/**` only and `integration_test/` needs a display target. Not a required check on PRs; this is the point at which it runs.
 1. Choose the version per SemVer. Pre-1.0: breaking changes bump MINOR.
 2. Bump `app/pubspec.yaml` `version:` (including `+BUILD`), `native/Cargo.toml` `[workspace.package] version`, and `app/lib/src/app_info.dart`'s `version` constant to match. `flutter test` catches drift on the last one (`settings_screen_test.dart`'s "AppInfo version stays aligned with pubspec base version").
 3. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a fresh empty `## [Unreleased]` above it. Update the compare-link footer too: repoint `[Unreleased]` at `compare/vX.Y.Z...HEAD` and add a `[X.Y.Z]: compare/<prev>...vX.Y.Z` line.

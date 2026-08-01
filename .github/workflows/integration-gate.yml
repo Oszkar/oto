@@ -1,0 +1,68 @@
+name: integration-gate
+
+# The Flutter `integration_test/` suite: the full Dart -> Rust -> Dart loop
+# against MockWire, driven through the real FRB bridge on a real Windows
+# desktop target. Not part of `ci.yml` - `flutter test` there picks up
+# `app/test/**` only, because integration_test needs a display target and
+# ubuntu-latest has none.
+#
+# This is a RELEASE gate, not a merge gate: run it by hand before cutting a
+# tag (see RELEASING.md). It is deliberately not a required check.
+on:
+  workflow_dispatch:
+  # Also run on PRs that change the gate itself. A `workflow_dispatch`-only
+  # workflow isn't dispatchable until it reaches the default branch, so
+  # without this a change to this file could not be verified before merge.
+  # Scoped to this one path, so it costs nothing on ordinary PRs.
+  pull_request:
+    paths:
+      - ".github/workflows/integration-gate.yml"
+
+concurrency:
+  group: integration-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-integration:
+    name: Integration tests (Windows desktop)
+    runs-on: windows-latest
+    # Heaviest job in the repo: Flutter + Rust + MSVC + a real app launch per
+    # test file. Backstop only.
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+
+      # .fvmrc is the canonical Flutter version (see AGENTS.md / CONTRIBUTING.md).
+      # working-directory override: this job defaults to app/, .fvmrc is at root.
+      - name: Read Flutter version
+        id: fvm
+        working-directory: ${{ github.workspace }}
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.fvm.outputs.version }}
+          channel: stable
+          cache: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      # Builds the Windows app (cargokit compiles the oto_native cdylib under
+      # MSVC on the way through) and runs every integration_test/ file against
+      # it. `-d windows` picks the desktop target explicitly rather than
+      # relying on device auto-selection.
+      - name: flutter test integration_test
+        run: flutter test integration_test/ -d windows

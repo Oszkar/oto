@@ -1,10 +1,22 @@
 /// v0.4 end-to-end acceptance tests. Drives MockWire via
-/// `dev_discover_mock` and asserts the full Dart->Rust->Dart event
-/// loop works for every variant of `ChangeEventDto`. Covers Mute,
-/// grouped Playback, the dev-seam SubscriptionError regression, and
-/// the discover-replacement race fix (generation token).
+/// `dev_discover_mock` and asserts the full Dart->Rust->Dart event loop
+/// carries `ChangeEventDto` across the bridge intact.
 ///
-/// Run on a connected Windows desktop:
+/// Variants covered: Volume, Mute, Playback (grouped), GroupVolume,
+/// GroupMute, TopologyChanged, and SubscriptionError. Plus the
+/// discover-replacement race fix (generation token).
+///
+/// NOT covered here, deliberately: `Track` and `SubscriptionRecovered`.
+/// Reaching either from Dart would need a new `dev_push_*` FRB function -
+/// the mock seeds no Track (no media in the fixture) and
+/// SubscriptionRecovered requires driving a speaker to Errored first, which
+/// needs command-error injection the bridge does not expose. Both are
+/// covered in Rust: the health transitions in `oto-app`'s tests, and the
+/// DTO mapping in `native/src/map.rs`. Growing the FRB surface for
+/// test-only reasons was judged the worse trade.
+///
+/// Run as the release gate (see RELEASING.md), or by hand on a Windows
+/// desktop:
 ///
 /// ```text
 /// cd app && flutter test integration_test/v0_4_events_test.dart -d windows
@@ -188,14 +200,104 @@ void main() {
     unawaited(h.sub.cancel());
   });
 
+  // ── v0.5.1 GroupRenderingControl variants ────────────────────────────────
+  //
+  // Reachable through the real command surface (`setGroupVolume` /
+  // `setGroupMute`), so these need no dev seam - the mock auto-emits on SOAP
+  // success exactly as a device NOTIFYs. Office is the solo-group fixture,
+  // so the group id is stable and its coordinator is the only member.
+
+  test('v0.5.1: set_group_volume auto-emits ChangeEventDto.GroupVolume', () async {
+    await api.devDiscoverMock();
+    final h = _subscribeAndCollect();
+    await h.seedComplete.future.timeout(const Duration(seconds: 5));
+    h.events.clear();
+
+    await api.setGroupVolume(groupId: 'RINCON_OFFICE:0', volume: 42);
+    await _waitFor(
+      () => h.events.isNotEmpty,
+      message: 'no GroupVolume event arrived after setGroupVolume',
+    );
+
+    expect(h.events, hasLength(1));
+    final ev = h.events.first;
+    expect(ev, isA<api.ChangeEventDto_GroupVolume>());
+    ev as api.ChangeEventDto_GroupVolume;
+    expect(
+      ev.groupId,
+      'RINCON_OFFICE:0',
+      reason: 'GroupVolume addresses are per-GROUP, not per-speaker',
+    );
+    expect(ev.volume, 42);
+
+    unawaited(h.sub.cancel());
+  });
+
+  test('v0.5.1: set_group_mute auto-emits ChangeEventDto.GroupMute', () async {
+    await api.devDiscoverMock();
+    final h = _subscribeAndCollect();
+    await h.seedComplete.future.timeout(const Duration(seconds: 5));
+    h.events.clear();
+
+    await api.setGroupMute(groupId: 'RINCON_OFFICE:0', muted: true);
+    await _waitFor(
+      () => h.events.isNotEmpty,
+      message: 'no GroupMute event arrived after setGroupMute',
+    );
+
+    expect(h.events, hasLength(1));
+    final ev = h.events.first;
+    expect(ev, isA<api.ChangeEventDto_GroupMute>());
+    ev as api.ChangeEventDto_GroupMute;
+    expect(ev.groupId, 'RINCON_OFFICE:0');
+    expect(ev.muted, isTrue);
+
+    unawaited(h.sub.cancel());
+  });
+
+  test('v0.5.1: GroupVolume and GroupMute are seeded on subscribe', () async {
+    // The seed set gained these in #157; without them
+    // `cached_group_volume`/`cached_group_muted` read null forever on a
+    // fresh mock, so any group-volume UI test was asserting the empty state
+    // by accident. Assert the seed shape directly rather than trusting
+    // _expectedSeedCount alone.
+    await api.devDiscoverMock();
+    final h = _subscribeAndCollect();
+    await h.seedComplete.future.timeout(const Duration(seconds: 5));
+
+    final groupVolumeSeeds = h.events
+        .whereType<api.ChangeEventDto_GroupVolume>()
+        .toList();
+    final groupMuteSeeds = h.events
+        .whereType<api.ChangeEventDto_GroupMute>()
+        .toList();
+
+    expect(groupVolumeSeeds, hasLength(2), reason: 'one per group');
+    expect(groupMuteSeeds, hasLength(2), reason: 'one per group');
+    expect(
+      groupVolumeSeeds.map((e) => e.groupId).toSet(),
+      {'RINCON_KITCHEN:1', 'RINCON_OFFICE:0'},
+      reason: 'both fixture groups seed a GroupVolume',
+    );
+    expect(
+      groupMuteSeeds.every((e) => !e.muted),
+      isTrue,
+      reason: 'seed group mute starts unmuted',
+    );
+
+    unawaited(h.sub.cancel());
+  });
+
   test(
     'v0.5: TopologyChanged is delivered end-to-end over the FRB stream',
     () async {
-      // The FRB `subscribe_change_events` stream-loop has no Rust-level CI
-      // test (it blocks on recv()); this integration test is the only
-      // automated coverage that the loop forwards a variant to Dart. v0.5
-      // adds the payload-less TopologyChanged variant - assert it crosses
-      // the bridge unchanged, driven by the dev seam (debug-only).
+      // The consumer loop itself now has Rust coverage
+      // (`native/tests/event_consumer_e2e.rs` drives the drain order,
+      // cancel, teardown and stale-generation paths), but that runs against
+      // a plain channel - this remains the only check that a variant
+      // survives the real FRB bridge into Dart. v0.5 adds the payload-less
+      // TopologyChanged variant - assert it crosses unchanged, driven by
+      // the dev seam (debug-only).
       await api.devDiscoverMock();
       final h = _subscribeAndCollect();
       await h.seedComplete.future.timeout(const Duration(seconds: 5));

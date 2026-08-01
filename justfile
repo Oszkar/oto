@@ -65,14 +65,16 @@ test-rust:
 test-dart:
     flutter test
 
-# Bridge smoke: boots the app on a connected device / desktop so the FRB
-# cdylib actually loads. Not part of `just test` (or CI) because Flutter's
-# `integration_test` needs a display target — neither ubuntu-latest nor
-# the build.yml matrix are wired up for that. Run manually against
-# Windows / Android when validating a release.
+# Boots the app on a Windows desktop target so the FRB cdylib actually
+# loads, then drives the full Dart -> Rust -> Dart loop against MockWire.
+# Not part of `just test` (or `ci.yml`) because Flutter's `integration_test`
+# needs a display target and ubuntu-latest has none. CI runs the same thing
+# on windows-latest via the `integration-gate` workflow, dispatched by hand.
+#
+# Release gate - see RELEASING.md step 0.
 [working-directory: 'app']
 test-integration:
-    flutter test integration_test/
+    flutter test integration_test/ -d windows
 
 # Supply-chain check (runs cargo deny against the workspace).
 [working-directory: 'native']
