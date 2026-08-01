@@ -19,11 +19,17 @@ import 'package:oto/src/rust/api.dart' as api;
 import 'package:oto/src/rust/frb_generated.dart';
 
 /// MockWire seed set: subscribe_speakers emits Volume + Mute (per speaker)
-/// + Playback (per group). For the 3-speaker / 2-group fixture that's
-/// 3 + 3 + 2 = 8 events. Pinning the exact count makes the seed-drain
-/// Completer trip when the seed surface grows again (deliberate
-/// brittleness - a silent change to the seed shape should fail this test).
-const int _expectedSeedCount = 3 + 3 + 2;
+/// + Playback + GroupVolume + GroupMute (per group). For the 3-speaker /
+/// 2-group fixture that's 3 + 3 + 2 + 2 + 2 = 12 events. Pinning the exact
+/// count makes the seed-drain Completer trip when the seed surface grows
+/// again (deliberate brittleness - a silent change to the seed shape should
+/// fail this test).
+///
+/// Keep this in lockstep with `MockWire::subscribe_speakers`. It is not just
+/// an assertion: `seedComplete` fires when this many events have arrived, so
+/// a stale (too-low) value completes early and lets post-seed mutations race
+/// a still-draining seed phase - an intermittent failure, not a clean one.
+const int _expectedSeedCount = 3 + 3 + 2 + 2 + 2;
 
 /// Subscribe to the unified stream and capture a (subscription,
 /// events, seedComplete) triple. `seedComplete` fires after
@@ -88,7 +94,8 @@ void main() {
 
       await h.seedComplete.future.timeout(const Duration(seconds: 5));
 
-      // Seed shape: 3 Volume + 3 Mute + 2 Playback.
+      // Seed shape: 3 Volume + 3 Mute + 2 Playback + 2 GroupVolume
+      // + 2 GroupMute (see _expectedSeedCount).
       final volumeSeeds = h.events
           .whereType<api.ChangeEventDto_Volume>()
           .toList();

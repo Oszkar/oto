@@ -118,7 +118,8 @@ void main() {
 
       // ── Discovery + seed settle ──────────────────────────────────────────
       // Discovery resolves (devDiscoverMock installs the mock wire), the event
-      // stream subscribes, and the seed drains (3 Volume + 3 Mute + 2 Playback)
+      // stream subscribes, and the seed drains (3 Volume + 3 Mute + 2 Playback
+      // + 2 GroupVolume + 2 GroupMute)
       // into the accumulating household. Wait until the household has the full
       // 3-speaker / 2-group skeleton AND Kitchen's seed volume (30) has landed.
       final container = ProviderScope.containerOf(

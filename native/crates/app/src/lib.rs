@@ -913,9 +913,10 @@ mod tests {
             PlaybackState::Paused
         );
 
-        // MockWire next/previous are coordinator-lookup stubs (no queue
-        // model, no event emit); meaningful state assertion is deferred
-        // to the SonosWire hardware smoke.
+        // MockWire next/previous are coordinator-lookup stubs: no queue
+        // model, so the emitted Playback carries the coordinator's EXISTING
+        // state rather than a new track. Meaningful state assertion is
+        // deferred to the SonosWire hardware smoke.
         next(&office_group).unwrap();
         previous(&office_group).unwrap();
 
