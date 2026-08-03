@@ -73,7 +73,7 @@ jobs:
       # Pinned to the action's major tag (not the mutable `@nextest` tool
       # branch) so Dependabot tracks it like every other `uses:` ref.
       - name: Install nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: nextest
 
@@ -111,7 +111,7 @@ jobs:
       # Major tag, not the mutable `@cargo-deny` tool branch - see the
       # nextest install above.
       - name: Install cargo-deny
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-deny
 
@@ -145,7 +145,7 @@ jobs:
           workspaces: native
 
       - name: Install cargo-ndk
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-ndk
 
