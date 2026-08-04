@@ -300,7 +300,8 @@ class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
                   textAlign: TextAlign.right,
                   style: TextStyles.caption.copyWith(
                     fontFamily: Fonts.mono,
-                    fontWeight: FontWeight.w600,
+                    // GeistMono ships 400 + 500 only; w600 silently falls back.
+                    fontWeight: FontWeight.w500,
                     color: oto.ink2,
                   ),
                 ),

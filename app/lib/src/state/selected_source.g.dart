@@ -11,6 +11,13 @@ part of 'selected_source.dart';
 /// Tracks the coordinator the wide detail pane shows, reconciling on every
 /// active-source change (finding: a plain "first active source" default jumps
 /// whenever another room starts/stops).
+///
+/// `keepAlive`: this holds explicit user intent, and on compact width NOTHING
+/// watches it - `OtoScaffold` skips the detail pane below 840, and
+/// `group_card.dart` short-circuits its `ref.watch` behind `wide &&`. Under
+/// autoDispose that made `nav.dart`'s `select()` write into a provider disposed
+/// on the next tick, so a wide -> compact -> wide resize silently dropped the
+/// pin. The state is two small fields for the app's lifetime.
 
 @ProviderFor(SelectedSource)
 final selectedSourceProvider = SelectedSourceProvider._();
@@ -18,18 +25,32 @@ final selectedSourceProvider = SelectedSourceProvider._();
 /// Tracks the coordinator the wide detail pane shows, reconciling on every
 /// active-source change (finding: a plain "first active source" default jumps
 /// whenever another room starts/stops).
+///
+/// `keepAlive`: this holds explicit user intent, and on compact width NOTHING
+/// watches it - `OtoScaffold` skips the detail pane below 840, and
+/// `group_card.dart` short-circuits its `ref.watch` behind `wide &&`. Under
+/// autoDispose that made `nav.dart`'s `select()` write into a provider disposed
+/// on the next tick, so a wide -> compact -> wide resize silently dropped the
+/// pin. The state is two small fields for the app's lifetime.
 final class SelectedSourceProvider
     extends $NotifierProvider<SelectedSource, PaneSource> {
   /// Tracks the coordinator the wide detail pane shows, reconciling on every
   /// active-source change (finding: a plain "first active source" default jumps
   /// whenever another room starts/stops).
+  ///
+  /// `keepAlive`: this holds explicit user intent, and on compact width NOTHING
+  /// watches it - `OtoScaffold` skips the detail pane below 840, and
+  /// `group_card.dart` short-circuits its `ref.watch` behind `wide &&`. Under
+  /// autoDispose that made `nav.dart`'s `select()` write into a provider disposed
+  /// on the next tick, so a wide -> compact -> wide resize silently dropped the
+  /// pin. The state is two small fields for the app's lifetime.
   SelectedSourceProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'selectedSourceProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -50,11 +71,18 @@ final class SelectedSourceProvider
   }
 }
 
-String _$selectedSourceHash() => r'81c523e34c28a7fb569f40a8529e7a1c329a6567';
+String _$selectedSourceHash() => r'2cdea3238103ca44ff8be8ad9b3b63503e4e3aed';
 
 /// Tracks the coordinator the wide detail pane shows, reconciling on every
 /// active-source change (finding: a plain "first active source" default jumps
 /// whenever another room starts/stops).
+///
+/// `keepAlive`: this holds explicit user intent, and on compact width NOTHING
+/// watches it - `OtoScaffold` skips the detail pane below 840, and
+/// `group_card.dart` short-circuits its `ref.watch` behind `wide &&`. Under
+/// autoDispose that made `nav.dart`'s `select()` write into a provider disposed
+/// on the next tick, so a wide -> compact -> wide resize silently dropped the
+/// pin. The state is two small fields for the app's lifetime.
 
 abstract class _$SelectedSource extends $Notifier<PaneSource> {
   PaneSource build();

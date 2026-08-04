@@ -141,25 +141,32 @@ class Discovery extends _$Discovery {
   /// Publish a freshly re-pulled wire's [topology] AND re-key the event stream.
   ///
   /// The signal bump forces `wireGenerationProvider` (events.dart) to recompute
-  /// even when [topology] is value-equal to the current one. A no-op regroup
-  /// yields an unchanged `Topology`; because FRB `Topology` has value equality,
-  /// re-publishing it does NOT transition `discoveryProvider`, so on its own it
-  /// would leave the event stream subscribed to the REPLACED wire's now-dead
-  /// one-shot receiver (events silently stop). Bumping the install signal makes
-  /// `wireGenerationProvider` re-read the fresh Rust generation and re-subscribe.
+  /// **independently of whether publishing [topology] transitions this
+  /// provider**. Without it, a non-transitioning publish would leave the event
+  /// stream subscribed to the REPLACED wire's now-dead one-shot receiver and
+  /// events would silently stop; the bump makes `wireGenerationProvider`
+  /// re-read the fresh Rust generation and re-subscribe regardless.
   ///
-  /// Co-located with the publish so any future fast (non-SSDP, non-transitioning)
-  /// install that routes through here cannot reintroduce the value-equal-strand
-  /// class by forgetting to signal.
+  /// Note this is a *guarantee*, not a workaround for an observed suppression:
+  /// FRB's generated `Topology` compares its `List` fields with Dart's
+  /// identity-based `List ==`, so a freshly deserialized topology is never `==`
+  /// to the previous one and a re-publish does in fact transition today. That
+  /// is an implementation detail of the generated equality, not a property this
+  /// code should depend on - hence the explicit signal.
+  ///
+  /// Co-located with the publish so any future fast (non-SSDP) install that
+  /// routes through here cannot reintroduce the dead-receiver class by
+  /// forgetting to signal.
   void _publishInstalledWire(rust_api.Topology topology) {
     state = AsyncValue.data(topology);
     ref.read(wireInstallSignalProvider.notifier).bump();
   }
 }
 
-/// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
-/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// A monotonic signal bumped on every wire install, whether or not that install
+/// transitions [discoveryProvider] - specifically a fast `refreshTopology()`
+/// after a no-op regroup, whose topology is equivalent to the one already
+/// published. `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
 /// and is the sole bumper; `events.dart` only consumes it (keeps the dependency

@@ -17,9 +17,9 @@
 /// the same wire-replacement lifecycle. `refreshTopology()` re-keys the event
 /// stream itself (it bumps the wire-install signal that `wireGenerationProvider`
 /// watches - see `Discovery._publishInstalledWire`), so the new wire's fresh
-/// pump (clean `TopologyFilter`) is picked up even when the new `Topology` is
-/// value-equal to the old (a no-op `TopologyChanged`) and `discoveryProvider`
-/// does not transition. If the fast re-pull throws (e.g. every cached speaker is
+/// pump (clean `TopologyFilter`) is picked up even if publishing the new
+/// `Topology` does not transition `discoveryProvider` (a no-op
+/// `TopologyChanged`). If the fast re-pull throws (e.g. every cached speaker is
 /// now unreachable), it falls back to a full re-discover via
 /// `ref.invalidate(discoveryProvider)`.
 ///
@@ -67,7 +67,7 @@ void topologyController(Ref ref) {
           try {
             // refreshTopology() re-keys the event stream itself - it bumps the
             // wire-install signal so changeEventsProvider re-subscribes against
-            // the new wire even on a value-equal re-pull that does not transition
+            // the new wire even on a re-pull that does not transition
             // discoveryProvider (see Discovery._publishInstalledWire). Nothing to
             // invalidate here.
             await ref.read(discoveryProvider.notifier).refreshTopology();
