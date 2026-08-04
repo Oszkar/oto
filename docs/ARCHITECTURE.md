@@ -56,7 +56,9 @@ Ownership is **split**, and has been since v0.6.0. Rust owns the authoritative d
 | State | Authoritative owner | Notes |
 |---|---|---|
 | Topology (rooms, groups, membership, coordinator) | Rust (`oto-wire` caches, re-pulled by `discover()` / `refresh_topology()`) | Dart re-seeds its skeleton from every `discoveryProvider` transition. |
-| Per-speaker volume / mute, transport, track | Rust (`StateManager` cache in `oto-app`) | Event-fed; Dart mirrors them into `householdProvider` and can re-derive from a fresh event. |
+| Per-speaker volume / mute | Rust (`StateManager` cache in `oto-app`) | Event-fed; Dart mirrors them into `householdProvider` and can re-derive from a fresh event. |
+| Transport state / current track | Rust (`StateManager` cache in `oto-app`) | Cached per **group**, fed by coordinator-only AVTransport events; `speaker_state` resolves speaker -> group to read it. |
+| Track position / duration | Rust (`Wire::track_position`) | A live `GetPositionInfo` SOAP read, *not* in the event cache - no NOTIFY carries elapsed position. |
 | **Group volume / mute** | **Dart (`householdProvider`)** | Event-only - there is no Rust read path for these, so the Dart accumulation is the *only* copy. Lost on restart until the next `GroupVolume` / `GroupMute` NOTIFY. |
 | Per-speaker health (reachable / errored) | Rust | Surfaced as `SubscriptionError` / `SubscriptionRecovered`; Dart carries the flags forward across an automatic refresh and clears them on a `TopologySource.userScan` (see [Frontend shell](#frontend-shell-responsive-v063-v064)). |
 | In-flight command failures | Dart (`commandFailuresProvider`) | Transient by design; see [Command flow](#command-flow). |

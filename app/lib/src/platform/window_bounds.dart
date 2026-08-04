@@ -42,61 +42,91 @@ Rect? _rectFrom(String? s) {
   return Rect.fromLTWH(p[0]!, p[1]!, p[2]!, p[3]!);
 }
 
-/// Conservative logical-pixel extent of the attached displays.
+/// Conservative logical-pixel bounds on where the desktop can reach.
 ///
 /// `PlatformDispatcher` exposes each display's physical size and DPR but NOT
 /// its virtual-desktop offset, so the true multi-monitor rectangle is not
-/// reachable without taking a direct `screen_retriever` dependency. Summing
-/// the logical extents is deliberately an over-estimate: it bounds how far a
-/// legitimate origin can sit from the primary display without ever rejecting
-/// a position that is genuinely on-screen.
+/// reachable without taking a direct `screen_retriever` dependency. We bound it
+/// by the two arrangements that actually occur - all displays in one **row**
+/// (widths sum, height is the tallest) or one **column** (heights sum, width is
+/// the widest) - and treat an origin as plausible if it fits either.
+///
+/// That never rejects a genuinely on-screen position, and is strictly tighter
+/// than summing both axes, which would invent a bottom-right corner no display
+/// covers: two side-by-side 1920x1080 monitors are a 3840x1080 desktop, not
+/// 3840x2160. An L-shaped arrangement can still slip an off-screen origin
+/// through, which is the residual this cannot close without real offsets.
+///
+/// TODO(v0.7): exact validation needs per-display offsets (`screen_retriever`);
+/// folded into the hardening bucket rather than taken as a dependency here.
+typedef DesktopBounds = ({Size row, Size column});
+
+/// `Display.size` is physical; window_manager positions in logical pixels.
+/// Split out so [desktopBounds] takes plain sizes - `Display` has no public
+/// constructor, so it cannot be faked in a unit test.
+Iterable<Size> _logicalSizes(Iterable<Display> displays) => displays.map((d) {
+  final dpr = d.devicePixelRatio > 0 ? d.devicePixelRatio : 1.0;
+  return Size(d.size.width / dpr, d.size.height / dpr);
+});
+
 @visibleForTesting
-Size displayEnvelope(Iterable<Display> displays) {
-  var w = 0.0;
-  var h = 0.0;
-  for (final d in displays) {
-    final dpr = d.devicePixelRatio > 0 ? d.devicePixelRatio : 1.0;
-    w += d.size.width / dpr;
-    h += d.size.height / dpr;
+DesktopBounds desktopBounds(Iterable<Size> logicalSizes) {
+  var sumW = 0.0, sumH = 0.0, maxW = 0.0, maxH = 0.0;
+  for (final s in logicalSizes) {
+    final w = s.width;
+    final h = s.height;
+    if (!w.isFinite || !h.isFinite || w <= 0 || h <= 0) continue;
+    sumW += w;
+    sumH += h;
+    maxW = max(maxW, w);
+    maxH = max(maxH, h);
   }
-  // No displays reported (headless / early startup): fall back to the default
-  // size as the envelope so only absurd origins are rejected.
-  return w > 0 && h > 0 ? Size(w, h) : _kDefaultSize;
+  // No usable displays reported (headless / early startup): fall back to the
+  // default size so only absurd origins are rejected.
+  if (sumW <= 0 || sumH <= 0) {
+    return (row: _kDefaultSize, column: _kDefaultSize);
+  }
+  return (row: Size(sumW, maxH), column: Size(maxW, sumH));
 }
+
+/// The widest and tallest a restored window may legitimately be: a window can
+/// span monitors, so each axis is bounded by that axis's largest tiling.
+Size _maxWindowSize(DesktopBounds b) =>
+    Size(max(b.row.width, b.column.width), max(b.row.height, b.column.height));
 
 /// The size to restore, or null to fall back to [_kDefaultSize].
 ///
 /// Rejects degenerate/absent sizes outright; clamps an over-large one (a rect
-/// saved on a since-removed larger monitor) down to the current envelope.
+/// saved on a since-removed larger monitor) down to what the displays can hold.
 @visibleForTesting
-Size? sanitizedSize(Size? saved, Size envelope) {
+Size? sanitizedSize(Size? saved, DesktopBounds bounds) {
   if (saved == null) return null;
   if (saved.width < _kMinSize.width || saved.height < _kMinSize.height) {
     return null;
   }
+  final limit = _maxWindowSize(bounds);
   return Size(
-    saved.width.clamp(_kMinSize.width, max(_kMinSize.width, envelope.width)),
-    saved.height.clamp(
-      _kMinSize.height,
-      max(_kMinSize.height, envelope.height),
-    ),
+    saved.width.clamp(_kMinSize.width, max(_kMinSize.width, limit.width)),
+    saved.height.clamp(_kMinSize.height, max(_kMinSize.height, limit.height)),
   );
 }
 
 /// The origin to restore, or null to centre instead.
 ///
 /// A rect saved on a since-disconnected monitor reopens off-screen, so require
-/// a [_kMinVisible] slab to fall inside the envelope. `top` may not be negative
-/// (a title bar above the desktop is not grabbable); `left` may be, because a
-/// monitor placed to the left of the primary yields legitimate negative x.
+/// a [_kMinVisible] slab to fall inside one of [DesktopBounds]' two tilings -
+/// checked per tiling, so a wide x is not paired with a tall y unless a single
+/// arrangement allows both. `top` may not be negative (a title bar above the
+/// desktop is not grabbable); `left` may be, because a monitor placed to the
+/// left of the primary yields legitimate negative x.
 @visibleForTesting
-Offset? sanitizedOrigin(Offset saved, Size size, Size envelope) {
-  final leftOk =
+Offset? sanitizedOrigin(Offset saved, Size size, DesktopBounds bounds) {
+  bool fits(Size extent) =>
       saved.dx >= -(size.width - _kMinVisible.width) &&
-      saved.dx + _kMinVisible.width <= envelope.width;
-  final topOk =
-      saved.dy >= 0 && saved.dy + _kMinVisible.height <= envelope.height;
-  return leftOk && topOk ? saved : null;
+      saved.dx + _kMinVisible.width <= extent.width &&
+      saved.dy >= 0 &&
+      saved.dy + _kMinVisible.height <= extent.height;
+  return fits(bounds.row) || fits(bounds.column) ? saved : null;
 }
 
 /// Restore the last window size + position on desktop startup, then persist
@@ -114,11 +144,13 @@ Future<void> initWindowBounds(SharedPreferences prefs) async {
     // window. Size and origin are validated independently so a still-sane size
     // survives an unreachable origin.
     final saved = _rectFrom(prefs.getString(_kBounds));
-    final envelope = displayEnvelope(PlatformDispatcher.instance.displays);
-    final size = sanitizedSize(saved?.size, envelope);
+    final bounds = desktopBounds(
+      _logicalSizes(PlatformDispatcher.instance.displays),
+    );
+    final size = sanitizedSize(saved?.size, bounds);
     final origin = size == null
         ? null
-        : sanitizedOrigin(saved!.topLeft, size, envelope);
+        : sanitizedOrigin(saved!.topLeft, size, bounds);
     final opts = WindowOptions(
       size: size ?? _kDefaultSize,
       center: origin == null,

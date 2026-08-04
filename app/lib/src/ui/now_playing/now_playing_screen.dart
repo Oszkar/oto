@@ -156,6 +156,8 @@ class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
           key: Key('np-progress-$groupId'),
           value: value,
           onChanged: null, // read-only: no seek (no backend)
+          // An indicator, not a disabled control - keep the accent tokens.
+          readOnly: true,
         ),
         const SizedBox(height: Space.sm6),
         Row(

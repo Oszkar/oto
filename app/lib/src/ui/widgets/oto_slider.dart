@@ -11,31 +11,45 @@ import '../../theme/oto_colors.dart';
 /// touch target clears the >=44px floor.
 ///
 /// [onChanged] fires continuously during a drag; [onChangeEnd] fires once on
-/// release. A null [onChanged] renders a disabled (non-interactive) slider -
-/// the idiomatic Material way to show a read-only/unknown value (e.g. a volume
-/// that hasn't been reported yet), rather than a draggable no-op. Disabled
-/// keeps the same token colors as enabled: the two read-only cases carry their
-/// own signal already (an unreported volume sits at 0 with a "-" readout, and
-/// the Now Playing progress bar is a permanently read-only *indicator* that
-/// should still look like the accent), so a Material grey-out would only
-/// desaturate the progress bar for no gain.
+/// release. A null [onChanged] renders a non-interactive slider - the idiomatic
+/// Material way to show a read-only or unknown value, rather than a draggable
+/// no-op.
+///
+/// Non-interactive covers two different things, and [readOnly] tells them
+/// apart, because they should not look alike:
+///
+///  - a read-only **indicator** ([readOnly] true, e.g. the Now Playing progress
+///    bar), which keeps the accent tokens because there is no control to
+///    disable in the first place; and
+///  - a **control that is currently unavailable** ([readOnly] false, e.g. a
+///    volume whose speaker is offline or whose value has not been reported),
+///    which renders in muted tokens so it does not read as interactive.
+///
+/// Either way the colors come from [OtoColors]: Material's disabled slots
+/// default to `colorScheme.onSurface` and would otherwise bypass the token
+/// layer entirely.
 class OtoSlider extends StatelessWidget {
   const OtoSlider({
     super.key,
     required this.value,
     required this.onChanged,
     this.onChangeEnd,
+    this.readOnly = false,
   });
 
   /// Current value, clamped to `0..1` on build.
   final double value;
 
   /// Fires with the live value during a drag. When null, the slider is
-  /// disabled (greyed, non-interactive).
+  /// non-interactive; [readOnly] decides how that reads visually.
   final ValueChanged<double>? onChanged;
 
   /// Fires once with the final value when the drag is released.
   final ValueChanged<double>? onChangeEnd;
+
+  /// True when this is a read-only indicator rather than an unavailable
+  /// control. Only meaningful while [onChanged] is null.
+  final bool readOnly;
 
   /// Thin visual track height.
   static const double _trackHeight = 4;
@@ -62,12 +76,10 @@ class OtoSlider extends StatelessWidget {
           thumbColor: oto.accent,
           // The disabled variants are separate SliderThemeData slots; leaving
           // them unset makes Material fill them from `colorScheme.onSurface`,
-          // bypassing the token layer entirely. That is not a corner case here
-          // - the Now Playing progress bar is always disabled, so without these
-          // it renders default grey instead of accent-on-fillStrong.
-          disabledActiveTrackColor: oto.accent,
-          disabledInactiveTrackColor: oto.fillStrong,
-          disabledThumbColor: oto.accent,
+          // bypassing the token layer entirely.
+          disabledActiveTrackColor: readOnly ? oto.accent : oto.inkFaint,
+          disabledInactiveTrackColor: readOnly ? oto.fillStrong : oto.fill,
+          disabledThumbColor: readOnly ? oto.accent : oto.inkFaint,
           overlayColor: oto.accent.withValues(alpha: 0.12),
           thumbShape: const RoundSliderThumbShape(
             enabledThumbRadius: _thumbRadius,
