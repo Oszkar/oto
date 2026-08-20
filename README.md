@@ -66,6 +66,10 @@ oto/
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design - layers, crate responsibilities, state ownership, and the command/event flow.
 
+Flutter command controllers share one app-lifetime scheduler that preserves
+user-intent order per physical speaker and reconciles optimistic writes per
+operation lane, including across group-id churn.
+
 The Flutter plugin `app/rust_builder/` is the [Cargokit][cargokit] integration shim that compiles `native/` into the right shared library for each platform during a normal `flutter build`. Its CMake / Gradle / Podspec files point at `../../../native` (or deeper, on Windows where the symlink chain is longer); if you move `native/` or `rust_builder/`, update those paths.
 
 We carry one **local patch** against vendored Cargokit to drop 32-bit Android ABIs from the Rust build target list. See [LOCAL_PATCHES.md](LOCAL_PATCHES.md) for the diff and re-apply procedure if you ever sync Cargokit from upstream.

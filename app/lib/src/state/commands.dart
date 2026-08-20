@@ -5,11 +5,12 @@
 /// throttled (≤1 SOAP / 150 ms, trailing) plus one final send on release - the
 /// LAN-politeness non-negotiable: never one command per slider pixel.
 ///
-/// Reconciliation (shared via [_Reconciling]): a `CommandError_NotFound` means a
-/// stale identifier, so we re-discover; any other error rolls the optimistic
-/// value back. A *successful* no-op set emits no echo (Sonos suppresses
-/// unchanged values), so a standing optimistic value is correct - we **never**
-/// revert for lack of an echo, only on a thrown error.
+/// Reconciliation is shared by both controllers through [CommandScheduler]. A
+/// `CommandError_NotFound` means a stale identifier, so we re-discover; any
+/// other current-intent error restores the lane's last committed value. A
+/// successful no-op set emits no echo (Sonos suppresses unchanged values), so a
+/// standing optimistic value is correct - we never revert for lack of an echo,
+/// only on a thrown error.
 library;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -47,295 +48,439 @@ class CommandApi {
       rust_api.setGroupMute(groupId: groupId, muted: m);
 }
 
-/// Shared optimistic-command reconciliation. Runs [op]; on a thrown
-/// [CommandError] it either re-discovers (stale id → `NotFound`) or rolls back
-/// (any other error). Keeps `send`/error handling DRY across both controllers.
-mixin _Reconciling {
-  Ref get ref;
+enum _CommandLane {
+  roomVolume,
+  roomMute,
+  groupVolume,
+  groupMute,
+  transportToggle,
+}
 
-  /// Tail of the in-flight send chain per target id.
-  ///
-  /// Sends to the SAME target are serialized: each waits for its predecessor
-  /// before dispatching. Two reasons, both load-bearing.
-  ///
-  /// 1. Out-of-order completion becomes impossible, so an older failure can no
-  ///    longer land after a newer success. The `isCurrent` gate suppressed the
-  ///    Dart-side rollback and notice for that case, but it cannot suppress the
-  ///    `SubscriptionError` the Rust layer emits when the stale command fails -
-  ///    which marked the room unreachable even though the user's actual last
-  ///    command succeeded, and could tip Home into `HomeAllUnreachable`.
-  ///    Serializing removes the interleaving rather than papering over half of
-  ///    its consequences.
-  /// 2. LAN politeness: never two concurrent SOAP calls to one device.
-  ///
-  /// Keyed by target (speaker id for per-room commands, group id for
-  /// group-addressed ones), so unrelated rooms still command in parallel.
-  final Map<String, Future<void>> _chain = {};
+typedef _LaneKey = ({String speakerId, _CommandLane lane});
 
-  /// Room name for [speakerId], to name it in a failure notice. Null when the
-  /// id is unknown (already gone from the household) - `describeCommandError`
-  /// then falls back to a generic subject rather than printing a raw id.
+class _LaneState {
+  int generation = 0;
+  int activeIntents = 0;
+  Object? committed;
+}
+
+class _GroupTarget {
+  const _GroupTarget(this.originalGroupId, this.coordinatorId);
+
+  final String originalGroupId;
+  final String? coordinatorId;
+
+  String get dispatchKey => coordinatorId ?? originalGroupId;
+}
+
+class _CommandIntent<T> {
+  _CommandIntent({
+    required this.key,
+    required this.state,
+    required this.generation,
+    required this.optimisticValue,
+    required this.restore,
+    required this.dispatchKey,
+    required this.label,
+    this.groupTarget,
+  });
+
+  final _LaneKey key;
+  final _LaneState state;
+  final int generation;
+  final T optimisticValue;
+  final void Function(T committed, String? currentGroupId) restore;
+  final String dispatchKey;
+  final String? label;
+  final _GroupTarget? groupTarget;
+  bool active = true;
+}
+
+/// Shared command authority for both controllers.
+///
+/// Physical-device dispatch ordering and user-intent supersession deliberately
+/// use different keys. Every command sent to one speaker shares a dispatch
+/// tail, while only a newer value in the same operation lane suppresses an
+/// older rollback. Each lane also keeps the last successfully committed value,
+/// separate from the household's currently rendered optimistic value.
+class CommandScheduler {
+  CommandScheduler(this.ref);
+
+  final Ref ref;
+  final Map<String, Future<void>> _tails = {};
+  final Map<_LaneKey, _LaneState> _lanes = {};
+
+  /// Coordinator captures that outlive individual mid-drag sends. The scalar
+  /// helper owns gesture timing; the scheduler owns the stable physical target.
+  final Map<String, String?> _groupGestures = {};
+
   String? roomLabel(String speakerId) =>
       ref.read(householdProvider).rooms[speakerId]?.name;
 
-  /// A group is labelled by its coordinator's room name - the same name the
-  /// group card titles itself with. Used for group-addressed commands
-  /// (transport, group volume/mute), which have no single speaker to name.
-  String? groupLabel(String groupId) {
-    final h = ref.read(householdProvider);
-    final coord = h.groups[groupId]?.coordinatorId;
-    return coord == null ? null : h.rooms[coord]?.name;
-  }
-
-  /// Coordinator of [groupId] right now, or null if the group is gone.
-  String? coordinatorOf(String groupId) =>
+  String? _coordinatorOf(String groupId) =>
       ref.read(householdProvider).groups[groupId]?.coordinatorId;
 
-  /// Re-resolve a group id captured at dispatch time against the CURRENT
-  /// household, following the coordinator.
-  ///
-  /// Group ids churn across a regroup while coordinators are stable, and
-  /// `householdFromTopology` carries per-group state (including `groupMuted`
-  /// and `groupVolume`) to the new id by coordinator. A rollback that still
-  /// used the captured id would hit `updateGroup`'s unknown-id no-op, silently
-  /// leaving the optimistic value standing while the failure notice claimed the
-  /// command failed. Falls back to the original id when the coordinator is
-  /// unknown - no worse than before.
-  String resolveGroupId(String groupId, String? coordinatorId) {
-    if (coordinatorId == null) return groupId;
-    final h = ref.read(householdProvider);
-    if (h.groups.containsKey(groupId)) return groupId;
-    for (final g in h.groups.values) {
-      if (g.coordinatorId == coordinatorId) return g.id;
-    }
-    return groupId;
+  String? _labelFor(_GroupTarget target) {
+    final coordinator = target.coordinatorId;
+    return coordinator == null ? null : roomLabel(coordinator);
   }
 
-  /// Run [op] after any in-flight send to [target] has settled. Returns the
-  /// chained future so callers still await their own send.
-  Future<void> send(
-    Future<void> Function() op, {
-    void Function()? rollback,
-    String? label,
-    bool Function()? isCurrent,
-    String? target,
+  _GroupTarget _captureGroup(String groupId) {
+    final coordinator = _groupGestures.containsKey(groupId)
+        ? _groupGestures[groupId]
+        : _coordinatorOf(groupId);
+    return _GroupTarget(groupId, coordinator);
+  }
+
+  /// Re-resolve immediately before dispatch or rollback. Following the captured
+  /// coordinator even when the old id still exists avoids sending a queued
+  /// command to a newly re-coordinated group that happens to reuse that id.
+  String _currentGroupId(_GroupTarget target) {
+    final coordinator = target.coordinatorId;
+    if (coordinator != null) {
+      for (final group in ref.read(householdProvider).groups.values) {
+        if (group.coordinatorId == coordinator) return group.id;
+      }
+    }
+    return target.originalGroupId;
+  }
+
+  void _openGroupGesture(String groupId) {
+    _groupGestures.putIfAbsent(groupId, () => _coordinatorOf(groupId));
+  }
+
+  Set<String> _closeGroupGesture(_CommandIntent<int?> intent) {
+    final target = intent.groupTarget;
+    if (target == null) return const {};
+
+    final coordinator = target.coordinatorId;
+    if (coordinator == null) {
+      _groupGestures.remove(target.originalGroupId);
+      return {target.originalGroupId};
+    }
+
+    // A regroup can change the id supplied at drag release. Clear every alias
+    // captured for the same physical coordinator so the old id cannot retain a
+    // stale target if Sonos later reuses it for another group.
+    final aliases = <String>{};
+    _groupGestures.removeWhere((groupId, captured) {
+      final matches = captured == coordinator;
+      if (matches) aliases.add(groupId);
+      return matches;
+    });
+    aliases.add(target.originalGroupId);
+    return aliases;
+  }
+
+  _CommandIntent<T> _beginRoomIntent<T>({
+    required String speakerId,
+    required _CommandLane lane,
+    required T Function() readCommitted,
+    required T optimisticValue,
+    required void Function() applyOptimistic,
+    required void Function(T committed) restore,
+  }) => _beginIntent(
+    dispatchKey: speakerId,
+    lane: lane,
+    readCommitted: readCommitted,
+    optimisticValue: optimisticValue,
+    applyOptimistic: applyOptimistic,
+    restore: (value, _) => restore(value),
+    label: roomLabel(speakerId),
+  );
+
+  _CommandIntent<T> _beginGroupIntent<T>({
+    required String groupId,
+    required _CommandLane lane,
+    required T Function(String currentGroupId) readCommitted,
+    required T optimisticValue,
+    required void Function(String currentGroupId) applyOptimistic,
+    required void Function(String currentGroupId, T committed) restore,
   }) {
-    if (target == null) return _dispatch(op, rollback, label, isCurrent);
-    final prev = _chain[target];
-    // With nothing in flight, dispatch straight away so the common case keeps
-    // its old timing (the SOAP call starts synchronously, up to the first
-    // await) rather than slipping a microtask. `_dispatch` never throws (it
-    // swallows CommandError), but chain off a CAUGHT predecessor anyway so one
-    // unexpected error cannot wedge a target forever.
-    final next = prev == null
-        ? _dispatch(op, rollback, label, isCurrent)
-        : prev
-              .catchError((_) {})
-              .then((_) => _dispatch(op, rollback, label, isCurrent));
-    _chain[target] = next;
-    // Handle BOTH outcomes rather than `whenComplete`: that returns a derived
-    // future carrying the same error, and discarding it raises an unhandled
-    // async error if `_dispatch` ever throws something other than CommandError
-    // (an FRB panic, say) - even when the caller handles `next` itself.
-    void releaseTail(Object? _) {
-      // Only clear if we are still the tail - a newer send may have chained on.
-      if (identical(_chain[target], next)) _chain.remove(target);
-    }
-
-    next.then(releaseTail, onError: releaseTail);
-    return next;
+    final target = _captureGroup(groupId);
+    final currentGroupId = _currentGroupId(target);
+    return _beginIntent(
+      dispatchKey: target.dispatchKey,
+      lane: lane,
+      readCommitted: () => readCommitted(currentGroupId),
+      optimisticValue: optimisticValue,
+      applyOptimistic: () => applyOptimistic(currentGroupId),
+      restore: (value, currentGroupId) {
+        if (currentGroupId != null) restore(currentGroupId, value);
+      },
+      label: _labelFor(target),
+      groupTarget: target,
+    );
   }
 
-  Future<void> _dispatch(
-    Future<void> Function() op,
-    void Function()? rollback,
+  _CommandIntent<T> _beginIntent<T>({
+    required String dispatchKey,
+    required _CommandLane lane,
+    required T Function() readCommitted,
+    required T optimisticValue,
+    required void Function() applyOptimistic,
+    required void Function(T committed, String? currentGroupId) restore,
+    required String? label,
+    _GroupTarget? groupTarget,
+  }) {
+    final key = (speakerId: dispatchKey, lane: lane);
+    final state = _lanes.putIfAbsent(key, _LaneState.new);
+    if (state.activeIntents == 0) state.committed = readCommitted();
+    state.activeIntents++;
+    final generation = ++state.generation;
+
+    // The generation is visible before the optimistic write. An older failure
+    // landing after this point therefore cannot clobber the newer user intent.
+    applyOptimistic();
+    return _CommandIntent(
+      key: key,
+      state: state,
+      generation: generation,
+      optimisticValue: optimisticValue,
+      restore: restore,
+      dispatchKey: dispatchKey,
+      label: label,
+      groupTarget: groupTarget,
+    );
+  }
+
+  bool _isLatest<T>(_CommandIntent<T> intent) =>
+      intent.state.generation == intent.generation;
+
+  void _cancelIntent<T>(_CommandIntent<T> intent) => _finishIntent(intent);
+
+  Future<void> _dispatchRoomIntent<T>(
+    _CommandIntent<T> intent,
+    Future<void> Function() command,
+  ) => _enqueue(intent.dispatchKey, () => _runIntent(intent, (_) => command()));
+
+  Future<void> _dispatchGroupIntent<T>(
+    _CommandIntent<T> intent,
+    Future<void> Function(String currentGroupId) command,
+  ) => _enqueue(
+    intent.dispatchKey,
+    () => _runIntent(intent, (groupId) {
+      if (groupId == null) {
+        return Future<void>.error(
+          StateError('group intent has no captured group target'),
+        );
+      }
+      return command(groupId);
+    }),
+  );
+
+  Future<void> _runIntent<T>(
+    _CommandIntent<T> intent,
+    Future<void> Function(String? currentGroupId) command,
+  ) async {
+    final groupTarget = intent.groupTarget;
+    final groupId = groupTarget == null ? null : _currentGroupId(groupTarget);
+    try {
+      await command(groupId);
+      // A superseded success is still the committed predecessor for any newer
+      // queued operation that may fail.
+      intent.state.committed = intent.optimisticValue;
+    } on CommandError catch (error) {
+      if (_isLatest(intent)) {
+        final rollbackGroupId = groupTarget == null
+            ? null
+            : _currentGroupId(groupTarget);
+        intent.restore(intent.state.committed as T, rollbackGroupId);
+        _report(error, intent.label);
+      }
+      _rediscoverIfStale(error);
+    } finally {
+      _finishIntent(intent);
+    }
+  }
+
+  Future<void> _orderRoom({
+    required String speakerId,
+    required Future<void> Function() command,
+  }) => _enqueue(speakerId, () => _runOrdered(command, roomLabel(speakerId)));
+
+  Future<void> _orderGroup({
+    required String groupId,
+    required Future<void> Function(String currentGroupId) command,
+  }) {
+    final target = _captureGroup(groupId);
+    return _enqueue(
+      target.dispatchKey,
+      () => _runOrdered(
+        () => command(_currentGroupId(target)),
+        _labelFor(target),
+      ),
+    );
+  }
+
+  Future<void> _runOrdered(
+    Future<void> Function() command,
     String? label,
-    bool Function()? isCurrent,
   ) async {
     try {
-      await op();
-    } on CommandError catch (e) {
-      // A superseded send stays SILENT. `_ThrottledScalar` can have an earlier
-      // mid-drag send still in flight when the final one succeeds; if that
-      // stale send then fails, neither its rollback nor its failure notice is
-      // about anything the user is still doing - announcing it would claim
-      // "Could not reach Kitchen" right after the volume they set landed fine.
-      if (isCurrent?.call() ?? true) {
-        // Any thrown error means the optimistic guess didn't take, so undo it. A
-        // *successful* no-op set emits no echo, so a standing optimistic value
-        // is correct - we roll back only on a thrown error, never for a missing
-        // echo.
-        rollback?.call();
-        // Say so. Before v0.6.4 the rollback was silent, which made a failed
-        // command look like a control that bounced back for no reason.
-        ref
-            .read(commandFailuresProvider.notifier)
-            .report(describeCommandError(e, label));
-      }
-      if (e is CommandError_NotFound) {
-        // Stale identifier - also re-discover so the id is refreshed (sonos-notes
-        // § Identifiers). Deliberately OUTSIDE the isCurrent gate: a stale id is
-        // stale regardless of which gesture observed it, which preserves the
-        // pre-v0.6.4 re-discover behaviour exactly. Rolling back first means the
-        // view shows the last-known value until the fresh topology re-seeds it
-        // via events, rather than a wrong optimistic guess carried across
-        // re-discovery by coordinator.
-        ref.invalidate(discoveryProvider);
-      }
+      await command();
+    } on CommandError catch (error) {
+      _report(error, label);
+      _rediscoverIfStale(error);
     }
+  }
+
+  void _report(CommandError error, String? label) => ref
+      .read(commandFailuresProvider.notifier)
+      .report(describeCommandError(error, label));
+
+  void _rediscoverIfStale(CommandError error) {
+    // Deliberately independent of supersession. A stale identifier remains
+    // useful discovery evidence even when its optimistic intent was replaced.
+    if (error is CommandError_NotFound) ref.invalidate(discoveryProvider);
+  }
+
+  void _finishIntent<T>(_CommandIntent<T> intent) {
+    if (!intent.active) return;
+    intent.active = false;
+    intent.state.activeIntents--;
+    if (intent.state.activeIntents == 0 &&
+        identical(_lanes[intent.key], intent.state)) {
+      _lanes.remove(intent.key);
+    }
+  }
+
+  Future<void> _enqueue(String dispatchKey, Future<void> Function() command) {
+    final previous = _tails[dispatchKey];
+    final next = previous == null
+        ? command()
+        : previous.catchError((_) {}).then((_) => command());
+    _tails[dispatchKey] = next;
+
+    void releaseTail(Object? _) {
+      if (identical(_tails[dispatchKey], next)) _tails.remove(dispatchKey);
+    }
+
+    // Observe both outcomes without creating an unhandled derived future.
+    next.then(releaseTail, onError: releaseTail);
+    return next;
   }
 }
 
 /// One throttled, optimistic scalar (a volume) per target id - shared by the
 /// per-speaker and per-group volume paths so the drag bookkeeping lives once.
 ///
-/// Encapsulates: pre-gesture anchor capture, the LAN throttle (≤1 SOAP /
-/// 150 ms, trailing), a single final send on release, and **sequence-gated**
-/// rollback. The sequence gate fixes a real race: release (`end`) can fire
-/// while an earlier throttled mid-drag send is still in flight; if that stale
-/// send then fails *after* the final send succeeded, a naive rollback would
-/// revert the UI to the pre-gesture value, clobbering the value the user
-/// actually set. Each send bumps a per-id sequence, and a send only rolls back
-/// if it is still the latest - so a superseded send fails silently.
+/// This class owns only throttle and gesture bookkeeping. Dispatch ordering,
+/// supersession, and rollback baselines live in [CommandScheduler].
 class _ThrottledScalar {
   _ThrottledScalar({
-    required this.readCurrent,
-    required this.readLabel,
-    required this.applyOptimistic,
-    required this.restore,
-    required this.command,
-    required this.reconcile,
+    required this.beginIntent,
+    required this.dispatchIntent,
+    required this.cancelIntent,
+    required this.intentIsLatest,
+    this.onGestureStarted,
     this.onGestureSettled,
   });
 
-  /// Current authoritative value for [id] - the rollback target (anchor).
-  final int? Function(String id) readCurrent;
-
-  /// Human label for [id], for the failure notice.
-  final String? Function(String id) readLabel;
-
-  /// Apply an optimistic [value] for [id] to local household state.
-  final void Function(String id, int value) applyOptimistic;
-
-  /// Restore [id] to a possibly-null pre-gesture anchor on rollback. Distinct
-  /// from [applyOptimistic] (which only ever sets a concrete drag value)
-  /// because the anchor can be `null` at cold-start, and a failed command must
-  /// then clear the field rather than leave a fabricated value standing.
-  final void Function(String id, int? value) restore;
-
-  /// Fire the SOAP command for [id] at [value].
-  final Future<void> Function(String id, int value) command;
-
-  /// Called once a release gesture for [id] has fully settled AND is still the
-  /// latest - lets an owner release gesture-scoped bookkeeping in step with
-  /// this class's own `_anchor`/`_seq` cleanup, under the same guard.
-  final void Function(String id)? onGestureSettled;
-
-  /// The shared reconciler - [_Reconciling.send].
-  final Future<void> Function(
-    Future<void> Function(), {
-    void Function()? rollback,
-    String? label,
-    bool Function()? isCurrent,
-    String? target,
-  })
-  reconcile;
+  final _CommandIntent<int?> Function(String id, int value) beginIntent;
+  final Future<void> Function(_CommandIntent<int?> intent, String id, int value)
+  dispatchIntent;
+  final void Function(_CommandIntent<int?> intent) cancelIntent;
+  final bool Function(_CommandIntent<int?> intent) intentIsLatest;
+  final void Function(String id)? onGestureStarted;
+  final Set<String> Function(_CommandIntent<int?> intent)? onGestureSettled;
 
   final _throttle = <String, Throttle>{};
-  final _anchor = <String, int?>{};
-  final _seq = <String, int>{};
+  final _pending = <String, _CommandIntent<int?>>{};
+  final _openGestures = <String>{};
+
+  void _openGesture(String id) {
+    if (_openGestures.add(id)) onGestureStarted?.call(id);
+  }
 
   /// Mid-drag: optimistic now, SOAP send throttled to the trailing edge.
   void drag(String id, int value) {
-    _anchor.putIfAbsent(id, () => readCurrent(id));
-    applyOptimistic(id, value);
+    _openGesture(id);
+    final intent = beginIntent(id, value);
+    final replaced = _pending[id];
+    _pending[id] = intent;
+    if (replaced != null) cancelIntent(replaced);
     _throttle
         .putIfAbsent(id, () => Throttle(const Duration(milliseconds: 150)))
-        .run(() => _fire(id, value));
+        .run(() {
+          if (identical(_pending[id], intent)) _pending.remove(id);
+          dispatchIntent(intent, id, value);
+        });
   }
 
   /// Drag release: send the final value exactly once. Cancel the pending
   /// trailing send (dispose, do NOT flush - flush + this send would double-fire).
   void end(String id, int value) {
-    _anchor.putIfAbsent(id, () => readCurrent(id));
-    applyOptimistic(id, value);
+    _openGesture(id);
+    final intent = beginIntent(id, value);
     _throttle.remove(id)?.dispose();
-    final future = _fire(id, value);
-    final mySeq = _seq[id]; // the sequence _fire just assigned (synchronously).
-    future.whenComplete(() {
-      // Release the per-id bookkeeping ONLY if this gesture is still the latest.
-      // A new drag/end on the same id can start while our send is in flight;
-      // clearing unconditionally would wipe the newer gesture's anchor +
-      // sequence, stranding its rollback (it would see a null sequence and skip,
-      // leaving a failed newer command's optimistic value standing).
-      if (_seq[id] == mySeq) {
-        _anchor.remove(id);
-        _seq.remove(id);
-        onGestureSettled?.call(id);
-      }
-    });
-  }
+    final pending = _pending.remove(id);
+    if (pending != null) cancelIntent(pending);
+    final future = dispatchIntent(intent, id, value);
 
-  Future<void> _fire(String id, int value) {
-    // This send is now the latest for [id]. An older in-flight send that fails
-    // later will find a newer (or cleared) seq and skip its rollback, so a
-    // stale mid-drag failure can't clobber the final value.
-    final mySeq = (_seq[id] ?? 0) + 1;
-    _seq[id] = mySeq;
-    return reconcile(
-      () => command(id, value),
-      label: readLabel(id),
-      target: id,
-      // Superseded by a newer gesture on the same id -> no rollback AND no
-      // notice. One predicate governs both so they cannot drift.
-      isCurrent: () => _seq[id] == mySeq,
-      rollback: () {
-        // Restore the pre-gesture anchor, which may be null (cold-start) -
-        // `restore` clears to null so a failed command can't leave a fabricated
-        // value standing.
-        restore(id, _anchor[id]);
-      },
-    );
+    void settle(Object? _) {
+      if (intentIsLatest(intent)) {
+        final aliases = onGestureSettled?.call(intent);
+        if (aliases == null) {
+          _openGestures.remove(id);
+        } else {
+          _openGestures.removeAll(aliases);
+        }
+      }
+    }
+
+    future.then(settle, onError: settle);
   }
 }
 
 /// Transport + per-speaker volume commands, optimistic and LAN-throttled.
-class PlaybackController with _Reconciling {
-  PlaybackController(this.ref, this.api) {
+class PlaybackController {
+  PlaybackController(this.ref, this.api, this.scheduler) {
     _volume = _ThrottledScalar(
-      readCurrent: (id) => ref.read(householdProvider).rooms[id]?.volume,
-      readLabel: roomLabel,
-      applyOptimistic: (id, v) => _h.setOptimisticVolume(id, v),
-      restore: (id, v) => _h.restoreVolume(id, v),
-      command: (id, v) => api.setVolume(id, v),
-      reconcile: send,
+      beginIntent: (id, value) => scheduler._beginRoomIntent<int?>(
+        speakerId: id,
+        lane: _CommandLane.roomVolume,
+        readCommitted: () => ref.read(householdProvider).rooms[id]?.volume,
+        optimisticValue: value,
+        applyOptimistic: () => _h.setOptimisticVolume(id, value),
+        restore: (committed) => _h.restoreVolume(id, committed),
+      ),
+      dispatchIntent: (intent, id, value) =>
+          scheduler._dispatchRoomIntent(intent, () => api.setVolume(id, value)),
+      cancelIntent: scheduler._cancelIntent,
+      intentIsLatest: scheduler._isLatest,
     );
   }
-  @override
   final Ref ref;
   final CommandApi api;
+  final CommandScheduler scheduler;
   late final _ThrottledScalar _volume;
 
   HouseholdNotifier get _h => ref.read(householdProvider.notifier);
 
   /// Flip transport optimistically and fire play/pause. On a stale-id error the
-  /// shared reconciler re-discovers; on any other error it rolls transport back.
+  /// shared scheduler re-discovers; on any other error it rolls transport back.
   Future<void> togglePlay(String groupId, PlaybackState current) async {
     final next = current == PlaybackState.playing
         ? PlaybackState.paused
         : PlaybackState.playing;
-    // Captured now, resolved at rollback time: a regroup can re-key the group
-    // while this command is in flight (mirrors GroupingController.setGroupMute).
-    final coord = coordinatorOf(groupId);
-    _h.setOptimisticTransport(groupId, next);
-    await send(
-      () => next == PlaybackState.playing
-          ? api.play(groupId)
-          : api.pause(groupId),
-      label: groupLabel(groupId),
-      target: groupId,
-      rollback: () =>
-          _h.setOptimisticTransport(resolveGroupId(groupId, coord), current),
+    final intent = scheduler._beginGroupIntent<PlaybackState>(
+      groupId: groupId,
+      lane: _CommandLane.transportToggle,
+      readCommitted: (currentGroupId) =>
+          ref.read(householdProvider).groups[currentGroupId]?.transport ??
+          current,
+      optimisticValue: next,
+      applyOptimistic: (currentGroupId) =>
+          _h.setOptimisticTransport(currentGroupId, next),
+      restore: (currentGroupId, committed) =>
+          _h.setOptimisticTransport(currentGroupId, committed),
+    );
+    await scheduler._dispatchGroupIntent(
+      intent,
+      (currentGroupId) => next == PlaybackState.playing
+          ? api.play(currentGroupId)
+          : api.pause(currentGroupId),
     );
   }
 
@@ -343,14 +488,11 @@ class PlaybackController with _Reconciling {
   /// event drives the change, and the shared [send] re-discovers on a stale-id
   /// `NotFound`. (Deferred from Task 4 to the Now Playing screen.)
   Future<void> next(String groupId) =>
-      send(() => api.next(groupId), label: groupLabel(groupId), target: groupId);
+      scheduler._orderGroup(groupId: groupId, command: api.next);
 
   /// Skip to the previous track. Same no-optimistic-state rationale as [next].
-  Future<void> previous(String groupId) => send(
-    () => api.previous(groupId),
-    label: groupLabel(groupId),
-    target: groupId,
-  );
+  Future<void> previous(String groupId) =>
+      scheduler._orderGroup(groupId: groupId, command: api.previous);
 
   /// Mid-drag volume: optimistic now, SOAP send throttled to the trailing edge.
   void setVolume(String speakerId, int v) => _volume.drag(speakerId, v);
@@ -363,13 +505,17 @@ class PlaybackController with _Reconciling {
   /// no value seen yet), so a failed command restores null rather than leaving
   /// a fabricated value standing.
   Future<void> setMute(String speakerId, bool muted) {
-    final prev = ref.read(householdProvider).rooms[speakerId]?.muted;
-    _h.setOptimisticMuted(speakerId, muted);
-    return send(
+    final intent = scheduler._beginRoomIntent<bool?>(
+      speakerId: speakerId,
+      lane: _CommandLane.roomMute,
+      readCommitted: () => ref.read(householdProvider).rooms[speakerId]?.muted,
+      optimisticValue: muted,
+      applyOptimistic: () => _h.setOptimisticMuted(speakerId, muted),
+      restore: (committed) => _h.restoreMuted(speakerId, committed),
+    );
+    return scheduler._dispatchRoomIntent(
+      intent,
       () => api.setMute(speakerId, muted),
-      label: roomLabel(speakerId),
-      target: speakerId,
-      rollback: () => _h.restoreMuted(speakerId, prev),
     );
   }
 }
@@ -377,71 +523,67 @@ class PlaybackController with _Reconciling {
 /// Group form/break + group volume/mute commands. Form/break do NOT mutate
 /// membership optimistically - the topology event path (GroupMembership NOTIFY
 /// → debounced topology re-pull) drives that update.
-class GroupingController with _Reconciling {
-  GroupingController(this.ref, this.api) {
+class GroupingController {
+  GroupingController(this.ref, this.api, this.scheduler) {
     _groupVolume = _ThrottledScalar(
-      readCurrent: (id) => ref.read(householdProvider).groups[id]?.groupVolume,
-      readLabel: groupLabel,
-      applyOptimistic: (id, v) => _h.setOptimisticGroupVolume(id, v),
-      // Same regroup re-keying hazard as setGroupMute: resolve the id through
-      // the coordinator captured when the gesture started.
-      restore: (id, v) =>
-          _h.restoreGroupVolume(resolveGroupId(id, _coordAtDrag[id]), v),
-      command: (id, v) => api.setGroupVolume(id, v),
-      reconcile: send,
-      // Release the gesture-scoped coordinator capture once the gesture
-      // settles, so the map cannot accumulate stale ids across regroups.
-      onGestureSettled: _coordAtDrag.remove,
+      beginIntent: (id, value) => scheduler._beginGroupIntent<int?>(
+        groupId: id,
+        lane: _CommandLane.groupVolume,
+        readCommitted: (currentGroupId) =>
+            ref.read(householdProvider).groups[currentGroupId]?.groupVolume,
+        optimisticValue: value,
+        applyOptimistic: (currentGroupId) =>
+            _h.setOptimisticGroupVolume(currentGroupId, value),
+        restore: (currentGroupId, committed) =>
+            _h.restoreGroupVolume(currentGroupId, committed),
+      ),
+      dispatchIntent: (intent, _, value) => scheduler._dispatchGroupIntent(
+        intent,
+        (currentGroupId) => api.setGroupVolume(currentGroupId, value),
+      ),
+      cancelIntent: scheduler._cancelIntent,
+      intentIsLatest: scheduler._isLatest,
+      onGestureStarted: scheduler._openGroupGesture,
+      onGestureSettled: scheduler._closeGroupGesture,
     );
   }
-  @override
   final Ref ref;
   final CommandApi api;
+  final CommandScheduler scheduler;
   late final _ThrottledScalar _groupVolume;
-
-  /// Coordinator of each group with a volume gesture in flight, captured when
-  /// the gesture starts. A regroup can re-key the group before the command
-  /// fails, and the coordinator is the stable handle back to it.
-  final Map<String, String?> _coordAtDrag = {};
 
   HouseholdNotifier get _h => ref.read(householdProvider.notifier);
 
-  Future<void> joinGroup(String speakerId, String coordinatorId) => send(
-    () => api.joinGroup(speakerId, coordinatorId),
-    label: roomLabel(speakerId),
-    target: speakerId,
+  Future<void> joinGroup(String speakerId, String coordinatorId) =>
+      scheduler._orderRoom(
+        speakerId: speakerId,
+        command: () => api.joinGroup(speakerId, coordinatorId),
+      );
+
+  Future<void> leaveGroup(String speakerId) => scheduler._orderRoom(
+    speakerId: speakerId,
+    command: () => api.leaveGroup(speakerId),
   );
 
-  Future<void> leaveGroup(String speakerId) => send(
-    () => api.leaveGroup(speakerId),
-    label: roomLabel(speakerId),
-    target: speakerId,
-  );
+  void setGroupVolume(String groupId, int v) => _groupVolume.drag(groupId, v);
 
-  void setGroupVolume(String groupId, int v) {
-    _coordAtDrag.putIfAbsent(groupId, () => coordinatorOf(groupId));
-    _groupVolume.drag(groupId, v);
-  }
-
-  void setGroupVolumeEnd(String groupId, int v) {
-    _coordAtDrag.putIfAbsent(groupId, () => coordinatorOf(groupId));
-    _groupVolume.end(groupId, v);
-  }
+  void setGroupVolumeEnd(String groupId, int v) => _groupVolume.end(groupId, v);
 
   Future<void> setGroupMute(String groupId, bool muted) {
-    final prev = ref.read(householdProvider).groups[groupId]?.groupMuted;
-    // Captured now, resolved at rollback time: a regroup can re-key the group
-    // while this command is in flight.
-    final coord = coordinatorOf(groupId);
-    _h.setOptimisticGroupMuted(groupId, muted);
-    return send(
-      () => api.setGroupMute(groupId, muted),
-      label: groupLabel(groupId),
-      target: groupId,
-      // `prev` may be null (event-only field, no value seen yet) - restore it
-      // as-is so a failed mute can't leave a fabricated value standing.
-      rollback: () =>
-          _h.restoreGroupMuted(resolveGroupId(groupId, coord), prev),
+    final intent = scheduler._beginGroupIntent<bool?>(
+      groupId: groupId,
+      lane: _CommandLane.groupMute,
+      readCommitted: (currentGroupId) =>
+          ref.read(householdProvider).groups[currentGroupId]?.groupMuted,
+      optimisticValue: muted,
+      applyOptimistic: (currentGroupId) =>
+          _h.setOptimisticGroupMuted(currentGroupId, muted),
+      restore: (currentGroupId, committed) =>
+          _h.restoreGroupMuted(currentGroupId, committed),
+    );
+    return scheduler._dispatchGroupIntent(
+      intent,
+      (currentGroupId) => api.setGroupMute(currentGroupId, muted),
     );
   }
 }
@@ -450,14 +592,24 @@ class GroupingController with _Reconciling {
 @riverpod
 CommandApi commandApi(Ref ref) => const CommandApi();
 
-/// Stable singleton controller; keepAlive so throttle timers + rollback anchors
+/// One app-lifetime scheduler shared by every command controller.
+@Riverpod(keepAlive: true)
+CommandScheduler commandScheduler(Ref ref) => CommandScheduler(ref);
+
+/// Stable singleton controller; keepAlive so throttle timers and gesture state
 /// survive across a drag gesture (and the controller isn't rebuilt mid-gesture).
 @Riverpod(keepAlive: true)
-PlaybackController playbackController(Ref ref) =>
-    PlaybackController(ref, ref.watch(commandApiProvider));
+PlaybackController playbackController(Ref ref) => PlaybackController(
+  ref,
+  ref.watch(commandApiProvider),
+  ref.watch(commandSchedulerProvider),
+);
 
 /// Stable singleton controller; keepAlive for the same reason as
 /// [playbackControllerProvider].
 @Riverpod(keepAlive: true)
-GroupingController groupingController(Ref ref) =>
-    GroupingController(ref, ref.watch(commandApiProvider));
+GroupingController groupingController(Ref ref) => GroupingController(
+  ref,
+  ref.watch(commandApiProvider),
+  ref.watch(commandSchedulerProvider),
+);

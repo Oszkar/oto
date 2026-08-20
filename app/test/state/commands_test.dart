@@ -48,6 +48,16 @@ class _SpyApi extends CommandApi {
   final volumeCompleters = <Completer<void>>[];
   bool deferPlay = false;
   final playCompleters = <Completer<void>>[];
+  bool deferPause = false;
+  final pauseCompleters = <Completer<void>>[];
+  bool deferMute = false;
+  final muteCompleters = <Completer<void>>[];
+  bool deferGroupVolume = false;
+  final groupVolumeCompleters = <Completer<void>>[];
+  bool deferGroupMute = false;
+  final groupMuteCompleters = <Completer<void>>[];
+  bool deferJoin = false;
+  final joinCompleters = <Completer<void>>[];
 
   void _maybeThrow() {
     final t = throwOn;
@@ -67,9 +77,15 @@ class _SpyApi extends CommandApi {
   }
 
   @override
-  Future<void> pause(String groupId) async {
+  Future<void> pause(String groupId) {
     calls.add('pause($groupId)');
-    _maybeThrow();
+    if (deferPause) {
+      final c = Completer<void>();
+      pauseCompleters.add(c);
+      return c.future;
+    }
+    final t = throwOn;
+    return t != null ? Future<void>.error(t) : Future<void>.value();
   }
 
   @override
@@ -85,15 +101,27 @@ class _SpyApi extends CommandApi {
   }
 
   @override
-  Future<void> setMute(String speakerId, bool m) async {
+  Future<void> setMute(String speakerId, bool m) {
     calls.add('setMute($speakerId,$m)');
-    _maybeThrow();
+    if (deferMute) {
+      final c = Completer<void>();
+      muteCompleters.add(c);
+      return c.future;
+    }
+    final t = throwOn;
+    return t != null ? Future<void>.error(t) : Future<void>.value();
   }
 
   @override
-  Future<void> joinGroup(String speakerId, String coordinatorId) async {
+  Future<void> joinGroup(String speakerId, String coordinatorId) {
     calls.add('joinGroup($speakerId,$coordinatorId)');
-    _maybeThrow();
+    if (deferJoin) {
+      final c = Completer<void>();
+      joinCompleters.add(c);
+      return c.future;
+    }
+    final t = throwOn;
+    return t != null ? Future<void>.error(t) : Future<void>.value();
   }
 
   @override
@@ -103,15 +131,27 @@ class _SpyApi extends CommandApi {
   }
 
   @override
-  Future<void> setGroupVolume(String groupId, int v) async {
+  Future<void> setGroupVolume(String groupId, int v) {
     calls.add('setGroupVolume($groupId,$v)');
-    _maybeThrow();
+    if (deferGroupVolume) {
+      final c = Completer<void>();
+      groupVolumeCompleters.add(c);
+      return c.future;
+    }
+    final t = throwOn;
+    return t != null ? Future<void>.error(t) : Future<void>.value();
   }
 
   @override
-  Future<void> setGroupMute(String groupId, bool m) async {
+  Future<void> setGroupMute(String groupId, bool m) {
     calls.add('setGroupMute($groupId,$m)');
-    _maybeThrow();
+    if (deferGroupMute) {
+      final c = Completer<void>();
+      groupMuteCompleters.add(c);
+      return c.future;
+    }
+    final t = throwOn;
+    return t != null ? Future<void>.error(t) : Future<void>.value();
   }
 }
 
@@ -139,6 +179,11 @@ class _SpyApi extends CommandApi {
 Future<void> _seedHousehold(ProviderContainer c) async {
   c.read(householdProvider); // instantiate the notifier (starts the listen).
   await c.read(discoveryProvider.future); // resolve → household folds topology.
+}
+
+Future<void> _settleQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
 }
 
 void main() {
@@ -241,6 +286,33 @@ void main() {
     },
   );
 
+  test('a newer transport toggle supersedes an older failure', () async {
+    final spy = _SpyApi()
+      ..deferPlay = true
+      ..deferPause = true;
+    final (:container, :discovery) = _container(spy);
+    await _seedHousehold(container);
+    container
+        .read(householdProvider.notifier)
+        .setOptimisticTransport('G1', PlaybackState.paused);
+
+    final controller = container.read(playbackControllerProvider);
+    final first = controller.togglePlay('G1', PlaybackState.paused);
+    final second = controller.togglePlay('G1', PlaybackState.playing);
+
+    spy.playCompleters.single.completeError(const CommandError.sonos('older'));
+    await _settleQueue();
+
+    expect(container.read(commandFailuresProvider), isNull);
+    expect(
+      container.read(householdProvider).groups['G1']!.transport,
+      PlaybackState.paused,
+    );
+
+    spy.pauseCompleters.single.complete();
+    await Future.wait([first, second]);
+  });
+
   test('Sonos reject on volume rolls the slider back', () async {
     final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
     final (:container, :discovery) = _container(spy);
@@ -284,11 +356,11 @@ void main() {
     },
   );
 
-  test('failed volume with a null anchor clears back to null', () async {
+  test('failed volume with a null baseline clears back to null', () async {
     final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
     final (:container, :discovery) = _container(spy);
     await _seedHousehold(container);
-    // KT has no volume yet (cold-start null) - the anchor will be null.
+    // KT has no volume yet (cold-start null) - the baseline will be null.
     expect(container.read(householdProvider).rooms['KT']!.volume, isNull);
 
     container.read(playbackControllerProvider).setVolumeEnd('KT', 40);
@@ -348,35 +420,163 @@ void main() {
     expect(spy.volumeCompleters.length, 2);
   });
 
-  test('a superseded gesture failing first neither rolls back nor reports', () async {
-    final spy = _SpyApi()..deferVolume = true;
-    final (:container, :discovery) = _container(spy);
-    await _seedHousehold(container);
-    container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
+  test(
+    'group and coordinator-room commands share one cross-controller queue',
+    () async {
+      final spy = _SpyApi()..deferPlay = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
 
-    final c = container.read(playbackControllerProvider);
-    c.setVolumeEnd('KT', 20); // gesture 1 - dispatched
-    c.setVolumeEnd('KT', 30); // gesture 2 - supersedes it, queued
+      final playback = container.read(playbackControllerProvider);
+      final grouping = container.read(groupingControllerProvider);
+      final play = playback.togglePlay('G1', PlaybackState.paused);
+      final groupMute = grouping.setGroupMute('G1', true);
+      final roomMute = playback.setMute('LR', true);
+      await _settleQueue();
 
-    // Gesture 1 now fails. The user has already moved to 30, so this must be
-    // silent: no rollback to the anchor, no notice.
-    spy.volumeCompleters[0].completeError(const CommandError.sonos('late'));
-    await Future<void>.delayed(Duration.zero);
-    await Future<void>.delayed(Duration.zero);
+      expect(
+        spy.calls,
+        ['play(G1)'],
+        reason:
+            'both controllers must queue group and room commands behind the '
+            'same coordinator speaker',
+      );
 
-    expect(container.read(commandFailuresProvider), isNull);
-    expect(
-      container.read(householdProvider).rooms['KT']!.volume,
-      30,
-      reason: 'the superseded failure must not roll back over the newer value',
-    );
+      spy.playCompleters.single.complete();
+      await Future.wait([play, groupMute, roomMute]);
 
-    // And gesture 2 still gets its turn.
-    expect(spy.volumeCompleters.length, 2);
-    spy.volumeCompleters[1].complete();
-    await Future<void>.delayed(Duration.zero);
-    expect(container.read(householdProvider).rooms['KT']!.volume, 30);
-  });
+      expect(spy.calls, [
+        'play(G1)',
+        'setGroupMute(G1,true)',
+        'setMute(LR,true)',
+      ]);
+    },
+  );
+
+  test(
+    'commands across a regroup keep coordinator order and re-resolve group ids',
+    () async {
+      final spy = _SpyApi()..deferMute = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+
+      final playback = container.read(playbackControllerProvider);
+      final grouping = container.read(groupingControllerProvider);
+      final blocker = playback.setMute('LR', true);
+      grouping.setGroupVolumeEnd('G1', 60);
+
+      final notifier = container.read(householdProvider.notifier);
+      final g1 = notifier.state.groups['G1']!;
+      notifier.state = notifier.state.copyWith(
+        groups: {'G2': g1.copyWith(id: 'G2')},
+      );
+      final afterRegroup = playback.togglePlay('G2', PlaybackState.paused);
+      await _settleQueue();
+
+      expect(spy.calls, ['setMute(LR,true)']);
+
+      spy.muteCompleters.single.complete();
+      await blocker;
+      await afterRegroup;
+      await _settleQueue();
+
+      expect(
+        spy.calls,
+        ['setMute(LR,true)', 'setGroupVolume(G2,60)', 'play(G2)'],
+        reason:
+            'the pre-regroup operation must resolve G1 to G2 at dispatch, and '
+            'the post-regroup operation must remain behind it on LR',
+      );
+    },
+  );
+
+  test(
+    'a superseded gesture failing first neither rolls back nor reports',
+    () async {
+      final spy = _SpyApi()..deferVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
+
+      final c = container.read(playbackControllerProvider);
+      c.setVolumeEnd('KT', 20); // gesture 1 - dispatched
+      c.setVolumeEnd('KT', 30); // gesture 2 - supersedes it, queued
+
+      // Gesture 1 now fails. The user has already moved to 30, so this must be
+      // silent: no rollback to the baseline, no notice.
+      spy.volumeCompleters[0].completeError(const CommandError.sonos('late'));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(container.read(commandFailuresProvider), isNull);
+      expect(
+        container.read(householdProvider).rooms['KT']!.volume,
+        30,
+        reason:
+            'the superseded failure must not roll back over the newer value',
+      );
+
+      // And gesture 2 still gets its turn.
+      expect(spy.volumeCompleters.length, 2);
+      spy.volumeCompleters[1].complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(householdProvider).rooms['KT']!.volume, 30);
+    },
+  );
+
+  test(
+    'volume rollback uses the earlier successfully committed value',
+    () async {
+      final spy = _SpyApi()..deferVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
+
+      final controller = container.read(playbackControllerProvider);
+      controller.setVolumeEnd('KT', 20);
+      controller.setVolumeEnd('KT', 30);
+
+      spy.volumeCompleters[0].complete();
+      await _settleQueue();
+      spy.volumeCompleters[1].completeError(const CommandError.sonos('newer'));
+      await _settleQueue();
+
+      expect(
+        container.read(householdProvider).rooms['KT']!.volume,
+        20,
+        reason:
+            'the newer failure must restore the predecessor that succeeded, '
+            'not the original pre-gesture value',
+      );
+    },
+  );
+
+  test(
+    'volume rollback keeps the original baseline when both sends fail',
+    () async {
+      final spy = _SpyApi()..deferVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container.read(householdProvider.notifier).setOptimisticVolume('KT', 10);
+
+      final controller = container.read(playbackControllerProvider);
+      controller.setVolumeEnd('KT', 20);
+      controller.setVolumeEnd('KT', 30);
+
+      spy.volumeCompleters[0].completeError(const CommandError.sonos('older'));
+      await _settleQueue();
+      spy.volumeCompleters[1].completeError(const CommandError.sonos('newer'));
+      await _settleQueue();
+
+      expect(
+        container.read(householdProvider).rooms['KT']!.volume,
+        10,
+        reason:
+            'a superseded failure must not promote its optimistic value into '
+            'the committed baseline',
+      );
+    },
+  );
 
   test(
     'NotFound rolls the optimistic transport back and re-discovers',
@@ -470,6 +670,35 @@ void main() {
       expect(spy.calls, ['leaveGroup(KT)']);
     });
 
+    test(
+      'cumulative commands stay ordered and an older failure still reports',
+      () async {
+        final spy = _SpyApi()..deferJoin = true;
+        final (:container, :discovery) = _container(spy);
+        await _seedHousehold(container);
+
+        final controller = container.read(groupingControllerProvider);
+        final join = controller.joinGroup('KT', 'LR');
+        final leave = controller.leaveGroup('KT');
+        await _settleQueue();
+
+        expect(spy.calls, ['joinGroup(KT,LR)']);
+
+        spy.joinCompleters.single.completeError(
+          const CommandError.sonos('older'),
+        );
+        await Future.wait([join, leave]);
+
+        expect(spy.calls, ['joinGroup(KT,LR)', 'leaveGroup(KT)']);
+        expect(
+          container.read(commandFailuresProvider)?.message,
+          'Kitchen rejected that command',
+          reason:
+              'cumulative commands are ordered but do not supersede failures',
+        );
+      },
+    );
+
     test('Sonos reject on group volume rolls back', () async {
       final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
       final (:container, :discovery) = _container(spy);
@@ -506,6 +735,66 @@ void main() {
       },
     );
 
+    test(
+      'a settled regrouped gesture releases the old group id capture',
+      () async {
+        final spy = _SpyApi()..deferGroupVolume = true;
+        final (:container, :discovery) = _container(spy);
+        await _seedHousehold(container);
+
+        final controller = container.read(groupingControllerProvider);
+        controller.setGroupVolumeEnd('G1', 40);
+
+        final notifier = container.read(householdProvider.notifier);
+        final original = notifier.state.groups['G1']!;
+        notifier.state = notifier.state.copyWith(
+          groups: {'G2': original.copyWith(id: 'G2')},
+        );
+        controller.setGroupVolumeEnd('G2', 50);
+
+        spy.groupVolumeCompleters[0].complete();
+        await _settleQueue();
+        spy.groupVolumeCompleters[1].complete();
+        await _settleQueue();
+
+        final regrouped = notifier.state.groups['G2']!;
+        notifier.state = notifier.state.copyWith(
+          groups: {
+            'G2': regrouped,
+            'G1': regrouped.copyWith(
+              id: 'G1',
+              coordinatorId: 'KT',
+              memberIds: const ['KT'],
+            ),
+          },
+        );
+        spy.deferGroupVolume = false;
+        controller.setGroupVolume('G1', 60);
+
+        final reused = notifier.state.groups['G1']!;
+        notifier.state = notifier.state.copyWith(
+          groups: {
+            'G2': regrouped,
+            'G3': reused.copyWith(id: 'G3'),
+          },
+        );
+        controller.setGroupVolumeEnd('G1', 70);
+        await _settleQueue();
+
+        expect(
+          spy.calls,
+          [
+            'setGroupVolume(G1,40)',
+            'setGroupVolume(G2,50)',
+            'setGroupVolume(G3,70)',
+          ],
+          reason:
+              'after the first regrouped gesture settles, reused G1 must open '
+              'a fresh KT capture that follows its own regroup to G3',
+        );
+      },
+    );
+
     test('Sonos reject on group mute rolls back', () async {
       final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
       final (:container, :discovery) = _container(spy);
@@ -535,7 +824,7 @@ void main() {
     });
 
     test(
-      'failed group volume with a null anchor clears back to null',
+      'failed group volume with a null baseline clears back to null',
       () async {
         final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
         final (:container, :discovery) = _container(spy);
@@ -577,6 +866,54 @@ void main() {
             '(no prior value to restore)',
       );
     });
+
+    test('a newer group-volume intent supersedes an older failure', () async {
+      final spy = _SpyApi()..deferGroupVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container
+          .read(householdProvider.notifier)
+          .setOptimisticGroupVolume('G1', 30);
+
+      final controller = container.read(groupingControllerProvider);
+      controller.setGroupVolumeEnd('G1', 40);
+      controller.setGroupVolumeEnd('G1', 50);
+
+      spy.groupVolumeCompleters[0].completeError(
+        const CommandError.sonos('older'),
+      );
+      await _settleQueue();
+
+      expect(container.read(commandFailuresProvider), isNull);
+      expect(container.read(householdProvider).groups['G1']!.groupVolume, 50);
+
+      spy.groupVolumeCompleters[1].complete();
+      await _settleQueue();
+    });
+
+    test('a newer group-mute intent supersedes an older failure', () async {
+      final spy = _SpyApi()..deferGroupMute = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+
+      final controller = container.read(groupingControllerProvider);
+      final first = controller.setGroupMute('G1', true);
+      final second = controller.setGroupMute('G1', false);
+
+      spy.groupMuteCompleters[0].completeError(
+        const CommandError.sonos('older'),
+      );
+      await _settleQueue();
+
+      expect(container.read(commandFailuresProvider), isNull);
+      expect(
+        container.read(householdProvider).groups['G1']!.groupMuted,
+        isFalse,
+      );
+
+      spy.groupMuteCompleters[1].complete();
+      await Future.wait([first, second]);
+    });
   });
 
   group('per-room mute', () {
@@ -606,6 +943,96 @@ void main() {
             'mute is event-fed and unobserved here, so a failed command must '
             'restore null rather than fabricate a false',
       );
+    });
+
+    test('newer mute failure restores the earlier successful mute', () async {
+      final spy = _SpyApi()..deferMute = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container
+          .read(householdProvider.notifier)
+          .setOptimisticMuted('LR', false);
+
+      final controller = container.read(playbackControllerProvider);
+      final first = controller.setMute('LR', true);
+      final second = controller.setMute('LR', false);
+
+      spy.muteCompleters[0].complete();
+      await _settleQueue();
+      spy.muteCompleters[1].completeError(const CommandError.sonos('newer'));
+      await Future.wait([first, second]);
+
+      expect(
+        container.read(householdProvider).rooms['LR']!.muted,
+        isTrue,
+        reason:
+            'the failed newer command must restore the earlier command that '
+            'successfully committed',
+      );
+    });
+
+    test('two failed mutes restore the original committed baseline', () async {
+      final spy = _SpyApi()..deferMute = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      container
+          .read(householdProvider.notifier)
+          .setOptimisticMuted('LR', false);
+
+      final controller = container.read(playbackControllerProvider);
+      final first = controller.setMute('LR', true);
+      final second = controller.setMute('LR', true);
+
+      spy.muteCompleters[0].completeError(const CommandError.sonos('older'));
+      await _settleQueue();
+      expect(
+        container.read(commandFailuresProvider),
+        isNull,
+        reason: 'the superseded first failure must stay silent',
+      );
+
+      spy.muteCompleters[1].completeError(const CommandError.sonos('newer'));
+      await Future.wait([first, second]);
+
+      expect(
+        container.read(householdProvider).rooms['LR']!.muted,
+        isFalse,
+        reason:
+            'a failed optimistic predecessor must not become the rollback '
+            'baseline for the current command',
+      );
+    });
+
+    test('a newer volume intent does not suppress a mute failure', () async {
+      final spy = _SpyApi()
+        ..deferMute = true
+        ..deferVolume = true;
+      final (:container, :discovery) = _container(spy);
+      await _seedHousehold(container);
+      final household = container.read(householdProvider.notifier);
+      household.setOptimisticMuted('LR', false);
+      household.setOptimisticVolume('LR', 10);
+
+      final controller = container.read(playbackControllerProvider);
+      final mute = controller.setMute('LR', true);
+      controller.setVolumeEnd('LR', 30);
+
+      spy.muteCompleters.single.completeError(
+        const CommandError.network('down'),
+      );
+      await mute;
+      await _settleQueue();
+
+      expect(container.read(householdProvider).rooms['LR']!.muted, isFalse);
+      expect(
+        container.read(commandFailuresProvider)?.message,
+        'Could not reach Living Room',
+        reason: 'supersession is lane-specific, not speaker-wide',
+      );
+      expect(container.read(householdProvider).rooms['LR']!.volume, 30);
+
+      spy.volumeCompleters.single.complete();
+      await _settleQueue();
     });
   });
 
@@ -650,7 +1077,7 @@ void main() {
 
     test('a superseded send that fails stays silent', () async {
       // Sends to one target are serialized, so the stale one resolves first;
-      // the sequence gate keeps it quiet because a newer gesture supersedes it.
+      // the scheduler generation keeps it quiet because a newer gesture wins.
       final spy = _SpyApi()..deferVolume = true;
       final (:container, :discovery) = _container(spy);
       await _seedHousehold(container);
@@ -684,7 +1111,9 @@ void main() {
       c.setVolumeEnd('KT', 20);
       c.setVolumeEnd('KT', 30);
 
-      spy.volumeCompleters[0].completeError(const CommandError.notFound('gone'));
+      spy.volumeCompleters[0].completeError(
+        const CommandError.notFound('gone'),
+      );
       await Future<void>.delayed(Duration.zero);
       // Invalidation re-runs build() lazily; reading the future forces it.
       await container.read(discoveryProvider.future);

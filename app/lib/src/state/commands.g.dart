@@ -54,13 +54,64 @@ final class CommandApiProvider
 
 String _$commandApiHash() => r'8954bdfca071e91312997201470a379b53c45e94';
 
-/// Stable singleton controller; keepAlive so throttle timers + rollback anchors
+/// One app-lifetime scheduler shared by every command controller.
+
+@ProviderFor(commandScheduler)
+final commandSchedulerProvider = CommandSchedulerProvider._();
+
+/// One app-lifetime scheduler shared by every command controller.
+
+final class CommandSchedulerProvider
+    extends
+        $FunctionalProvider<
+          CommandScheduler,
+          CommandScheduler,
+          CommandScheduler
+        >
+    with $Provider<CommandScheduler> {
+  /// One app-lifetime scheduler shared by every command controller.
+  CommandSchedulerProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'commandSchedulerProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$commandSchedulerHash();
+
+  @$internal
+  @override
+  $ProviderElement<CommandScheduler> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  CommandScheduler create(Ref ref) {
+    return commandScheduler(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(CommandScheduler value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<CommandScheduler>(value),
+    );
+  }
+}
+
+String _$commandSchedulerHash() => r'4d86b11551fcd1d8e50fc8bd906f00c125ee263b';
+
+/// Stable singleton controller; keepAlive so throttle timers and gesture state
 /// survive across a drag gesture (and the controller isn't rebuilt mid-gesture).
 
 @ProviderFor(playbackController)
 final playbackControllerProvider = PlaybackControllerProvider._();
 
-/// Stable singleton controller; keepAlive so throttle timers + rollback anchors
+/// Stable singleton controller; keepAlive so throttle timers and gesture state
 /// survive across a drag gesture (and the controller isn't rebuilt mid-gesture).
 
 final class PlaybackControllerProvider
@@ -71,7 +122,7 @@ final class PlaybackControllerProvider
           PlaybackController
         >
     with $Provider<PlaybackController> {
-  /// Stable singleton controller; keepAlive so throttle timers + rollback anchors
+  /// Stable singleton controller; keepAlive so throttle timers and gesture state
   /// survive across a drag gesture (and the controller isn't rebuilt mid-gesture).
   PlaybackControllerProvider._()
     : super(
@@ -108,7 +159,7 @@ final class PlaybackControllerProvider
 }
 
 String _$playbackControllerHash() =>
-    r'2f45ef8603ea5c5dd63b2b32e8b4da770b74f562';
+    r'397cc5a75c9bff9b5121efdd9dee55814e6b24de';
 
 /// Stable singleton controller; keepAlive for the same reason as
 /// [playbackControllerProvider].
@@ -164,4 +215,4 @@ final class GroupingControllerProvider
 }
 
 String _$groupingControllerHash() =>
-    r'ccad947875d0247609c04eaf15788f458936f901';
+    r'9c32f2eb212fe2a0e5548552f9a3fdbcf947b4cc';
