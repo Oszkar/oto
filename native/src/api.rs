@@ -52,6 +52,13 @@ pub struct TrackPositionDto {
 
 pub struct TransportDto {
     pub state: PlaybackStateDto,
+    /// Always `None` on the production path: the event-fed `StateManager`
+    /// cache has no NOTIFY that carries elapsed position, so it only ever
+    /// preserves whatever a prior snapshot held (which is nothing). Populated
+    /// only by the SOAP-baseline `Wire::speaker_state` used by the
+    /// hardware-gated `live_*` tests, and kept so this DTO stays a faithful
+    /// mirror of `oto_core::TransportState`. The UI's progress bar reads
+    /// `track_position()` / [`TrackPositionDto`] instead.
     pub position_secs: Option<u64>,
     pub current_track: Option<TrackDto>,
 }

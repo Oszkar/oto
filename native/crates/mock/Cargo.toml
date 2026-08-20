@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Deterministic mock UPnP/SOAP transport for tests."
+description = "Deterministic in-memory Wire implementation for tests. No transport, no network."
 publish = false
 
 [lints]

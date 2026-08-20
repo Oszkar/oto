@@ -52,7 +52,7 @@ class _ShowcaseAppState extends State<ShowcaseApp> {
       title: 'oto showcase',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F7A72)),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0E7168)),
       ),
       home: Scaffold(
         body: SafeArea(

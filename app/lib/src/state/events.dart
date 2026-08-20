@@ -48,8 +48,9 @@ BigInt Function() wireGenerationReader(Ref ref) =>
 /// re-discover or a redundant signal bump.
 @riverpod
 BigInt? wireGeneration(Ref ref) {
-  // Force a re-read on a wire install that did NOT transition discovery (a
-  // value-equal fast `refreshTopology()`); see [wireInstallSignalProvider].
+  // Force a re-read on a wire install regardless of whether discovery
+  // transitioned (the fast `refreshTopology()` path); see
+  // [wireInstallSignalProvider].
   ref.watch(wireInstallSignalProvider);
   // Depend on discovery so we recompute on its transitions (a successful
   // discover bumps the Rust generation); the AsyncValue itself is unused -

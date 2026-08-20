@@ -275,7 +275,8 @@ class GroupCard extends ConsumerWidget {
                 textAlign: TextAlign.right,
                 style: TextStyles.caption.copyWith(
                   fontFamily: Fonts.mono,
-                  fontWeight: FontWeight.w600,
+                  // GeistMono ships 400 + 500 only; w600 silently falls back.
+                  fontWeight: FontWeight.w500,
                   color: oto.ink2,
                 ),
               ),
@@ -322,6 +323,11 @@ class GroupCard extends ConsumerWidget {
     final value = (room.volume ?? 0) / 100;
     final ctrl = ref.read(playbackControllerProvider);
     return Row(
+      // Keyed by room, not position: `memberIds` carries topology order, which
+      // can reorder across a re-pull. Without a key, element reuse is positional
+      // and a drag in flight would keep running against whatever room landed on
+      // that index - putting the volume on the wrong speaker.
+      key: Key('room-level-$roomId'),
       children: [
         SizedBox(
           // JSX fixes the name column at 92px so sliders align.

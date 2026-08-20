@@ -51,13 +51,28 @@ The Dart side is Flutter + Riverpod 3 (codegen). Providers live in `app/lib/src/
 
 ## State ownership
 
-State lives in Rust, not Dart. v0.4 swapped `speaker_state` from a per-call SOAP read to a read against the `StateManager` cache in `oto-app`. The cache is event-fed: `oto-wire`'s pump thread converts GENA NOTIFYs (and SDK-internal polling for the few properties Sonos doesn't NOTIFY) into `ChangeEvent`s, the FRB consumer loop applies each to the cache, and `speaker_state` reads from there. The `Wire::speaker_state` trait method is preserved for hardware-baseline tests and `MockWire`'s own unit tests but is no longer dispatched in production.
+Ownership is **split**, and has been since v0.6.0. Rust owns the authoritative device state; Dart owns the accumulated view model the UI renders. Which layer is authoritative depends on the field:
+
+| State | Authoritative owner | Notes |
+|---|---|---|
+| Topology (rooms, groups, membership, coordinator) | Rust (`oto-wire` caches, re-pulled by `discover()` / `refresh_topology()`) | Dart re-seeds its skeleton from every `discoveryProvider` transition. |
+| Per-speaker volume / mute | Rust (`StateManager` cache in `oto-app`) | Event-fed; Dart mirrors them into `householdProvider` and can re-derive from a fresh event. |
+| Transport state / current track | Rust (`StateManager` cache in `oto-app`) | Cached per **group**, fed by coordinator-only AVTransport events; `speaker_state` resolves speaker -> group to read it. |
+| Track position / duration | Rust (`Wire::track_position`) | A live `GetPositionInfo` SOAP read, *not* in the event cache - no NOTIFY carries elapsed position. |
+| Group volume / mute | Rust (`StateManager` cache in `oto-app`); Dart mirrors them | Event-fed. Rust caches both, but the current FRB surface exposes no getter, so `householdProvider` is the UI-readable copy. After an isolate restart Dart waits for the next seed / NOTIFY. |
+| Per-speaker health (reachable / errored) | Rust | Surfaced as `SubscriptionError` / `SubscriptionRecovered`; Dart carries the flags forward across an automatic refresh and clears them on a `TopologySource.userScan` (see [Frontend shell](#frontend-shell-responsive-v063-v064)). |
+| In-flight command failures | Dart (`commandFailuresProvider`) | Transient by design; see [Command flow](#command-flow). |
+| UI preferences (theme, accent, home layout) | Dart, persisted to `shared_preferences` | The only on-disk state (see [Scope](#scope)). |
+
+**Rust side.** v0.4 swapped `speaker_state` from a per-call SOAP read to a read against the `StateManager` cache in `oto-app`. The cache is event-fed: `oto-wire`'s pump thread converts GENA NOTIFYs (and SDK-internal polling for the few properties Sonos doesn't NOTIFY) into `ChangeEvent`s, the FRB consumer loop applies each to the cache, and `speaker_state` reads from there. The `Wire::speaker_state` trait method is preserved for hardware-baseline tests and `MockWire`'s own unit tests but is no longer dispatched in production.
+
+**Dart side (v0.6.0+).** `householdProvider` is a keep-alive `Notifier` that seeds its skeleton from `discoveryProvider` and folds `changeEventsProvider` deltas on top through the pure `household_reducer`. It exists because the UI needs an accumulated per-room / per-group model that no single FRB read returns, and because the current FRB surface has no getter for Rust's cached group volume/mute.
 
 Consequences:
 
-- State survives Flutter hot reload / UI restart.
-- A non-Flutter client (e.g. a CLI) could reuse the same core unchanged.
-- State mutations happen where network events are handled (Rust), avoiding cross-FFI consistency bugs.
+- **State survives Flutter *hot reload*, not *hot restart*.** Hot reload keeps the isolate, so both layers persist. A hot restart (or an app relaunch) tears down the Dart isolate: the Rust `StateManager` cache survives in the process, but the Dart accumulator does not. Group volume and group mute remain cached in Rust but are blank in the UI until Dart receives the next seed / NOTIFY.
+- A Rust client using `oto-app` can read its cached group volume/mute methods. A client limited to the current FRB surface must accumulate the event stream as Dart does because that surface exposes no getter for those fields.
+- Device-state mutations happen where network events are handled (Rust), avoiding cross-FFI consistency bugs. Dart mutates its mirror only optimistically, and rolls back on a `CommandError` (see [Command flow](#command-flow)).
 - **`speaker_state` is honest-partial during cold-start.** Fields for which no event has arrived yet are `None`; the SDK's initial SUBSCRIBE NOTIFY seeds the common case within ~1 s. An unknown speaker id still returns `WireError::NotFound` (topology is the source of truth for "is this id real?").
 - **The cache is per-process and ephemeral** - cleared on every `discover_with` via a generation token, so a wire replacement can't leave stale state visible to the new wire's seeds.
 
@@ -244,8 +259,12 @@ The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when
   `refresh_topology` replaces the complete wire through `discover_with`, so the
   new pump starts with a clean `TopologyFilter`; it never mutates the old
   pump's frozen maps in place. Dart forces the event-stream re-subscribe by
-  invalidating `wireGenerationProvider`, even when the refreshed FRB
-  `Topology` is value-equal to the old value.
+  bumping the wire-install signal `wireGenerationProvider` watches, so the
+  re-subscribe does not depend on the re-published `Topology` transitioning
+  `discoveryProvider`. (FRB's generated `Topology` compares its `List` fields
+  with Dart's identity-based `List ==`, so a freshly deserialized topology is
+  never equal to the previous one and today it *does* transition - an
+  implementation detail of the generated equality, not a contract.)
 - **Group volume/mute events (v0.5.1).** The pump also watches `GroupVolume` / `GroupMute` (GroupRenderingControl, `Scope::Group`, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}`. These are read from the SDK's group-property store via `get_group_property(GroupId)` - NOT the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike---hardware-confirmed-2026-06-04)).
 - **Subscription health.** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
 

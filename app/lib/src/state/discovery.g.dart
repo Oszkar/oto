@@ -155,9 +155,10 @@ abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
   }
 }
 
-/// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
-/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// A monotonic signal bumped on every wire install, whether or not that install
+/// transitions [discoveryProvider] - specifically a fast `refreshTopology()`
+/// after a no-op regroup, whose topology is equivalent to the one already
+/// published. `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
 /// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
@@ -169,9 +170,10 @@ abstract class _$Discovery extends $AsyncNotifier<rust_api.Topology> {
 @ProviderFor(WireInstallSignal)
 final wireInstallSignalProvider = WireInstallSignalProvider._();
 
-/// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
-/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// A monotonic signal bumped on every wire install, whether or not that install
+/// transitions [discoveryProvider] - specifically a fast `refreshTopology()`
+/// after a no-op regroup, whose topology is equivalent to the one already
+/// published. `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
 /// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
@@ -181,9 +183,10 @@ final wireInstallSignalProvider = WireInstallSignalProvider._();
 /// single widget subscription and accumulates across regroups).
 final class WireInstallSignalProvider
     extends $NotifierProvider<WireInstallSignal, int> {
-  /// A monotonic signal bumped on every wire install that may NOT transition
-  /// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
-  /// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+  /// A monotonic signal bumped on every wire install, whether or not that install
+  /// transitions [discoveryProvider] - specifically a fast `refreshTopology()`
+  /// after a no-op regroup, whose topology is equivalent to the one already
+  /// published. `wireGenerationProvider` (events.dart) watches this to
   /// force a re-read of the Rust generation so the event stream re-subscribes
   /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
   /// and is the sole bumper; `events.dart` only consumes it (keeps the dependency
@@ -220,9 +223,10 @@ final class WireInstallSignalProvider
 
 String _$wireInstallSignalHash() => r'2bf533d35d8e5429c890c41b9e404b5358f7c8a6';
 
-/// A monotonic signal bumped on every wire install that may NOT transition
-/// [discoveryProvider] - specifically a value-equal fast `refreshTopology()`
-/// (a no-op regroup). `wireGenerationProvider` (events.dart) watches this to
+/// A monotonic signal bumped on every wire install, whether or not that install
+/// transitions [discoveryProvider] - specifically a fast `refreshTopology()`
+/// after a no-op regroup, whose topology is equivalent to the one already
+/// published. `wireGenerationProvider` (events.dart) watches this to
 /// force a re-read of the Rust generation so the event stream re-subscribes
 /// against the new wire. Lives here because [Discovery] owns the wire lifecycle
 /// and is the sole bumper; `events.dart` only consumes it (keeps the dependency

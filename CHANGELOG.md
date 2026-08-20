@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+### Fixed
+
+- Malformed track times reported by a speaker no longer produce a wrong or
+  overflowing position; they are now discarded. A discovery run whose network
+  poller fails is reported as a network error instead of as "no speakers
+  found."
+- The wide layout's pinned room/group selection survives resizing the window
+  down to phone width and back.
+- Dragging a per-room volume slider inside a group card can no longer land on a
+  different room if the group's member order changes mid-drag.
+- A saved window position on a monitor that is no longer attached, or a corrupt
+  saved size, now falls back to a centered default window instead of opening
+  off-screen or at zero size.
+- The Now Playing progress bar renders in the accent color rather than the
+  default grey.
+- The teal and amber accents are slightly deeper in light mode so the group
+  member-count badge meets the WCAG AA contrast minimum.
+
 ## [0.6.4] - 2026-07-28
 
 v0.6.4 - Mute and honest failure. The v0.6 closer: mute reaches every volume surface, a failed command rolls back and explains itself instead of silently reverting, and Home offers a way back when every room looks unreachable. Also closes out the pipeline lifecycle hardening surfaced by dogfooding the v0.6 UI series.
