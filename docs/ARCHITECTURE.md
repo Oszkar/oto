@@ -110,15 +110,20 @@ sequenceDiagram
     B-->>U: Future resolves
 ```
 
-**Frontend command reconciliation (v0.6.4).** Dart applies volume, mute, and
-transport changes optimistically, then reconciles the FRB `Future`. Commands to
-the same target are chained in dispatch order (different targets may proceed
-independently at this layer), which prevents an older failure from racing a
-newer success. A `CommandError` rolls the current optimistic value back and is
-reported through the keep-alive `commandFailuresProvider`; the app-lifetime
+**Frontend command reconciliation.** Dart applies volume, mute, and transport
+changes optimistically, then reconciles the FRB `Future` through one keep-alive
+`CommandScheduler` shared by both controllers. Dispatch queues are keyed by the
+physical speaker that receives SOAP; group commands capture the coordinator and
+re-resolve the current group id immediately before dispatch and rollback. A
+separate speaker-plus-operation-lane generation decides whether an older
+failure has been superseded, and each lane retains its last successfully
+committed rollback baseline. Cumulative commands are ordered without
+superseding each other. A current `CommandError` rolls back and is reported
+through the keep-alive `commandFailuresProvider`; the app-lifetime
 `CommandFailureListener` renders one non-modal SnackBar per report. `NotFound`
-also invalidates discovery because it means the captured topology identifier is
-stale. The Rust slot still serializes all actual `Wire` calls globally.
+always invalidates discovery, including for a superseded operation, because it
+means the captured topology identifier is stale. The Rust slot still serializes
+all actual `Wire` calls globally.
 
 ## Concurrency model
 

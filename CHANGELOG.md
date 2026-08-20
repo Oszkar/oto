@@ -23,6 +23,9 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
   default grey.
 - The teal and amber accents are slightly deeper in light mode so the group
   member-count badge meets the WCAG AA contrast minimum.
+- Rapid commands across room, group, and playback controls now reach each
+  speaker in user-intent order. A superseded failure no longer overwrites a
+  newer optimistic value or rolls back past the last successful command.
 
 ## [0.6.4] - 2026-07-28
 

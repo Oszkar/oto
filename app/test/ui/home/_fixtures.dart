@@ -39,7 +39,7 @@ class FixtureHousehold extends HouseholdNotifier {
 
 /// A [PlaybackController] that records every command instead of hitting Rust.
 class SpyPlayback extends PlaybackController {
-  SpyPlayback(Ref ref) : super(ref, const CommandApi());
+  SpyPlayback(Ref ref) : super(ref, const CommandApi(), CommandScheduler(ref));
 
   final calls = <String>[];
 
@@ -77,7 +77,7 @@ class SpyPlayback extends PlaybackController {
 /// A [GroupingController] that records group-volume commands instead of hitting
 /// Rust. Used by the group-card test for the group-master slider.
 class SpyGrouping extends GroupingController {
-  SpyGrouping(Ref ref) : super(ref, const CommandApi());
+  SpyGrouping(Ref ref) : super(ref, const CommandApi(), CommandScheduler(ref));
 
   final calls = <String>[];
 
