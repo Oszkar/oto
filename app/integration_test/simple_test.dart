@@ -12,11 +12,10 @@ import 'package:oto/src/ui/shell/oto_app.dart';
 /// rest of the harness is mocked or unit-tested in `app/test/`; this is the
 /// only test that exercises the actual native artefact and its loader path.
 ///
-/// Not gated by CI today (Flutter's `integration_test` needs a display /
-/// device target - neither the `ubuntu-latest` CI runners nor any of the
-/// matrix runs in `build.yml` are configured for that). Run manually via
-/// `just test-integration` against a connected device / desktop platform.
-/// Revisit gating when v0.6 lands real UI and the smoke earns its keep.
+/// Runs as the release gate (RELEASING.md step 0) via the `integration-gate`
+/// workflow on windows-latest, or locally with `just test-integration`. Not
+/// part of `ci.yml`: Flutter's `integration_test` needs a display target and
+/// ubuntu-latest has none.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async => RustLib.init());
@@ -33,10 +32,15 @@ void main() {
       ),
     );
     await tester.pump();
-    // The placeholder Home (`shell/home_page.dart`) renders a centered loading
-    // spinner until Task 11b brings the real HomeScreen. Asserting on it catches
-    // both "FRB cdylib failed to load" and "widget tree never mounted" without
-    // requiring any particular post-v0.6 layout.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // Assert on the app root, not on anything inside Home. This used to check
+    // for the placeholder Home's loading spinner, which v0.6 removed when the
+    // real HomeScreen landed - so the smoke sat red and nobody noticed,
+    // because nothing ran it. Keep the assertion layout-agnostic so it
+    // survives the next UI change too.
+    //
+    // "FRB cdylib failed to load" is already caught upstream: `RustLib.init()`
+    // in setUpAll throws if the native artefact can't be loaded. What this
+    // adds is that the widget tree actually mounts on top of it.
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }

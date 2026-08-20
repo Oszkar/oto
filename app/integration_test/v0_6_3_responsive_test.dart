@@ -3,10 +3,15 @@
 /// LAN-free dev mock seam and asserts the wide three-pane shell renders and
 /// follows real bridge state: the persistent `NowPlayingPane` (no floating
 /// `BottomStrip`), the desktop `OtoNavRail`, playing a group filling the
-/// pane, select-in-place on a group card, and the Settings dialog opening
-/// from the rail. Mirrors the boot/seam/polling mechanics of
-/// `v0_6_0_ui_test.dart`; standalone (integration tests do not import each
-/// other), so the mock/boot/wait helpers are copied rather than shared.
+/// pane, live room-volume and topology changes, select-in-place on a group
+/// card, and the Settings dialog opening from the rail. Standalone
+/// (integration tests do not import each other), so the mock/boot/wait helpers
+/// are inlined rather than shared.
+///
+/// This is the surviving UI end-to-end: the v0.6.0 one asserted the
+/// pre-v0.6.3 layout contract (`BottomStrip` always composed) that the
+/// responsive work deliberately replaced with `!wide && hasActiveStream`,
+/// and was deleted rather than retrofitted.
 ///
 /// Run on a connected Windows desktop:
 ///
@@ -35,6 +40,7 @@ import 'package:oto/src/ui/settings/settings_screen.dart';
 import 'package:oto/src/ui/shell/oto_app.dart';
 import 'package:oto/src/ui/shell/oto_nav_rail.dart';
 import 'package:oto/src/ui/widgets/album_art.dart';
+import 'package:oto/src/ui/widgets/oto_slider.dart';
 
 // MockWire fixture (native/crates/mock): 3 speakers / 2 groups.
 //   - RINCON_KITCHEN ("Kitchen") + RINCON_DINING ("Dining") -> group
@@ -42,6 +48,8 @@ import 'package:oto/src/ui/widgets/album_art.dart';
 //   - RINCON_OFFICE ("Office") -> group RINCON_OFFICE:0 (solo).
 // Every speaker seeds at SEED_VOLUME = 30; both groups seed Stopped.
 const _kitchenGroup = 'RINCON_KITCHEN:1';
+const _kitchenSpeaker = 'RINCON_KITCHEN';
+const _seedVolume = 30;
 
 /// A [Discovery] whose `build()` drives discovery via the dev MockWire seam
 /// (`devDiscoverMock`) instead of a real LAN `discover()`. This installs the
@@ -54,8 +62,8 @@ class _MockDiscovery extends Discovery {
 }
 
 /// Wait for `condition()` to become true, polling each event-loop turn.
-/// Mirrors `_waitFor` in `v0_6_0_ui_test.dart`: when the Rust side emits an
-/// event the test resumes promptly instead of sleeping a fixed interval.
+/// When the Rust side emits an event the test resumes promptly instead of
+/// sleeping a fixed interval.
 /// Pumps the widget tree each turn so provider rebuilds settle into the
 /// rendered frame.
 Future<void> _waitFor(
@@ -100,7 +108,7 @@ void main() {
   });
 
   testWidgets(
-    'v0.6.3 end-to-end: wide three-pane shell renders and follows play + select + settings',
+    'v0.6.3 end-to-end: wide shell follows volume + topology + play + select + settings',
     (tester) async {
       // Force a desktop width BEFORE booting so `context.isWide` /
       // `context.isDesktop` see it from the very first frame (1280 >= 1200 =
@@ -118,13 +126,15 @@ void main() {
       // Discovery resolves (devDiscoverMock installs the mock wire), the event
       // stream subscribes, and the seed drains into the accumulating
       // household. Wait until the household has the full 3-speaker / 2-group
-      // skeleton.
+      // skeleton and the Kitchen volume seed has arrived.
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OtoApp)),
       );
       await _waitFor(tester, () {
         final h = container.read(householdProvider);
-        return h.rooms.length == 3 && h.groups.length == 2;
+        return h.rooms.length == 3 &&
+            h.groups.length == 2 &&
+            h.rooms[_kitchenSpeaker]?.volume == _seedVolume;
       }, message: 'discovery + seed never populated the household');
       await tester.pumpAndSettle();
 
@@ -152,6 +162,46 @@ void main() {
         findsOneWidget,
         reason: 'no active source yet -> the pane shows its empty placeholder',
       );
+
+      // ── Volume event -> composed group slider ───────────────────────────
+      const newVolume = 77;
+      await rust_api.setVolume(
+        speakerId: _kitchenSpeaker,
+        volume: newVolume,
+      );
+      await _waitFor(
+        tester,
+        () =>
+            container.read(householdProvider).rooms[_kitchenSpeaker]?.volume ==
+            newVolume,
+        message: 'setVolume did not propagate to the household',
+      );
+      await tester.pumpAndSettle();
+
+      final groupSliderValues = tester
+          .widgetList<OtoSlider>(
+            find.descendant(
+              of: find.byType(GroupCard),
+              matching: find.byType(OtoSlider),
+            ),
+          )
+          .map((slider) => slider.value);
+      expect(
+        groupSliderValues,
+        contains(closeTo(newVolume / 100, 0.001)),
+        reason: 'the Kitchen room slider reflects the bridge event',
+      );
+
+      // ── TopologyChanged -> debounce + re-pull + live tree ───────────────
+      await rust_api.devPushTopologyChangeOnMock();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      final afterRegroup = container.read(householdProvider);
+      expect(afterRegroup.rooms.length, 3);
+      expect(afterRegroup.groups.length, 2);
+      expect(find.byType(GroupCard), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
       // ── play(group) -> the pane fills ────────────────────────────────────
       // `resolvedSourceProvider` defaults to the first active source, so
