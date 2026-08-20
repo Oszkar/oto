@@ -220,9 +220,8 @@ void main() {
     );
 
     expect(h.events, hasLength(1));
-    final ev = h.events.first;
-    expect(ev, isA<api.ChangeEventDto_GroupVolume>());
-    ev as api.ChangeEventDto_GroupVolume;
+    expect(h.events.first, isA<api.ChangeEventDto_GroupVolume>());
+    final ev = h.events.first as api.ChangeEventDto_GroupVolume;
     expect(
       ev.groupId,
       'RINCON_OFFICE:0',
@@ -246,9 +245,8 @@ void main() {
     );
 
     expect(h.events, hasLength(1));
-    final ev = h.events.first;
-    expect(ev, isA<api.ChangeEventDto_GroupMute>());
-    ev as api.ChangeEventDto_GroupMute;
+    expect(h.events.first, isA<api.ChangeEventDto_GroupMute>());
+    final ev = h.events.first as api.ChangeEventDto_GroupMute;
     expect(ev.groupId, 'RINCON_OFFICE:0');
     expect(ev.muted, isTrue);
 
@@ -278,6 +276,11 @@ void main() {
       groupVolumeSeeds.map((e) => e.groupId).toSet(),
       {'RINCON_KITCHEN:1', 'RINCON_OFFICE:0'},
       reason: 'both fixture groups seed a GroupVolume',
+    );
+    expect(
+      groupMuteSeeds.map((e) => e.groupId).toSet(),
+      {'RINCON_KITCHEN:1', 'RINCON_OFFICE:0'},
+      reason: 'both fixture groups seed a GroupMute',
     );
     expect(
       groupMuteSeeds.every((e) => !e.muted),

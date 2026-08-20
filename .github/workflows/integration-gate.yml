@@ -18,6 +18,9 @@ on:
     paths:
       - ".github/workflows/integration-gate.yml"
 
+permissions:
+  contents: read
+
 concurrency:
   group: integration-gate-${{ github.ref }}
   cancel-in-progress: true
@@ -34,6 +37,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # .fvmrc is the canonical Flutter version (see AGENTS.md / CONTRIBUTING.md).
       # working-directory override: this job defaults to app/, .fvmrc is at root.
@@ -72,12 +77,5 @@ jobs:
       # Runs every file even if an earlier one fails, so a single stale test
       # doesn't mask the state of the rest, then fails the job at the end.
       - name: flutter test integration_test (one invocation per file)
-        shell: bash
-        run: |
-          status=0
-          for f in integration_test/*_test.dart; do
-            echo "::group::$f"
-            flutter test "$f" -d windows || status=1
-            echo "::endgroup::"
-          done
-          exit $status
+        shell: pwsh
+        run: ../scripts/run_integration_tests.ps1

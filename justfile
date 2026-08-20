@@ -74,7 +74,7 @@ test-dart:
 # Release gate - see RELEASING.md step 0.
 [working-directory: 'app']
 test-integration:
-    flutter test integration_test/ -d windows
+    pwsh -NoLogo -NoProfile -File ../scripts/run_integration_tests.ps1
 
 # Supply-chain check (runs cargo deny against the workspace).
 [working-directory: 'native']

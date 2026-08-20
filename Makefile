@@ -47,7 +47,7 @@ test-dart:
 # Bridge smoke — see justfile for full rationale. Not part of `test`/CI.
 # Release gate - see RELEASING.md step 0. Mirrors `just test-integration`.
 test-integration:
-	cd app && flutter test integration_test/ -d windows
+	cd app && pwsh -NoLogo -NoProfile -File ../scripts/run_integration_tests.ps1
 
 deny:
 	cd native && cargo deny check
