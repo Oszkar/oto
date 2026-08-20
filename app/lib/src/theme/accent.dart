@@ -5,11 +5,19 @@ import 'package:flutter/material.dart';
 /// Each accent carries its resolved swatch for light and dark themes plus a
 /// pre-blended "soft" variant (the same hue at low alpha) used for badges and
 /// pills. Soft alphas: light `0.14` (`0x24`), dark `0.22` (`0x38`).
+///
+/// The light swatches are constrained by their own soft variant: accent text
+/// on `accentSoft` over `surface` (the group member-count badge, 12px/w700 -
+/// small text, so WCAG AA wants 4.5:1) is the tightest pairing in the theme.
+/// Teal and amber were tuned to clear it; indigo (5.8:1) and slate (7.7:1)
+/// already did. Dark mode passes everywhere by a wide margin. Re-check this
+/// ratio before changing any light swatch.
 enum Accent {
   teal(
-    Color(0xFF0F7A72),
+    // 4.79:1 on softLight-over-white (was #0F7A72 at 4.28:1 - below AA).
+    Color(0xFF0E7168),
     Color(0xFF5DD6C8),
-    Color(0x240F7A72),
+    Color(0x240E7168),
     Color(0x385DD6C8),
   ),
   indigo(
@@ -19,9 +27,10 @@ enum Accent {
     Color(0x388A96FF),
   ),
   amber(
-    Color(0xFFA85A1A),
+    // 4.85:1 on softLight-over-white (was #A85A1A at 4.19:1 - below AA).
+    Color(0xFF9A5015),
     Color(0xFFF0B070),
-    Color(0x24A85A1A),
+    Color(0x249A5015),
     Color(0x38F0B070),
   ),
   slate(

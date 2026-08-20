@@ -28,7 +28,14 @@ typedef PaneSource = ({String? coord, bool pinned});
 /// Tracks the coordinator the wide detail pane shows, reconciling on every
 /// active-source change (finding: a plain "first active source" default jumps
 /// whenever another room starts/stops).
-@riverpod
+///
+/// `keepAlive`: this holds explicit user intent, and on compact width NOTHING
+/// watches it - `OtoScaffold` skips the detail pane below 840, and
+/// `group_card.dart` short-circuits its `ref.watch` behind `wide &&`. Under
+/// autoDispose that made `nav.dart`'s `select()` write into a provider disposed
+/// on the next tick, so a wide -> compact -> wide resize silently dropped the
+/// pin. The state is two small fields for the app's lifetime.
+@Riverpod(keepAlive: true)
 class SelectedSource extends _$SelectedSource {
   @override
   PaneSource build() {

@@ -110,8 +110,9 @@ final _brOnly = Household(
 );
 
 /// A container whose household can be swapped via the returned notifier. The
-/// `listen` keeps the selection chain alive so its reconcile listener fires on
-/// a swap (a bare `read` would let the autoDispose providers drop first).
+/// `listen` keeps `resolvedSourceProvider` (which IS autoDispose) alive so its
+/// reconcile chain fires on a swap; `selectedSourceProvider` itself is
+/// keepAlive - see the no-listener test below.
 (ProviderContainer, _MutableHousehold) _live(Household initial) {
   final fx = _MutableHousehold(initial);
   final container = ProviderContainer(
@@ -147,6 +148,33 @@ void main() {
     final (container, _) = _live(const Household());
     expect(container.read(resolvedSourceProvider), isNull);
   });
+
+  test(
+    'a pin survives with nothing watching the selection (keepAlive)',
+    () async {
+      // The compact layout is exactly this shape: OtoScaffold skips the detail
+      // pane below 840 and GroupCard short-circuits its watch behind `wide &&`,
+      // so nothing observes the selection. Under autoDispose the pin was
+      // collected on the next tick and a compact -> wide resize lost it.
+      final fx = _MutableHousehold(_household);
+      final container = ProviderContainer(
+        overrides: [householdProvider.overrideWith(() => fx)],
+      );
+      addTearDown(container.dispose);
+
+      container.read(selectedSourceProvider.notifier).select('G_IDLE');
+      expect(container.read(selectedSourceProvider).coord, 'OF');
+
+      await _tick();
+
+      expect(
+        container.read(selectedSourceProvider).coord,
+        'OF',
+        reason: 'an explicit pin must outlive having no listeners',
+      );
+      expect(container.read(selectedSourceProvider).pinned, isTrue);
+    },
+  );
 
   test(
     'an explicit pick survives a regroup (group id churns, coord stable)',

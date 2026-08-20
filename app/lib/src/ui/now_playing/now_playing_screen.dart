@@ -156,6 +156,8 @@ class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
           key: Key('np-progress-$groupId'),
           value: value,
           onChanged: null, // read-only: no seek (no backend)
+          // An indicator, not a disabled control - keep the accent tokens.
+          readOnly: true,
         ),
         const SizedBox(height: Space.sm6),
         Row(
@@ -300,7 +302,8 @@ class _NowPlayingBodyState extends ConsumerState<NowPlayingBody> {
                   textAlign: TextAlign.right,
                   style: TextStyles.caption.copyWith(
                     fontFamily: Fonts.mono,
-                    fontWeight: FontWeight.w600,
+                    // GeistMono ships 400 + 500 only; w600 silently falls back.
+                    fontWeight: FontWeight.w500,
                     color: oto.ink2,
                   ),
                 ),

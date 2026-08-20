@@ -17,7 +17,6 @@ class OtoColors extends ThemeExtension<OtoColors> {
   const OtoColors({
     required this.bg,
     required this.surface,
-    required this.surface2,
     required this.elevated,
     required this.line,
     required this.lineStrong,
@@ -28,9 +27,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
     required this.fill,
     required this.fillStrong,
     required this.onAccent,
-    required this.success,
     required this.danger,
-    required this.spotify,
     required this.accent,
     required this.accentSoft,
   });
@@ -40,9 +37,6 @@ class OtoColors extends ThemeExtension<OtoColors> {
 
   /// Card / sheet surface.
   final Color surface;
-
-  /// Recessed surface (one step back from [surface]).
-  final Color surface2;
 
   /// Raised surface (one step forward - popovers, floating bars).
   final Color elevated;
@@ -76,14 +70,8 @@ class OtoColors extends ThemeExtension<OtoColors> {
   /// Text/icon color on top of [accent].
   final Color onAccent;
 
-  /// Online / connected status.
-  final Color success;
-
   /// Destructive (ungroup, clear, offline).
   final Color danger;
-
-  /// Spotify Connect brand dot - branded exception, do not reuse.
-  final Color spotify;
 
   /// Resolved accent swatch for the current brightness.
   final Color accent;
@@ -98,7 +86,6 @@ class OtoColors extends ThemeExtension<OtoColors> {
     return OtoColors(
       bg: const Color(0xFFF6F5F1),
       surface: const Color(0xFFFFFFFF),
-      surface2: const Color(0xFFF0EEE9),
       elevated: const Color(0xFFFFFFFF),
       line: fillBase.withValues(alpha: 0.07),
       lineStrong: fillBase.withValues(alpha: 0.16),
@@ -109,9 +96,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
       fill: fillBase.withValues(alpha: 0.035),
       fillStrong: fillBase.withValues(alpha: 0.07),
       onAccent: const Color(0xFFFFFFFF),
-      success: const Color(0xFF3EA76F),
       danger: const Color(0xFFB34A3A),
-      spotify: const Color(0xFF1DB954),
       accent: a.light,
       accentSoft: a.softLight,
     );
@@ -124,7 +109,6 @@ class OtoColors extends ThemeExtension<OtoColors> {
     return OtoColors(
       bg: const Color(0xFF0E0E10),
       surface: const Color(0xFF16161A),
-      surface2: const Color(0xFF1D1D22),
       elevated: const Color(0xFF22222A),
       line: fillBase.withValues(alpha: 0.07),
       lineStrong: fillBase.withValues(alpha: 0.14),
@@ -135,9 +119,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
       fill: fillBase.withValues(alpha: 0.04),
       fillStrong: fillBase.withValues(alpha: 0.10),
       onAccent: const Color(0xFF0E0E10),
-      success: const Color(0xFF5CC497),
       danger: const Color(0xFFE08A7A),
-      spotify: const Color(0xFF1DB954),
       accent: a.dark,
       accentSoft: a.softDark,
     );
@@ -147,7 +129,6 @@ class OtoColors extends ThemeExtension<OtoColors> {
   OtoColors copyWith({
     Color? bg,
     Color? surface,
-    Color? surface2,
     Color? elevated,
     Color? line,
     Color? lineStrong,
@@ -158,16 +139,13 @@ class OtoColors extends ThemeExtension<OtoColors> {
     Color? fill,
     Color? fillStrong,
     Color? onAccent,
-    Color? success,
     Color? danger,
-    Color? spotify,
     Color? accent,
     Color? accentSoft,
   }) {
     return OtoColors(
       bg: bg ?? this.bg,
       surface: surface ?? this.surface,
-      surface2: surface2 ?? this.surface2,
       elevated: elevated ?? this.elevated,
       line: line ?? this.line,
       lineStrong: lineStrong ?? this.lineStrong,
@@ -178,9 +156,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
       fill: fill ?? this.fill,
       fillStrong: fillStrong ?? this.fillStrong,
       onAccent: onAccent ?? this.onAccent,
-      success: success ?? this.success,
       danger: danger ?? this.danger,
-      spotify: spotify ?? this.spotify,
       accent: accent ?? this.accent,
       accentSoft: accentSoft ?? this.accentSoft,
     );
@@ -192,7 +168,6 @@ class OtoColors extends ThemeExtension<OtoColors> {
     return OtoColors(
       bg: Color.lerp(bg, other.bg, t)!,
       surface: Color.lerp(surface, other.surface, t)!,
-      surface2: Color.lerp(surface2, other.surface2, t)!,
       elevated: Color.lerp(elevated, other.elevated, t)!,
       line: Color.lerp(line, other.line, t)!,
       lineStrong: Color.lerp(lineStrong, other.lineStrong, t)!,
@@ -203,9 +178,7 @@ class OtoColors extends ThemeExtension<OtoColors> {
       fill: Color.lerp(fill, other.fill, t)!,
       fillStrong: Color.lerp(fillStrong, other.fillStrong, t)!,
       onAccent: Color.lerp(onAccent, other.onAccent, t)!,
-      success: Color.lerp(success, other.success, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
-      spotify: Color.lerp(spotify, other.spotify, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       accentSoft: Color.lerp(accentSoft, other.accentSoft, t)!,
     );

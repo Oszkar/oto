@@ -4,11 +4,18 @@
 ///   - `changeEventsProvider` re-subscribes EXACTLY once per new wire.
 ///
 /// The re-subscribe is keyed on the wire GENERATION, not on a topology value
-/// transition. The subtle case a value-equal fast `refreshTopology()` (a no-op
-/// regroup publishes an unchanged `Topology`, so `discoveryProvider` does not
-/// transition) must still re-subscribe, because the Rust wire was replaced and
-/// its previous one-shot receiver is dead. That path is driven by
-/// [wireInstallSignalProvider], which this suite bumps directly.
+/// transition. The subtle case is a fast `refreshTopology()` after a no-op
+/// regroup: the Rust wire was replaced and its previous one-shot receiver is
+/// dead, so the stream must re-subscribe even if `discoveryProvider` never
+/// transitions. That path is driven by [wireInstallSignalProvider], which this
+/// suite bumps directly.
+///
+/// A note on `Topology` equality, because the comment this suite used to carry
+/// had it backwards: FRB's generated `Topology` compares its `List` fields with
+/// Dart's identity-based `List ==`, so two separately allocated topologies are
+/// NEVER equal even when structurally identical (asserted below). A re-publish
+/// therefore does transition `discoveryProvider` in practice - the install
+/// signal is the guarantee that the re-subscribe does not *rely* on that.
 ///
 /// FRB is bypassed via two overridable seams: [wireGenerationReaderProvider]
 /// (a controllable generation counter) and [changeEventStreamFactoryProvider]
@@ -28,6 +35,25 @@ import 'package:oto/src/state/events.dart';
 const _fakeTopology = rust_api.Topology(
   speakers: [
     rust_api.DiscoveredSpeaker(
+      id: 'RINCON_KITCHEN',
+      roomName: 'Kitchen',
+      ip: '10.0.0.10',
+    ),
+  ],
+  groups: [
+    rust_api.DiscoveredGroup(
+      id: 'RINCON_KITCHEN:0',
+      coordinator: 'RINCON_KITCHEN',
+      members: ['RINCON_KITCHEN'],
+    ),
+  ],
+);
+
+/// The same topology as [_fakeTopology], structurally, but built at runtime so
+/// its `List` fields are separate allocations rather than canonicalized consts.
+rust_api.Topology _equivalentTopology() => rust_api.Topology(
+  speakers: [
+    const rust_api.DiscoveredSpeaker(
       id: 'RINCON_KITCHEN',
       roomName: 'Kitchen',
       ip: '10.0.0.10',
@@ -114,6 +140,25 @@ void main() {
     });
   });
 
+  group('Topology equality', () {
+    // Pins the assumption the install-signal rationale used to get wrong. FRB
+    // generates `speakers == other.speakers` over `List`, and Dart's `List ==`
+    // is identity-based, so only const canonicalization can make two topologies
+    // equal. Every topology crossing FRB is freshly deserialized.
+    test('is identity-based over the List fields, not structural', () {
+      expect(
+        _equivalentTopology() == _equivalentTopology(),
+        isFalse,
+        reason: 'separately allocated lists must compare unequal',
+      );
+      expect(
+        _fakeTopology == _fakeTopology,
+        isTrue,
+        reason: 'the const fixture is canonicalized, hence identical',
+      );
+    });
+  });
+
   group('changeEvents', () {
     test('does not subscribe while no wire is installed', () async {
       final container = makeContainer(_LoadingDiscovery.new);
@@ -144,8 +189,8 @@ void main() {
       );
     });
 
-    test('re-subscribes on a value-equal refresh (install signal bumps the '
-        'generation without a discovery transition)', () async {
+    test('re-subscribes on an install signal with no discovery transition '
+        '(the fast no-op-regroup refresh path)', () async {
       generation = BigInt.from(1);
       final container = makeContainer(_DataDiscovery.new);
       addTearDown(container.dispose);
@@ -155,9 +200,9 @@ void main() {
       await pumpEventQueue();
       expect(subscribeCount, 1);
 
-      // A no-op regroup: the Rust wire was replaced (generation bumps) but the
-      // Topology value is unchanged, so discoveryProvider does NOT transition.
-      // Only the install signal fires.
+      // A no-op regroup: the Rust wire was replaced (generation bumps) but
+      // nothing re-publishes through discoveryProvider, so it does NOT
+      // transition. Only the install signal fires.
       generation = BigInt.from(2);
       container.read(wireInstallSignalProvider.notifier).bump();
       await pumpEventQueue();

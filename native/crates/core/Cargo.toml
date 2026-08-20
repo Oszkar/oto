@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Sonos discovery, SOAP control, and event subscription core."
+description = "Pure oto domain types, the Wire trait, and WireError. No networking, async, or third-party deps."
 publish = false
 
 [lints]

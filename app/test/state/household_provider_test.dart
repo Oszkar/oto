@@ -44,9 +44,12 @@ ProviderContainer _container() => ProviderContainer(
 );
 
 
-/// A second topology, value-DIFFERENT from [_topo] so republishing it actually
-/// transitions `discoveryProvider` (FRB `Topology` has value equality, so an
-/// identical re-publish would not fire the listener).
+/// A second topology, DIFFERENT from [_topo] so republishing it actually
+/// transitions `discoveryProvider`. Both are `const`, and Dart canonicalizes
+/// const literals, so re-publishing [_topo] itself would be `identical` and
+/// would not fire the listener. (FRB `Topology` compares its `List` fields with
+/// Dart's identity-based `List ==`, so const canonicalization is the *only*
+/// way two topologies compare equal here - see `events_test.dart`.)
 Topology _topoV2() => const Topology(
   speakers: [
     DiscoveredSpeaker(

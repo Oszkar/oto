@@ -12,7 +12,7 @@ ignore = [
     # no security impact). It is a transitive dependency of sonos-api: the full
     # path is paste → sonos-api → oto-wire. No upgrade path while sonos-api is
     # pinned =0.5.2.
-    # TODO(v0.6): re-evaluate if the sonos-api pin is changed.
+    # TODO(v0.7): re-evaluate if the sonos-api pin is changed.
     { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api (paste → sonos-api → oto-wire); no upgrade path on pinned sonos-api =0.5.2" },
     # `quick-xml v0.31.0` - two DoS-class parsing advisories (RUSTSEC-2026-0194
     # quadratic duplicate-attribute check; RUSTSEC-2026-0195 unbounded
@@ -31,6 +31,14 @@ ignore = [
     # bumped to a release that depends on quick-xml >=0.41.0.
     { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
     { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
+    # `h2 v0.3.27` can queue empty DATA frames without limit
+    # (RUSTSEC-2026-0258, fixed only in h2 >=0.4.16). It is locked to the old
+    # h2 line through both reqwest 0.11 and warp 0.3 in the exact-pinned Sonos
+    # SDK stack, so there is no compatible leaf update. Exposure is LAN-local
+    # DoS against HTTP clients / the callback server, not memory unsafety.
+    # TODO(v0.7): remove when the sonos-api pin or local SDK patch moves its
+    # HTTP stack to h2 >=0.4.16.
+    { id = "RUSTSEC-2026-0258", reason = "LAN-local DoS in h2 0.3.27; transitive via reqwest 0.11 / warp 0.3 in exact-pinned sonos-api stack; no compatible leaf update, fixed only on h2 >=0.4.16" },
     # RUSTSEC-2025-0134 (rustls-pemfile v1) formerly ignored here: it came
     # in via sonos-sdk-discovery's default-tls reqwest feature. Retired
     # 2026-07-01 when that feature was dropped (LOCAL_PATCHES.md #2) and
