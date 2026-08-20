@@ -735,6 +735,66 @@ void main() {
       },
     );
 
+    test(
+      'a settled regrouped gesture releases the old group id capture',
+      () async {
+        final spy = _SpyApi()..deferGroupVolume = true;
+        final (:container, :discovery) = _container(spy);
+        await _seedHousehold(container);
+
+        final controller = container.read(groupingControllerProvider);
+        controller.setGroupVolumeEnd('G1', 40);
+
+        final notifier = container.read(householdProvider.notifier);
+        final original = notifier.state.groups['G1']!;
+        notifier.state = notifier.state.copyWith(
+          groups: {'G2': original.copyWith(id: 'G2')},
+        );
+        controller.setGroupVolumeEnd('G2', 50);
+
+        spy.groupVolumeCompleters[0].complete();
+        await _settleQueue();
+        spy.groupVolumeCompleters[1].complete();
+        await _settleQueue();
+
+        final regrouped = notifier.state.groups['G2']!;
+        notifier.state = notifier.state.copyWith(
+          groups: {
+            'G2': regrouped,
+            'G1': regrouped.copyWith(
+              id: 'G1',
+              coordinatorId: 'KT',
+              memberIds: const ['KT'],
+            ),
+          },
+        );
+        spy.deferGroupVolume = false;
+        controller.setGroupVolume('G1', 60);
+
+        final reused = notifier.state.groups['G1']!;
+        notifier.state = notifier.state.copyWith(
+          groups: {
+            'G2': regrouped,
+            'G3': reused.copyWith(id: 'G3'),
+          },
+        );
+        controller.setGroupVolumeEnd('G1', 70);
+        await _settleQueue();
+
+        expect(
+          spy.calls,
+          [
+            'setGroupVolume(G1,40)',
+            'setGroupVolume(G2,50)',
+            'setGroupVolume(G3,70)',
+          ],
+          reason:
+              'after the first regrouped gesture settles, reused G1 must open '
+              'a fresh KT capture that follows its own regroup to G3',
+        );
+      },
+    );
+
     test('Sonos reject on group mute rolls back', () async {
       final spy = _SpyApi()..throwOn = const CommandError.sonos('x');
       final (:container, :discovery) = _container(spy);

@@ -149,7 +149,28 @@ class CommandScheduler {
     _groupGestures.putIfAbsent(groupId, () => _coordinatorOf(groupId));
   }
 
-  void _closeGroupGesture(String groupId) => _groupGestures.remove(groupId);
+  Set<String> _closeGroupGesture(_CommandIntent<int?> intent) {
+    final target = intent.groupTarget;
+    if (target == null) return const {};
+
+    final coordinator = target.coordinatorId;
+    if (coordinator == null) {
+      _groupGestures.remove(target.originalGroupId);
+      return {target.originalGroupId};
+    }
+
+    // A regroup can change the id supplied at drag release. Clear every alias
+    // captured for the same physical coordinator so the old id cannot retain a
+    // stale target if Sonos later reuses it for another group.
+    final aliases = <String>{};
+    _groupGestures.removeWhere((groupId, captured) {
+      final matches = captured == coordinator;
+      if (matches) aliases.add(groupId);
+      return matches;
+    });
+    aliases.add(target.originalGroupId);
+    return aliases;
+  }
 
   _CommandIntent<T> _beginRoomIntent<T>({
     required String speakerId,
@@ -362,7 +383,7 @@ class _ThrottledScalar {
   final void Function(_CommandIntent<int?> intent) cancelIntent;
   final bool Function(_CommandIntent<int?> intent) intentIsLatest;
   final void Function(String id)? onGestureStarted;
-  final void Function(String id)? onGestureSettled;
+  final Set<String> Function(_CommandIntent<int?> intent)? onGestureSettled;
 
   final _throttle = <String, Throttle>{};
   final _pending = <String, _CommandIntent<int?>>{};
@@ -399,8 +420,12 @@ class _ThrottledScalar {
 
     void settle(Object? _) {
       if (intentIsLatest(intent)) {
-        _openGestures.remove(id);
-        onGestureSettled?.call(id);
+        final aliases = onGestureSettled?.call(intent);
+        if (aliases == null) {
+          _openGestures.remove(id);
+        } else {
+          _openGestures.removeAll(aliases);
+        }
       }
     }
 
