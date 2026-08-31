@@ -28,17 +28,17 @@ dependencies:
   # Native bridge.
   oto_native:
     path: rust_builder
-  flutter_rust_bridge: 2.12.0
+  flutter_rust_bridge: 2.13.0
 
   # State management — Riverpod 3 with code generation.
-  flutter_riverpod: ^3.3.1
-  riverpod_annotation: ^4.0.2
+  flutter_riverpod: ^3.4.2
+  riverpod_annotation: ^4.0.6
   freezed_annotation: ^3.1.0
 
   # UI foundation (v0.6.0).
   shared_preferences: ^2.3.0
   flutter_svg: ^2.0.10
-  lucide_icons_flutter: ^3.1.15
+  lucide_icons_flutter: ^3.1.17
 
   # Windows/desktop window size + position persistence (v0.6.3).
   window_manager: ^0.5.2
@@ -62,9 +62,9 @@ dev_dependencies:
   # didn't exist, plugin failed to start, ~50% of main CI pushes failed.
   # Base `flutter analyze` + `flutter_lints` covers everything else. Can
   # re-add when upstream stabilizes lockfile handling.
-  build_runner: ^2.15.1
-  riverpod_generator: ^4.0.3
-  freezed: ^3.2.5
+  build_runner: ^2.16.0
+  riverpod_generator: ^4.0.8
+  freezed: ^4.0.1
 
 flutter:
   uses-material-design: true
