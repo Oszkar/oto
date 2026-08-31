@@ -38,8 +38,8 @@ sonos-api = "=0.5.2"
 # (same precedent as `sonos-api`); the v0.4 spike (see
 # `docs/evidence/v0.4-spike/findings.md`) validated the 0.5.2 surface on
 # real hardware. Do NOT bump without re-running the v0.4 acceptance gate.
-sonos-sdk-state = "=0.5.2"
-sonos-sdk-event-manager = "=0.5.2"
+sonos-sdk-state = "=0.8.0"
+sonos-sdk-event-manager = "=0.8.0"
 sonos-sdk-stream = "=0.5.2"
 sonos-sdk-callback-server = "=0.5.2"
 
@@ -64,7 +64,7 @@ socket2 = "0.5"
 # sonos-api's SOAP client / webpki-roots — see deny.toml); this only adds a
 # direct edge to the already-resolved version. §7-approved (2026-05-29).
 # Exact pin so no second ureq major enters the build.
-ureq = "=2.12.1"
+ureq = "=3.4.0"
 
 # Log-emission facade for oto-wire's own diagnostics (per AGENTS.md §3:
 # "oto-wire/oto-app may use anyhow at boundaries and tracing for logs").
