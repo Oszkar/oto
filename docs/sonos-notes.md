@@ -29,7 +29,7 @@ Mechanics:
 - **HTTP fetch quirk (`device_description.xml`).** Sonos's embedded server replies with chunked HTTP even to an HTTP/1.0 request. A raw `TcpStream` hands chunk framing to the XML parser. `oto-wire/src/device_description.rs` uses ureq 3.4 with `timeout_connect` (1 s) and `timeout_global` (2 s), shared with upstream discovery's dependency. Parallel per-speaker model fetches remain best-effort: failure leaves `model = None` and discovery still succeeds.
 - **Hardware probe:** `native/crates/wire/examples/ssdp_multicast_if_probe.rs` compares M-SEARCH with and without the egress pin. The original dev LAN used the default multicast interface, so matching results there establish non-regression, not correctness on a non-default NIC.
 
-Any reachable Sonos can return the whole household. If one responder fails its topology read, discovery tries another. Response validation and candidate-count limits remain [planned hardening](ROADMAP.md#v07---hardening--polish).
+Any reachable Sonos can return the whole household. Discovery validates status `200`, the ZonePlayer `ST`, and a literal IPv4 `LOCATION` host matching the sender, retaining the first 32 distinct hosts. Full discovery, seeded discovery, and cached refresh each try at most 8 distinct topology candidates, with a 30-second check before each attempt. The receive loop rotates batches of 32 datagrams and checks its three-second deadline within each batch. In-flight SOAP, model enrichment, and subscription setup are outside the receive deadline. Sender matching does not authenticate topology or its member addresses. Hardware acceptance remains required for [v0.7](ROADMAP.md#v07---hardening--test-distribution), including a non-default LAN interface.
 
 ## Topology - `GetZoneGroupState` SOAP
 
@@ -252,7 +252,7 @@ SDK 0.8 manager clones share an event fanout. A held manager keeps it alive, so 
 
 `ZoneGroupTopology` is a service; the watchable property is speaker-scoped `GroupMembership`. Several speakers can emit for one regroup, so Dart debounces for 250 ms and re-pulls authoritative topology.
 
-The initial subscription also emits membership seeds. `TopologyFilter` suppresses the first membership event per speaker only within a five-second startup window. A later first event is treated as a real regroup. This bounds the risk of swallowing a change when a seed never arrives.
+The initial subscription also emits membership seeds. The wire compares their group ID and coordinator role with the discovered topology before marking routing dirty. Unchanged membership is ignored regardless of arrival time; a differing membership triggers refresh even if it is the first event. Android testing observed delayed initial notifications beyond five seconds, which made the former timing-based seed filter repeatedly rebuild subscriptions and interrupt playback updates.
 
 After a regroup, the old pump's coordinator maps are stale. It temporarily drops group-addressed events until a fresh wire is installed. If both fast refresh and full discovery fail, its dirty flag expires after 60 seconds, checked on the next event. That bounds silence while accepting possibly stale routing. See [Architecture](ARCHITECTURE.md#live-events) for the wire-generation lifecycle.
 

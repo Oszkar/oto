@@ -21,7 +21,6 @@
 //! adapters) could burn the entire bounded window on timeouts and never
 //! reach the responder.
 
-use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
@@ -33,6 +32,9 @@ use oto_core::WireError;
 
 const SSDP_ADDR: &str = "239.255.255.250:1900";
 const ST: &str = "urn:schemas-upnp-org:device:ZonePlayer:1";
+// Bound memory independently of the number of advertisements or URL variants.
+const MAX_CANDIDATE_HOSTS: usize = 32;
+const RECEIVE_BATCH: usize = 32;
 
 fn msearch() -> String {
     format!(
@@ -42,12 +44,65 @@ fn msearch() -> String {
     )
 }
 
-/// Extract the `LOCATION` value from one SSDP response payload.
-fn location_of(payload: &str) -> Option<String> {
-    payload
-        .lines()
-        .find(|l| l.to_ascii_lowercase().starts_with("location:"))
-        .map(|l| l["location:".len()..].trim().to_string())
+/// Accept only complete search replies advertising their sender's literal IP.
+/// This is destination validation, not authentication of a LAN peer.
+fn candidate_of(payload: &[u8], sender: SocketAddr) -> Option<Ipv4Addr> {
+    let payload = std::str::from_utf8(payload).ok()?;
+    let mut lines = payload.lines();
+    let mut status = lines.next()?.split_ascii_whitespace();
+    if status.next()? != "HTTP/1.1" || status.next()? != "200" {
+        return None;
+    }
+    let mut location = None;
+    let mut target = None;
+    let mut complete = false;
+    for line in lines {
+        if line.is_empty() {
+            complete = true;
+            break;
+        }
+        let (name, value) = line.split_once(':')?;
+        let slot = if name.eq_ignore_ascii_case("location") {
+            &mut location
+        } else if name.eq_ignore_ascii_case("st") {
+            &mut target
+        } else {
+            continue;
+        };
+        if slot.replace(value.trim()).is_some() {
+            return None;
+        }
+    }
+    if !complete || target? != ST {
+        return None;
+    }
+    let url = location?;
+    if url
+        .bytes()
+        .any(|b| b.is_ascii_whitespace() || b.is_ascii_control())
+    {
+        return None;
+    }
+    let authority = url.strip_prefix("http://")?.split('/').next()?;
+    let host = if let Some((host, port)) = authority.split_once(':') {
+        if port.is_empty()
+            || !port.bytes().all(|b| b.is_ascii_digit())
+            || port.parse::<u16>().ok()? == 0
+        {
+            return None;
+        }
+        host
+    } else {
+        authority
+    };
+    let ip: Ipv4Addr = host.parse().ok()?;
+    (IpAddr::V4(ip) == sender.ip()).then_some(ip)
+}
+
+fn admit_candidate(found: &mut Vec<Ipv4Addr>, ip: Ipv4Addr) {
+    if found.len() < MAX_CANDIDATE_HOSTS && !found.contains(&ip) {
+        found.push(ip);
+    }
 }
 
 /// Usable IPv4 interface addresses (no loopback, no link-local).
@@ -94,38 +149,28 @@ fn bind_multicast_sender(ip: Ipv4Addr) -> std::io::Result<UdpSocket> {
     Ok(UdpSocket::from_std(sock.into()))
 }
 
-/// Receive SSDP replies across ALL sockets until `deadline`, collecting
-/// unique LOCATION URLs.
-///
-/// Uses `mio::Poll` so the wait is **collective**: one `poll()` call
-/// blocks until any socket is readable or the remaining-time budget
-/// elapses. There is no per-socket timeout to consume, so a host with
-/// many quiet adapters cannot starve a responder bound to a later
-/// socket. Each ready socket is drained to `WouldBlock` so a burst of
-/// replies on one interface doesn't require another `poll()` round-trip.
+/// Collect first-seen unique hosts, rotating bounded batches across ready NICs.
+/// Retain readiness until WouldBlock: mio need not emit another edge for an
+/// incompletely drained socket. Poll without blocking between rounds so a new
+/// sparse responder is noticed even while another socket stays continuously busy.
 fn collect_until(
     poll: &mut Poll,
     sockets: &[UdpSocket],
     deadline: Instant,
-) -> Result<BTreeSet<String>, WireError> {
-    let mut found = BTreeSet::new();
-    // Capacity tracks socket count so a single `poll` call can surface
-    // every ready socket without growing the buffer mid-loop. `.max(8)`
-    // keeps the allocation reasonable for single-NIC hosts.
+) -> Result<Vec<Ipv4Addr>, WireError> {
+    let mut found = Vec::new();
+    let mut ready = vec![false; sockets.len()];
     let mut events = Events::with_capacity(sockets.len().max(8));
-    let mut buf = [0u8; 2048];
+    // One extra byte lets us reject oversized/truncated datagrams on platforms
+    // that return a truncated payload instead of an error.
+    let mut buf = [0u8; 2049];
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
-        // EINTR is benign on platforms where mio doesn't already swallow it
-        // (some BSDs / older platforms) - retry within the bounded window.
-        // Any other error means the poller itself is wedged (e.g. EBADF
-        // after a registration we no longer own); retrying would
-        // tight-spin until the deadline. Stop the wait loop either way: if
-        // we already collected replies, return them (a late poll failure
-        // doesn't invalidate what real devices already answered); if we
-        // collected nothing, surface the poll error as `WireError::Network`
-        // so a wedged poller is not misreported as an empty LAN. The next
-        // discover_with() call constructs a fresh Poll.
-        match poll.poll(&mut events, Some(remaining)) {
+        let wait = if ready.contains(&true) {
+            Duration::ZERO
+        } else {
+            remaining
+        };
+        match poll.poll(&mut events, Some(wait)) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) if found.is_empty() => {
@@ -133,48 +178,32 @@ fn collect_until(
             }
             Err(_) => break,
         }
-        for event in events.iter() {
-            if !event.is_readable() {
+        for event in events.iter().filter(|event| event.is_readable()) {
+            ready[event.token().0] = true;
+        }
+        for (idx, pending) in ready.iter_mut().enumerate() {
+            if !*pending {
                 continue;
             }
-            let idx = event.token().0;
-            // Drain everything available on this socket. Repeats are
-            // cheap and avoid relying on level-vs-edge triggering
-            // semantics. A hard error (e.g. Windows WSAECONNRESET from
-            // an ICMP port-unreachable to the M-SEARCH) ends the drain
-            // for this socket only; other sockets keep working.
-            loop {
+            for _ in 0..RECEIVE_BATCH {
+                if Instant::now() >= deadline {
+                    return Ok(found);
+                }
                 match sockets[idx].recv_from(&mut buf) {
-                    Ok((n, _)) => {
-                        // TODO(v0.7): accepted-risk hardening. We take any
-                        // datagram carrying a LOCATION header - we do NOT
-                        // validate the SSDP status line or `ST`, match the
-                        // LOCATION host against the responder's source
-                        // address (discarded as `_` here), or cap the
-                        // candidate count. A hostile device already on the
-                        // user's LAN could therefore inject a LOCATION that
-                        // points discovery's follow-up GetZoneGroupState
-                        // SOAP at an arbitrary host (port 1400 only - the
-                        // LOCATION port is ignored downstream). Accepted for
-                        // v0.5: LAN-local threat, blast radius is junk SOAP
-                        // attempts (a non-Sonos host fails to parse and is
-                        // skipped), and `discover()` stops at the first
-                        // responder that returns a parseable topology.
-                        // Harden in v0.7 (validate 200 + `ST`, require the
-                        // LOCATION host == source IP, cap candidates) -
-                        // wants a hardware re-validation pass on the LAN.
-                        // The candidate cap also bounds an all-fail
-                        // amplification: when NO candidate returns a parseable
-                        // topology, `discover()` issues one GetZoneGroupState
-                        // SOAP per candidate sequentially before giving up, so
-                        // an uncapped LOCATION set turns injected candidates
-                        // into N serial SOAP attempts.
-                        if let Some(loc) = location_of(&String::from_utf8_lossy(&buf[..n])) {
-                            found.insert(loc);
+                    Ok((n, sender)) => {
+                        if n < buf.len()
+                            && let Some(ip) = candidate_of(&buf[..n], sender)
+                        {
+                            admit_candidate(&mut found, ip);
                         }
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                    Err(_) => break,
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    // Includes WouldBlock and per-socket failures (e.g.
+                    // Windows ICMP port-unreachable); other NICs keep working.
+                    Err(_) => {
+                        *pending = false;
+                        break;
+                    }
                 }
             }
         }
@@ -182,7 +211,7 @@ fn collect_until(
     Ok(found)
 }
 
-/// SSDP across every usable IPv4 interface. Returns unique LOCATION URLs.
+/// SSDP across every usable IPv4 interface. Returns validated, unique IPv4 hosts in arrival order.
 ///
 /// Two-phase, so that **every** usable NIC is actually searched within a
 /// single bounded window (the prior per-interface sequential design blocked
@@ -199,14 +228,13 @@ fn collect_until(
 ///   `WireError::Network` with the last underlying cause so a local
 ///   stack/socket failure is not misreported as `NoDevicesFound`.
 /// - **Phase 2 (recv-all, collective):** wait on all sockets via
-///   `mio::Poll` until the deadline. Every readable socket is drained on
-///   each wakeup, so a quiet socket cannot consume the wait budget.
+///   `mio::Poll` until the deadline. Ready sockets receive bounded turns, so busy or quiet sockets cannot
+///   monopolize the receive window.
 ///
-/// `timeout` is the **total bounded window** across all interfaces: the
-/// deadline is computed once up front, so wall time stays O(timeout)
-/// regardless of NIC count (important on multi-NIC Windows hosts with
-/// Docker/WSL/VPN adapters).
-pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
+/// `timeout` sets one receive deadline, established before socket setup.
+/// Interface enumeration and send-all setup are not interruptible; SOAP and
+/// model enrichment happen afterward and are outside this receive budget.
+pub fn discover_hosts(timeout: Duration) -> Result<Vec<Ipv4Addr>, WireError> {
     let ifaces = usable_ipv4()?;
     if ifaces.is_empty() {
         return Err(WireError::Network("no usable IPv4 interface".into()));
@@ -267,7 +295,7 @@ pub fn discover_locations(timeout: Duration) -> Result<Vec<String>, WireError> {
     // WireError::Network (see collect_until) rather than being conflated
     // with a genuinely empty LAN.
     let found = collect_until(&mut poll, &sockets, deadline)?;
-    Ok(found.into_iter().collect())
+    Ok(found)
 }
 
 #[cfg(test)]
@@ -275,43 +303,68 @@ mod tests {
     use super::*;
     use std::net::UdpSocket as StdUdpSocket;
 
-    #[test]
-    fn parses_location_case_insensitive() {
-        let resp = "HTTP/1.1 200 OK\r\n\
-                    LOCATION: http://10.83.0.10:1400/xml/device_description.xml\r\n\
-                    ST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n";
-        assert_eq!(
-            location_of(resp).as_deref(),
-            Some("http://10.83.0.10:1400/xml/device_description.xml")
-        );
+    fn reply(ip: &str) -> String {
+        format!("HTTP/1.1 200 OK\r\nLOCATION: http://{ip}:1400/desc.xml\r\nST: {ST}\r\n\r\n")
     }
 
     #[test]
-    fn parses_location_lowercase_header() {
-        let resp = "HTTP/1.1 200 OK\r\n\
-                    location: http://192.168.1.5:1400/xml/device_description.xml\r\n\
-                    ST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n";
+    fn validates_search_reply() {
+        let sender = "127.0.0.1:1900".parse().unwrap();
+        let valid = reply("127.0.0.1");
         assert_eq!(
-            location_of(resp).as_deref(),
-            Some("http://192.168.1.5:1400/xml/device_description.xml")
+            candidate_of(valid.as_bytes(), sender),
+            Some(Ipv4Addr::LOCALHOST)
         );
+        let tolerant = valid
+            .replace("LOCATION: ", "location:  ")
+            .replace("ST:", "st:");
+        assert!(candidate_of(tolerant.as_bytes(), sender).is_some());
+        for invalid in [
+            valid.replace("200 OK", "500 Error"),
+            valid.replace("200 OK", "2000 OK"),
+            valid.replace("HTTP/1.1 200 OK", "NOTIFY * HTTP/1.1"),
+            valid.replace(ST, "ssdp:all"),
+            valid.replace("127.0.0.1", "127.0.0.2"),
+            valid.replace("127.0.0.1", "localhost"),
+            valid.replace("http://", "https://"),
+            valid.replace("127.0.0.1", "user@127.0.0.1"),
+            valid.replace(":1400/", ":0/"),
+            valid.replace(":1400/", ":65536/"),
+            valid.replace(":1400/", ":1400:80/"),
+            valid.replace("LOCATION:", " LOCATION:"),
+            valid.replace("\r\n\r\n", &format!("\r\nst: {ST}\r\n\r\n")),
+            valid.replace("\r\n\r\n", "\r\nLOCATION: http://127.0.0.1/\r\n\r\n"),
+            valid.replace(&format!("ST: {ST}\r\n"), ""),
+            valid.trim_end().to_string(),
+            format!("HTTP/1.1 200 OK\r\n\r\nLOCATION: http://127.0.0.1/\r\nST: {ST}\r\n"),
+        ] {
+            assert_eq!(
+                candidate_of(invalid.as_bytes(), sender),
+                None,
+                "{invalid:?}"
+            );
+        }
+        assert_eq!(candidate_of(&[0xff], sender), None);
     }
 
     #[test]
-    fn no_location_header_returns_none() {
+    fn candidates_are_unique_hosts_and_bounded_in_arrival_order() {
+        let mut found = Vec::new();
+        for n in 1..=MAX_CANDIDATE_HOSTS + 5 {
+            let ip = Ipv4Addr::new(10, 0, 0, n as u8);
+            for path in ["a", "b"] {
+                let payload = reply(&ip.to_string()).replace("desc.xml", path);
+                admit_candidate(
+                    &mut found,
+                    candidate_of(payload.as_bytes(), SocketAddr::new(ip.into(), 1900)).unwrap(),
+                );
+            }
+        }
+        assert_eq!(found.len(), MAX_CANDIDATE_HOSTS);
+        assert_eq!(found[0], Ipv4Addr::new(10, 0, 0, 1));
         assert_eq!(
-            location_of("HTTP/1.1 200 OK\r\nST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n"),
-            None
-        );
-    }
-
-    #[test]
-    fn location_value_is_trimmed() {
-        // Some devices emit trailing whitespace after the URL.
-        let resp = "HTTP/1.1 200 OK\r\nLOCATION:  http://10.0.0.1:1400/desc.xml  \r\n\r\n";
-        assert_eq!(
-            location_of(resp).as_deref(),
-            Some("http://10.0.0.1:1400/desc.xml")
+            found[MAX_CANDIDATE_HOSTS - 1],
+            Ipv4Addr::new(10, 0, 0, MAX_CANDIDATE_HOSTS as u8)
         );
     }
 
@@ -325,6 +378,90 @@ mod tests {
             .register(&mut sock, Token(idx), Interest::READABLE)
             .expect("register");
         (sock, addr)
+    }
+
+    #[test]
+    fn sustained_traffic_preserves_deadline_and_sparse_responder() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::thread;
+
+        for payload in [
+            b"invalid advertisement".to_vec(),
+            reply("127.0.0.1").into_bytes(),
+        ] {
+            let mut poll = Poll::new().unwrap();
+            let (busy, busy_addr) = bind_and_register(&mut poll, 0);
+            let (sparse, sparse_addr) = bind_and_register(&mut poll, 1);
+            let stop = Arc::new(AtomicBool::new(false));
+            let sender_stop = stop.clone();
+            let flood = thread::spawn(move || {
+                let tx = StdUdpSocket::bind("127.0.0.1:0").unwrap();
+                tx.set_nonblocking(true).unwrap();
+                let until = Instant::now() + Duration::from_secs(2);
+                while !sender_stop.load(Ordering::Relaxed) && Instant::now() < until {
+                    let _ = tx.send_to(&payload, busy_addr);
+                }
+            });
+            let sparse_sender = thread::spawn(move || {
+                let tx = StdUdpSocket::bind("127.0.0.2:0").unwrap();
+                thread::sleep(Duration::from_millis(50));
+                tx.send_to(reply("127.0.0.2").as_bytes(), sparse_addr)
+                    .unwrap();
+            });
+            let start = Instant::now();
+            let result = collect_until(
+                &mut poll,
+                &[busy, sparse],
+                start + Duration::from_millis(400),
+            );
+            let elapsed = start.elapsed();
+            stop.store(true, Ordering::Relaxed);
+            flood.join().unwrap();
+            sparse_sender.join().unwrap();
+            assert!(
+                elapsed < Duration::from_secs(1),
+                "receive deadline overrun: {elapsed:?}"
+            );
+            assert!(result.unwrap().contains(&Ipv4Addr::new(127, 0, 0, 2)));
+        }
+    }
+
+    #[test]
+    fn oversized_datagram_is_not_admitted() {
+        let mut poll = Poll::new().unwrap();
+        let (socket, addr) = bind_and_register(&mut poll, 0);
+        let tx = StdUdpSocket::bind("127.0.0.1:0").unwrap();
+        let mut payload = reply("127.0.0.1");
+        payload.push_str(&"x".repeat(3000));
+        tx.send_to(payload.as_bytes(), addr).unwrap();
+        assert!(
+            collect_until(
+                &mut poll,
+                &[socket],
+                Instant::now() + Duration::from_millis(50)
+            )
+            .unwrap()
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn queued_reply_after_batch_is_drained_without_another_send() {
+        let mut poll = Poll::new().unwrap();
+        let (socket, addr) = bind_and_register(&mut poll, 0);
+        let tx = StdUdpSocket::bind("127.0.0.1:0").unwrap();
+        for _ in 0..RECEIVE_BATCH + 1 {
+            tx.send_to(b"invalid", addr).unwrap();
+        }
+        tx.send_to(reply("127.0.0.1").as_bytes(), addr).unwrap();
+        let found = collect_until(
+            &mut poll,
+            &[socket],
+            Instant::now() + Duration::from_millis(100),
+        )
+        .unwrap();
+        assert_eq!(found, vec![Ipv4Addr::LOCALHOST]);
     }
 
     /// Regression guard for the v0.1 [P1] multi-NIC discovery bug: with
@@ -348,14 +485,15 @@ mod tests {
 
         let sender = thread::spawn(move || {
             let tx = StdUdpSocket::bind("127.0.0.1:0").expect("bind sender");
-            let reply_a = "HTTP/1.1 200 OK\r\nLOCATION: http://10.0.0.1:1400/a.xml\r\n\r\n";
-            let reply_b = "HTTP/1.1 200 OK\r\nLOCATION: http://10.0.0.2:1400/b.xml\r\n\r\n";
+            let reply_a = reply("127.0.0.1");
+            let tx_b = StdUdpSocket::bind("127.0.0.2:0").expect("bind B");
+            let reply_b = reply("127.0.0.2");
             tx.send_to(reply_a.as_bytes(), addr_a).expect("send A");
             // Slight delay before B's reply makes the "stuck on first
             // socket" failure mode observable while staying deterministic
             // and well inside the deadline.
             thread::sleep(Duration::from_millis(50));
-            tx.send_to(reply_b.as_bytes(), addr_b).expect("send B");
+            tx_b.send_to(reply_b.as_bytes(), addr_b).expect("send B");
         });
 
         let found = collect_until(
@@ -367,11 +505,11 @@ mod tests {
         sender.join().expect("join sender thread");
 
         assert!(
-            found.contains("http://10.0.0.1:1400/a.xml"),
+            found.contains(&Ipv4Addr::LOCALHOST),
             "missing socket A's LOCATION; found={found:?}"
         );
         assert!(
-            found.contains("http://10.0.0.2:1400/b.xml"),
+            found.contains(&Ipv4Addr::new(127, 0, 0, 2)),
             "missing socket B's LOCATION (the [P1] failure mode: \
              stuck on the first socket); found={found:?}"
         );
@@ -434,7 +572,7 @@ mod tests {
 
         let sender = thread::spawn(move || {
             let tx = StdUdpSocket::bind("127.0.0.1:0").expect("bind sender");
-            let reply = "HTTP/1.1 200 OK\r\nLOCATION: http://10.99.99.99:1400/desc.xml\r\n\r\n";
+            let reply = reply("127.0.0.1");
             // Small delay so the recv loop is parked in `poll` when the
             // reply arrives, exercising the wakeup path.
             thread::sleep(Duration::from_millis(50));
@@ -451,7 +589,7 @@ mod tests {
         sender.join().expect("join sender thread");
 
         assert!(
-            found.contains("http://10.99.99.99:1400/desc.xml"),
+            found.contains(&Ipv4Addr::LOCALHOST),
             "responder behind 13 quiet sockets was not received within the deadline; \
              a regression to the per-socket-timeout design would block long enough \
              to miss it. found={found:?}"

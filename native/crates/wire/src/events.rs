@@ -18,7 +18,7 @@
 //! registers watches silently with no UPnP SUBSCRIBE.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     net::IpAddr,
     sync::{
         Arc,
@@ -37,25 +37,6 @@ use oto_core::{ChangeEvent, GroupId, SpeakerId, WireError};
 /// shutdown wait and well over typical event arrival cadence - the timeout
 /// rarely fires on a busy LAN.
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
-
-/// How long after pump spawn a *first* `GroupMembership` per speaker is
-/// treated as the subscribe seed (and swallowed). Seeds arrive in a burst
-/// right after the SDK's SUBSCRIBE (~1 s on a healthy LAN per sonos-notes);
-/// a first-ever `GroupMembership` arriving LATER than this is a genuine
-/// regroup whose seed was dropped or delayed (e.g. a speaker asleep at
-/// subscribe time), so it must be emitted, not mistaken for a seed. Bounding
-/// the seed-vs-real ambiguity in time - not by ordinal position - closes the
-/// missed-seed hole without re-opening the seed → rediscover → seed loop (a
-/// fresh pump still swallows its own in-window seed burst). 5 s gives generous
-/// margin over the observed ~1 s seed latency.
-///
-/// Load-bearing knob: seed and regroup are payload-identical at this layer, so
-/// timing is the only discriminator. If dogfooding ever surfaces a
-/// rediscover-churn loop (a speaker whose seed consistently lands after this
-/// window is treated as a real regroup → re-discover → fresh pump → same late
-/// seed), widen this to exceed the measured worst-case seed latency on the
-/// target LAN rather than tightening it. See `tests/live_topology_events.rs`.
-const SEED_WINDOW: Duration = Duration::from_secs(5);
 
 /// How long `TopologyFilter` stays `dirty` (dropping group-addressed events)
 /// with no self-heal. Normally a real regroup's `dirty` window is brief: the
@@ -507,15 +488,9 @@ fn pump_loop(
 /// by `pump_loop` (one per pump). Two jobs, both cross-PR review fixes
 /// (codex cumulative review of the v0.5 series):
 ///
-/// 1. **Seed suppression (#1).** A fresh `GroupMembership` subscription emits
-///    one startup *seed* NOTIFY per speaker, before any user action. Each
-///    would map to `TopologyChanged`. The Dart controller reacts to
-///    `TopologyChanged` with a full re-discover - which spawns a new pump,
-///    which emits new seeds, which trigger another re-discover: an infinite
-///    loop. So we drop the FIRST `group_membership` per speaker **while it
-///    arrives inside the seed window** (the burst right after SUBSCRIBE) and
-///    only emit on the 2nd+, or on any first event arriving after the window
-///    (a real regroup whose seed never landed - see [`SEED_WINDOW`]).
+/// 1. **Seed suppression.** `map_upstream_event` compares membership with
+///    the discovered group and coordinator role. Unchanged seeds are ignored
+///    regardless of arrival time; genuine changes are forwarded immediately.
 ///
 /// 2. **Post-regroup group-event drop (#4).** The pump's `coord_to_group` /
 ///    `speaker_to_coord` maps are captured by value at spawn and frozen.
@@ -525,10 +500,6 @@ fn pump_loop(
 ///    the pump is rebuilt (re-discover). Per-speaker `Volume`/`Mute` are
 ///    unaffected by grouping and keep flowing.
 struct TopologyFilter {
-    /// Speakers whose initial (seed) `group_membership` we've already
-    /// swallowed. Absent + within [`SEED_WINDOW`] ↔ "next group_membership
-    /// is this speaker's seed".
-    seen_seed: HashSet<SpeakerId>,
     /// Set once a real (post-seed) topology change is observed. While set,
     /// group-addressed events are dropped (stale routing).
     dirty: bool,
@@ -540,45 +511,24 @@ struct TopologyFilter {
     /// [`DIRTY_TIMEOUT`]; tests inject a short window to drive the self-heal
     /// path deterministically.
     dirty_timeout: Duration,
-    /// After this instant, a first-ever `group_membership` for a speaker is a
-    /// real regroup, not a seed (see [`SEED_WINDOW`]). Anchored at pump
-    /// spawn (when `TopologyFilter::new` runs in `pump_loop`).
-    seed_deadline: Instant,
 }
 
 impl TopologyFilter {
     fn new() -> Self {
-        Self::with_seed_window(SEED_WINDOW)
+        Self::with_dirty_timeout(DIRTY_TIMEOUT)
     }
 
-    /// Construct with an explicit seed window. `new()` uses [`SEED_WINDOW`];
-    /// tests pass a zero/elapsed window to drive the post-window path
-    /// deterministically. Uses the real [`DIRTY_TIMEOUT`].
-    fn with_seed_window(window: Duration) -> Self {
-        Self::with_windows(window, DIRTY_TIMEOUT)
-    }
-
-    /// Construct with explicit seed AND dirty windows. Test-only seam so the
-    /// dirty-self-heal path can be driven deterministically without waiting
-    /// out the real [`DIRTY_TIMEOUT`].
-    #[cfg(test)]
-    fn with_dirty_timeout(seed_window: Duration, dirty_timeout: Duration) -> Self {
-        Self::with_windows(seed_window, dirty_timeout)
-    }
-
-    fn with_windows(seed_window: Duration, dirty_timeout: Duration) -> Self {
+    fn with_dirty_timeout(dirty_timeout: Duration) -> Self {
         Self {
-            seen_seed: HashSet::new(),
             dirty: false,
             dirty_since: None,
             dirty_timeout,
-            seed_deadline: Instant::now() + seed_window,
         }
     }
 
     /// Decide whether to forward `event` (which originated from `speaker`).
-    /// `None` = drop. Mutates seed/dirty state.
-    fn admit(&mut self, speaker: &SpeakerId, event: ChangeEvent) -> Option<ChangeEvent> {
+    /// `None` = drop. Mutates dirty state.
+    fn admit(&mut self, _speaker: &SpeakerId, event: ChangeEvent) -> Option<ChangeEvent> {
         // Self-heal: if dirty has outlived DIRTY_TIMEOUT with no pump rebuild
         // (both re-pull paths failed), stop dropping group-addressed events -
         // see DIRTY_TIMEOUT's doc for why. Checked lazily on the next event
@@ -592,17 +542,6 @@ impl TopologyFilter {
         }
         match &event {
             ChangeEvent::TopologyChanged => {
-                // The FIRST `group_membership` per speaker is the subscribe
-                // seed - but ONLY while still inside the seed window. A
-                // first-ever event arriving after the window is a real
-                // regroup whose seed was dropped/delayed (e.g. a speaker
-                // asleep at subscribe time); emit it rather than swallowing
-                // it forever. `insert` still records the speaker so a genuine
-                // 2nd event is always treated as real.
-                let first_for_speaker = self.seen_seed.insert(speaker.clone());
-                if first_for_speaker && Instant::now() < self.seed_deadline {
-                    return None;
-                }
                 // A real regroup: routing is now stale until pump rebuild
                 // (or DIRTY_TIMEOUT self-heals it - see that constant's doc).
                 self.dirty = true;
@@ -661,9 +600,19 @@ fn map_upstream_event(
             av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?,
             m.clone(),
         )),
-        // The authoritative topology is still re-read through direct SOAP.
-        // Keep seed suppression and stale-group filtering in TopologyFilter.
-        PropertyChange::GroupMembership(_) => Some(ChangeEvent::TopologyChanged),
+        PropertyChange::GroupMembership(membership) => {
+            // Initial NOTIFYs can arrive tens of seconds after SUBSCRIBE.
+            // Compare with discovery instead of guessing from arrival time:
+            // rebuilding on a delayed seed restarts subscriptions and loses
+            // group events while the old pump is marked dirty.
+            let unchanged = speaker_to_coord.get(speaker).is_some_and(|coord| {
+                coord_to_group.get(coord).is_some_and(|group| {
+                    group.as_str() == membership.group_id.as_str()
+                        && (speaker == coord) == membership.is_coordinator
+                })
+            });
+            (!unchanged).then_some(ChangeEvent::TopologyChanged)
+        }
         // Properties outside oto's watched surface are intentionally ignored.
         _ => None,
     }
@@ -762,6 +711,60 @@ mod tests {
     }
     fn gid(s: &str) -> GroupId {
         GroupId::new(s)
+    }
+
+    #[test]
+    fn unchanged_membership_does_not_restart_subscriptions() {
+        use sonos_state::{ChangeSource, PropertyChange, WriteStamp};
+        let speaker = sid("RINCON_K");
+        let c2g = HashMap::from([(speaker.clone(), gid("G:1"))]);
+        let s2c = HashMap::from([(speaker.clone(), speaker.clone())]);
+        let upstream = sonos_state::ChangeEvent::new(
+            sonos_state::SpeakerId::new(speaker.as_str()),
+            PropertyChange::GroupMembership(sonos_state::GroupMembership::new(
+                sonos_state::GroupId::new("G:1"),
+                true,
+            )),
+            WriteStamp::now(ChangeSource::Event),
+        );
+        // Delayed NOTIFY and polling seeds must be compared to discovery,
+        // not interpreted as regrouping simply because five seconds elapsed.
+        assert!(map_upstream_event(&upstream, &speaker, &c2g, &s2c).is_none());
+    }
+
+    #[test]
+    fn membership_mapping_detects_group_and_role_changes_for_all_rooms() {
+        use sonos_state::{ChangeSource, PropertyChange, WriteStamp};
+        let coord = sid("RINCON_K");
+        let follower = sid("RINCON_L");
+        let c2g = HashMap::from([(coord.clone(), gid("G:1"))]);
+        let s2c = HashMap::from([
+            (coord.clone(), coord.clone()),
+            (follower.clone(), coord.clone()),
+        ]);
+        for (speaker, group, is_coord, changed) in [
+            (coord.clone(), "G:1", true, false),
+            (follower.clone(), "G:1", false, false),
+            (coord.clone(), "G:2", true, true),
+            (follower.clone(), "G:2", false, true),
+            (coord, "G:1", false, true),
+            (follower, "G:1", true, true),
+            (sid("RINCON_NEW"), "G:1", false, true),
+        ] {
+            let upstream = sonos_state::ChangeEvent::new(
+                sonos_state::SpeakerId::new(speaker.as_str()),
+                PropertyChange::GroupMembership(sonos_state::GroupMembership::new(
+                    sonos_state::GroupId::new(group),
+                    is_coord,
+                )),
+                WriteStamp::now(ChangeSource::Event),
+            );
+            assert_eq!(
+                map_upstream_event(&upstream, &speaker, &c2g, &s2c),
+                changed.then_some(ChangeEvent::TopologyChanged),
+                "membership for {speaker:?} in {group}, coordinator={is_coord}",
+            );
+        }
     }
 
     #[test]
@@ -960,79 +963,13 @@ mod tests {
     }
 
     #[test]
-    fn first_topology_event_per_speaker_is_suppressed_as_seed() {
+    fn genuine_topology_change_is_admitted_even_at_startup() {
         let mut f = TopologyFilter::new();
-        // First group_membership for a speaker is the subscribe seed → drop.
-        assert!(
-            f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged)
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn first_topology_event_after_seed_window_is_a_real_regroup() {
-        // A speaker whose seed NOTIFY never arrived inside the window: its
-        // first group_membership is a genuine regroup, not a seed - it must be
-        // emitted (and mark the pump dirty), not swallowed forever. Regression
-        // for the positional-seed hole (a first-ever event was always treated
-        // as the seed regardless of timing).
-        let mut f = TopologyFilter::with_seed_window(Duration::ZERO);
-        assert!(
-            matches!(
-                f.admit(&sid("RINCON_LATE"), ChangeEvent::TopologyChanged),
-                Some(ChangeEvent::TopologyChanged)
-            ),
-            "first event past the seed window is a real regroup, not a seed"
-        );
-        // …and the pump is now dirty, like after any real regroup.
-        assert!(
-            f.admit(&sid("RINCON_LATE"), playback_ev("G:1")).is_none(),
-            "a post-window first event marks routing stale (dirty)"
-        );
-    }
-
-    #[test]
-    fn second_topology_event_emits_and_marks_dirty() {
-        let mut f = TopologyFilter::new();
-        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
-        // A real regroup (2nd group_membership for the speaker) is forwarded.
         assert!(matches!(
             f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged),
             Some(ChangeEvent::TopologyChanged)
         ));
-    }
-
-    #[test]
-    fn seeds_are_per_speaker() {
-        let mut f = TopologyFilter::new();
-        // Each speaker's FIRST event is its own seed (suppressed).
-        assert!(
-            f.admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
-                .is_none()
-        );
-        assert!(
-            f.admit(&sid("RINCON_B"), ChangeEvent::TopologyChanged)
-                .is_none()
-        );
-        // A's second is a real change.
-        assert!(
-            f.admit(&sid("RINCON_A"), ChangeEvent::TopologyChanged)
-                .is_some()
-        );
-    }
-
-    /// The loop-prevention invariant: a burst of seed-only events (one per
-    /// speaker, as a fresh subscription emits) yields ZERO TopologyChanged -
-    /// so the Dart controller never triggers a re-discover off the seeds, so
-    /// the seed → rediscover → seed loop cannot start.
-    #[test]
-    fn seed_only_burst_emits_no_topology_change() {
-        let mut f = TopologyFilter::new();
-        let emitted = ["RINCON_A", "RINCON_B", "RINCON_C"]
-            .into_iter()
-            .filter_map(|s| f.admit(&sid(s), ChangeEvent::TopologyChanged))
-            .count();
-        assert_eq!(emitted, 0, "seed burst must emit no TopologyChanged");
+        assert!(f.admit(&sid("RINCON_K"), playback_ev("G:1")).is_none());
     }
 
     #[test]
@@ -1046,7 +983,6 @@ mod tests {
     #[test]
     fn group_events_dropped_while_dirty_but_volume_mute_pass() {
         let mut f = TopologyFilter::new();
-        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // real → dirty
         // Group-addressed events now carry stale routing → dropped.
         assert!(f.admit(&sid("RINCON_K"), playback_ev("G:stale")).is_none());
@@ -1071,7 +1007,6 @@ mod tests {
         // maps - they must be dropped after a regroup (stale routing), like
         // Playback/Track. Per-speaker Volume/Mute keep flowing.
         let mut f = TopologyFilter::new();
-        let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // seed
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged); // real → dirty
         assert!(
             f.admit(&sid("RINCON_K"), group_volume_ev("G:stale"))
@@ -1126,8 +1061,8 @@ mod tests {
     /// life. `dirty` must clear once DIRTY_TIMEOUT elapses.
     #[test]
     fn dirty_flag_self_heals_after_timeout_with_no_pump_rebuild() {
-        let mut f = TopologyFilter::with_dirty_timeout(Duration::ZERO, Duration::from_millis(50));
-        // Past the (zero) seed window, so this first event is a real regroup.
+        let mut f = TopologyFilter::with_dirty_timeout(Duration::from_millis(50));
+        // Mapping already established that membership differs from discovery.
         let _ = f.admit(&sid("RINCON_K"), ChangeEvent::TopologyChanged);
         assert!(
             f.admit(&sid("RINCON_K"), playback_ev("G:1")).is_none(),
