@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the Sonos SDK family to 0.8.0 and retired the Android TLS fork.
+  The event adapter now reads typed event payloads, preserving queued changes
+  without re-reading a newer cache value.
+
 ### Fixed
 
 - Malformed track times reported by a speaker no longer produce a wrong or

@@ -24,7 +24,7 @@ The living, hot-reloadable view of screens and states is the **showcase**:
 cd app && flutter run -t lib/showcase/main.dart
 ```
 
-It renders every screen and presentation state against fixture data, with
+It renders a gallery of screens and presentation states against fixture data, with
 brightness / accent / layout toggles - the replacement for the old static
 prototype.
 
@@ -49,7 +49,7 @@ in code; kept here as the rationale.
 The core abstraction is a **source**, not a speaker. A source is either a
 **group of rooms playing in sync** or a **single room** on its own.
 
-- **Transport (play / pause / skip / shuffle / repeat) is per-source** -
+- **Transport (play / pause / skip) is per-source** -
   group-wide. To play something different in one room, ungroup it first.
 - **Volume is per-room** (the exception); a group also has a **group master**
   that moves all members proportionally.
@@ -57,7 +57,7 @@ The core abstraction is a **source**, not a speaker. A source is either a
   hand-authored - `sourcesFromHousehold` is the single guardrail (a screen
   can't claim a different source count than its rooms imply). See
   [`app/lib/src/state/model/source.dart`](../../app/lib/src/state/model/source.dart).
-- Idle / unreachable rooms are not sources.
+- A group becomes a source when `hasActiveStream` is true; reachability is presented separately.
 
 ### Colour & type
 
@@ -74,13 +74,3 @@ The core abstraction is a **source**, not a speaker. A source is either a
 - **44 px minimum touch target** everywhere (transparent hit-slop around smaller
   glyphs is fine - keep it with `InkResponse` / min `Size`, don't shrink to the
   visible glyph).
-
-## History
-
-This directory once held the pre-implementation prototype: a React/JSX hi-fi
-mock (`hifi-*.jsx`, `design-canvas.jsx`), an HTML v3 comp, a platform-neutral
-`design-tokens.json`, and a `HANDOFF.md`. They were faithful design-time
-scaffolding for the v0.6 UI and have all been translated into the Flutter app,
-so they were retired once they began to drift from (and under-describe) the
-shipped, backend-true UI. Recover any of them from git history if needed
-(`git log -- docs/design-system/`).

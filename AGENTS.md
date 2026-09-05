@@ -25,7 +25,7 @@ This is a **side project**. Optimize for usefulness, low maintenance, tight scop
 
 Out of scope: cloud, Sonos accounts, the Sonos cloud API, multi-household.
 
-Authoritative docs: `docs/ARCHITECTURE.md` (system design - today's structure), `docs/ROADMAP.md` (milestone status + forward plan + project-bound open items), `docs/sonos-notes.md` (Sonos protocol / SDK durable reference), `README.md` (incl. milestone ladder), `RELEASING.md` (versioning).
+Authoritative docs: `docs/ARCHITECTURE.md` (system design - today's structure), `docs/ROADMAP.md` (milestone status + forward plan + project-bound open items), `docs/sonos-notes.md` (Sonos protocol / SDK durable reference), `README.md` (project entry point), `RELEASING.md` (versioning).
 
 ## 2. Engineering Principles
 
@@ -82,7 +82,7 @@ oto/
 └── .github/workflows/           ci.yml + build.yml
 ```
 
-`oto-app` owns runtime state. v0.1: the active `Wire` + `discover` routing; v0.2 added playback/state command routing; v0.3 routes group-addressed commands over real ZoneGroupTopology (the `sonos-api`↔`oto_core` mapping lives in `oto-wire`, never via `SonosSystem` - its topology layer was hardware-proven lazy/non-deterministic and the `sonos-sdk` umbrella was dropped at v0.3); v0.4 adds the event-pump threads; v0.5 added topology change events, SubscriptionError health surfacing, Android MulticastLock, and model repopulation; v0.5.1 added group form/break commands, group volume/mute commands, and fast topology refresh; v0.6.1 added the `track_position` read (Wire trait + FRB surface, backing the Now Playing progress bar); v0.6.4 hardened wire-generation pairing and event-pump teardown without changing the surface.
+`oto-app` owns runtime state, command routing, the event-fed cache, and wire replacement. `oto-wire` owns discovery, SOAP, and SDK event subscriptions. Current lifecycle and state ownership are documented in [ARCHITECTURE.md](docs/ARCHITECTURE.md); release history belongs in [CHANGELOG.md](CHANGELOG.md).
 
 ### Architectural boundaries - agents must respect
 

@@ -1,15 +1,5 @@
-# oto
+# oto Flutter app
 
-Flutter application shell for oto.
+The UI and Riverpod state live in `lib/src/`; `lib/src/rust/` contains committed FRB bindings. `rust_builder/` compiles the Rust workspace as part of a Flutter build.
 
-## Development
-
-Run app-level commands from this directory, or use the root `Makefile` / `justfile` from the repository root.
-
-Common local commands:
-
-- `flutter pub get`
-- `flutter analyze`
-- `flutter test`
-
-Generated FRB and Riverpod source is committed. Regenerate it from the repository root with `just gen` or `make gen` after changing the Rust bridge API or `@riverpod` providers.
+Use the repository [setup and commands](../README.md#development-setup), [contributor guide](../CONTRIBUTING.md), and [design system](../docs/design-system/README.md). Run `flutter` commands from this directory and `just` recipes from the repository root.

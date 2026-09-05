@@ -2,7 +2,7 @@
 
 Durable reference for how oto talks to Sonos: UPnP/SOAP behaviors, the `sonos-api` crate at the pinned `=0.8.0`, and the load-bearing facts learned from hardware spikes. Historical observations below name the SDK version used at the time.
 
-Audience: anyone touching `oto-wire`. If you're touching the GENA event path, the [Event model](#event-model-v04-load-bearing) section is the one to read first.
+Audience: anyone touching `oto-wire`. If you're touching the GENA event path, the [Event model](#event-model) section is the one to read first.
 
 > **Scope.** This is technical reference. Project status, milestones, and forward plan live in [ROADMAP.md](ROADMAP.md). System structure lives in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -10,31 +10,26 @@ Audience: anyone touching `oto-wire`. If you're touching the GENA event path, th
 
 - `sonos-api = "=0.8.0"` (exact), aligned with the reactive SDK crates. Re-check SOAP, discovery, events, and hardware acceptance when upgrading.
 - All Sonos crates now resolve from crates.io. Upstream 0.8 removed the reqwest/native-TLS dependencies that required our fork; [`LOCAL_PATCHES.md`](../LOCAL_PATCHES.md) #2 records its retirement. SDK discovery uses ureq 3.4, shared with oto's model fetches; upstream SOAP still uses ureq 2.x.
-- `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl`. Already in the locked graph via `sonos-api` - unify, don't bump.
+- `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl` and model-name extraction in `device_description.rs`. Already in the locked graph via `sonos-api` - unify, don't bump.
 - The `sonos-sdk` umbrella and its `test-support` tree are **not** in oto-wire's dependency graph (dropped at v0.3). v0.4 live events add the upstream reactive state/event crates from the same SDK family; `sonos-api` remains the only Sonos crate used for direct SOAP commands and discovery.
-- Raw `callback-server` + own change-detection was prototyped but not chosen; oto uses the upstream reactive stack - see [Event model](#event-model-v04-load-bearing).
+- Raw `callback-server` + own change-detection was prototyped but not chosen; oto uses the upstream reactive stack - see [Event model](#event-model).
 
 ## SSDP discovery
 
-oto-wire runs its own multi-interface SSDP (`crates/wire/src/ssdp.rs`). The original reason was this SDK 0.5.2 bug:
+oto-wire runs its own IPv4 multi-interface SSDP in `native/crates/wire/src/ssdp.rs`. Each socket binds to an interface and explicitly sets `IP_MULTICAST_IF`; `mio::Poll` shares one absolute receive deadline across them. Binding a unicast address alone does not select multicast egress.
 
-```rust
-// sonos-sdk-discovery-0.5.2/src/ssdp.rs:27
-let socket = UdpSocket::bind("0.0.0.0:0")
-```
-
-Upstream closed [#76](https://github.com/tatimblin/sonos-sdk/issues/76) with [#80](https://github.com/tatimblin/sonos-sdk/pull/80), released in 0.5.3: discovery binds per interface and probes concurrently. Source review at [0.8.0](https://github.com/tatimblin/sonos-sdk/blob/sonos-sdk-v0.8.0/sonos-discovery/src/ssdp.rs) still shows two gaps: it does not set `IP_MULTICAST_IF`, and each successful receive restarts the socket timeout rather than enforcing an absolute deadline. Binding a unicast address alone does not select multicast egress. oto therefore retains `set_multicast_if_v4` and `mio::Poll` with one shared bounded receive window. Replacing this module requires equivalent safeguards and multi-NIC hardware validation.
+Upstream added concurrent per-interface probing after the SDK 0.5.2 bug, but the pinned SDK still lacks explicit multicast egress and an absolute receive deadline. Keep oto's implementation until both safeguards and multi-NIC hardware validation are available upstream.
 
 Mechanics:
 
 - **IPv4 SSDP group:** `239.255.255.250:1900`. M-SEARCH target: `urn:schemas-upnp-org:device:ZonePlayer:1`.
 - **IPv6 SSDP group:** `[FF02::C]:1900`. Sonos S2 also advertises here. oto-wire does **not** join - see [ROADMAP § IPv6 SSDP coverage](ROADMAP.md#ipv6-ssdp-coverage).
 - **Responder `LOCATION`** header → `http://<ip>:1400/xml/device_description.xml`.
-- **Identity proof.** As of v0.3, success of `GetZoneGroupState` SOAP on any responder *is* the "this is a Sonos" proof. oto-wire no longer fetches `device_description.xml` in the identity path.
+- **Topology validation.** A successful, parseable `GetZoneGroupState` response admits a responder. This is not authentication. Device descriptions are fetched only to enrich the resulting member identities with model names.
 - **HTTP fetch quirk (`device_description.xml`).** Sonos's embedded server replies with chunked HTTP even to an HTTP/1.0 request. A raw `TcpStream` hands chunk framing to the XML parser. `oto-wire/src/device_description.rs` uses ureq 3.4 with `timeout_connect` (1 s) and `timeout_global` (2 s), shared with upstream discovery's dependency. Parallel per-speaker model fetches remain best-effort: failure leaves `model = None` and discovery still succeeds.
-- **Per-NIC bind ≠ per-NIC egress.** Binding a socket to a NIC's unicast address does **not** select which interface a *multicast* datagram leaves by - the OS picks that from its multicast routing table (usually one default NIC). You must set `IP_MULTICAST_IF` (`socket2::set_multicast_if_v4`) per socket; oto-wire does this as of the v0.5 egress fix (the `set_multicast_if_v4` claim in this section's intro was aspirational until then). Verify with `examples/ssdp_multicast_if_probe`: it sends the M-SEARCH per NIC twice - with and without the pin - and counts responders each way. On the 4-speaker dev LAN both columns match (the LAN NIC is the OS default multicast interface, so #76 stays dormant - the "works by accident" case); a host where Sonos sits behind a non-default NIC is where the pinned column wins.
+- **Hardware probe:** `native/crates/wire/examples/ssdp_multicast_if_probe.rs` compares M-SEARCH with and without the egress pin. The original dev LAN used the default multicast interface, so matching results there establish non-regression, not correctness on a non-default NIC.
 
-Multi-responder behavior: `ServiceScope::PerNetwork` - any reachable Sonos returns the whole household, so on `GetZoneGroupState` failure (e.g. an asleep first responder) fall through to another. Validated: of 4 LAN speakers, the vanished `.115` returned `NetworkError(connection timed out)`; `.103/.105/.187` each returned the complete topology, 10/10.
+Any reachable Sonos can return the whole household. If one responder fails its topology read, discovery tries another. Response validation and candidate-count limits remain [planned hardening](ROADMAP.md#v07---hardening--polish).
 
 ## Topology - `GetZoneGroupState` SOAP
 
@@ -43,16 +38,18 @@ The deterministic, complete, fast topology path. **Never use `SonosSystem::from_
 Call shape:
 
 ```rust
-use sonos_api::services::zone_group_topology::{get_zone_group_state, parse_zone_group_state_xml};
+use sonos_api::services::zone_group_topology::{
+    get_zone_group_state, parse_zone_group_state_xml, ZoneGroupInfo,
+};
 
-let op = get_zone_group_state().build();
+let op = get_zone_group_state().build()?;
 let resp = client.execute_enhanced(&ip, op)?;  // -> GetZoneGroupStateResponse { zone_group_state: String }
 let infos: Vec<ZoneGroupInfo> = parse_zone_group_state_xml(&resp.zone_group_state)?;
 ```
 
-- **Parser:** use the crate's `parse_zone_group_state_xml`. Do **not** write our own ZoneGroupState parser; `quick-xml` stays DIDL-only.
-- **Timing:** ~7–40 ms per call on a healthy LAN (vs. `SonosSystem::new()`'s 3–5 s).
-- **Determinism:** 50/50 calls across two topologies returned the complete household, count-stable.
+- **Parser:** use the crate's `parse_zone_group_state_xml`. Do **not** write our own ZoneGroupState parser; oto uses `quick-xml` directly for DIDL-Lite and device-description model names.
+- **Historical timing (SDK 0.5.2):** ~7-40 ms per direct call on the test LAN.
+- **Historical completeness (SDK 0.5.2):** 50/50 calls across two topologies returned the complete household, count-stable.
 - **Per-network parity:** every live speaker reports the same household. Pick any reachable one.
 - **XML is NOT byte-identical across speakers** - `ZoneGroup`/member order is query-relative (the queried speaker's group tends to come first), and a few volatile attrs differ (`MicEnabled`, `ChannelFreq`). The *logical* topology is identical. Compare on the parsed model, never raw XML.
 
@@ -80,11 +77,11 @@ In all hardware runs the coordinator UUID appeared in the member list. Defensive
 
 - `SpeakerId` = bare `RINCON_...` (no `uuid:` prefix, unlike the device-description UDN path).
 - `GroupId` = `RINCON_<coord_uuid>:N`, e.g. `RINCON_542A1B9463A801400:3426502563`. `N` is opaque; the household assigns it.
-- App-side regrouping **changes `N`**. Stale `GroupId` → `WireError::NotFound` (the existing precondition error). This is the freshness contract: caches are populated by `discover()` only; commands using a stale ID error out cleanly.
+- Regrouping can change `N`. Discovery and fast topology refresh replace the routing caches. An old ID then returns `WireError::NotFound`; before refresh it can still route to the former coordinator. Do not treat `NotFound` as immediate detection of a regroup.
 
 ### No `model` attribute on live members
 
-`ZoneGroupMemberInfo` and `<Satellite>` carry `uuid`, `zone_name` (the Sonos room label), `location` (→ IP), but **no `Model`/`ModelInfo` attribute**. Only `<VanishedDevices>` entries carry `ModelInfo`. `SpeakerIdentity.model: Option<String>` therefore stays `None` since v0.3. The v0.5 hardening milestone repopulates this via a bounded per-member `device_description.xml` fetch over the authoritative topology member set (so the v0.6 UI has model strings to render); see [`docs/ROADMAP.md`](ROADMAP.md).
+Topology members provide UUID, room name, and location, but no model name. `discover()` and `refresh_topology()` enrich each member through a bounded, parallel `device_description.xml` fetch. Failure leaves `SpeakerIdentity.model = None` without failing discovery.
 
 ## Playback control - AVTransport / RenderingControl SOAP
 
@@ -104,7 +101,7 @@ Conventions:
 - **Channel for RenderingControl ops:** `"Master"`.
 - Direct SOAP operations are **sync/blocking** (`ureq` under the hood). No tokio reactor is needed for this one-shot command/read path.
 
-Operation table (hardware-verified - Run 1 stopped/empty queue, Run 2 playing Spotify):
+Operation table (historical SDK 0.5.2 hardware observations: Run 1 stopped/empty queue, Run 2 playing Spotify; these observations are not SDK 0.8 acceptance):
 
 | Operation | Builder | Response type | Observed (Run 1 / Run 2) |
 |---|---|---|---|
@@ -133,11 +130,11 @@ Write commands return `()` on success and carry no data. A device-side rejection
 | `"TRANSITIONING"` | `Transitioning` |
 | anything else | `WireError::Backend` |
 
-Only `"STOPPED"` and `"PLAYING"` were observed in the two-run spike. The other two are UPnP-spec and assumed-correct; if ever observed differently, capture and revisit.
+Paused and transitioning states were also observed during subsequent live-event acceptance. Unknown values remain errors in the one-shot SOAP mapping.
 
 ## Error mapping - `ApiError` → `WireError`
 
-**Critical quirk.** `ApiError::SoapFault(u16)` is **not emitted** by `sonos-api` for device-side UPnP faults. A device that rejects a command (HTTP 500 + UPnP fault body, e.g. fault 701 "transition not available") surfaces as:
+**Historical hardware finding, still reflected in the adapter:** device-side HTTP 500 faults arrived as `NetworkError` rather than `ApiError::SoapFault(u16)`, for example:
 
 ```text
 NetworkError("http://10.83.0.103:1400/MediaRenderer/AVTransport/Control: status code 500")
@@ -213,219 +210,63 @@ Top-level response fields carry sentinels that must map to `None`, not values:
 
 - Volume is `u8`, range `0..=100`.
 - `set_volume(>100)` is rejected **client-side** by `sonos-api` (`ApiError::InvalidParameter` / `ValidationError::RangeError`) - before the SOAP call.
-- `oto_core::Volume::new` is strict (`>100` → `Error::InvalidVolume`). `Volume::clamped(i32)` is lenient - use only when parsing inbound SOAP that might be out of range.
+- `oto_core::Volume::new` is strict (`>100` → `Error::InvalidVolume`). `Volume::clamped(i32)` is lenient; the FRB shim uses it for signed Dart volume inputs and SOAP parsing uses it for device values.
 - No clamping needed at the wire boundary for outbound volume.
 
-## Event model (v0.4 load-bearing)
+## Event model
 
-This section is what v0.4 needs. Authoritative findings live here; the experiment they came from is archived under [`docs/evidence/v0.4-spike/findings.md`](evidence/v0.4-spike/findings.md) (findings + raw logs).
+oto uses the aligned SDK reactive stack (`StateManager`, `SonosEventManager`, and the stream/callback layers). It owns GENA subscriptions, renewal, and internal polling. oto maps typed event payloads into domain events; it does not add a second general property-polling loop. Track progress has a separate bounded SOAP read path described in [Architecture](ARCHITECTURE.md#state-ownership).
 
-**Decision:** v0.4 builds on the upstream `sonos-sdk-state` reactive layer (`StateManager` + `SonosEventManager`) - confirmed stable through v0.5.1. The raw `sonos-sdk-callback-server` + own change-detection alternative is a documented off-ramp, not used; see [§ Off-ramp](#off-ramp-raw-callback-server-not-used) below.
+### Initialization and event delivery
 
-### Opt-in via `.watch()` - one multiplexed pump thread
+The ordering in `native/crates/wire/src/events.rs` is required:
 
-Sonos uses UPnP GENA NOTIFY for property change events. **Nothing fires without an explicit `.watch()` registration.** This makes event-stream granularity a design choice, not a forced shape: prefer **one multiplexed event stream → one pump thread**, not one thread per speaker.
+1. Attach a `SonosEventManager` through `StateManager::builder()`.
+2. Add discovered devices and call `manager.initialize(topology)`.
+3. Create `manager.iter()` before registering watches. SDK 0.8 has no event replay; attaching later can lose initial NOTIFYs.
+4. Register `watch_property_with_subscription` for the supported properties.
 
-### Cold-start: the initial SUBSCRIBE NOTIFY *is* the seed probe
+A bare `StateManager::new()` plus watch intent does not establish subscriptions. Missing topology initialization breaks AVTransport coordinator routing even when per-speaker volume events work. Use `build_sdk_topology` and the production spawn path as the implementation reference.
 
-Empirically resolved by the v0.4 spike on real hardware: when an SDK `.watch()` registration triggers an underlying UPnP `SUBSCRIBE`, the device's **first NOTIFY contains current state for every evented variable** - Volume, Mute, Bass, Treble, TransportState, CurrentTrack, etc. The cache transitions `None → populated` automatically within tens of ms of SUBSCRIBE completion.
+Volume/mute and `GroupMembership` are watched per speaker. Playback, track, and group volume/mute are watched for coordinators. Mapping reads `ChangeEvent.change` directly, preserving the value observed when each event was queued rather than reading a cache that may already have advanced.
 
-No separate `.fetch()` step is needed for cold-start. The v0.3-era concern about *"watch-after-fetch suppression silently dropping the first event"* applies only to the pattern `.fetch()` then `.watch()` (which we do not use); a bare `.watch()` is its own seed probe.
+### Cold-start and seed notifications
 
-### `sonos-stream` polls on top of GENA
+An initial SUBSCRIBE NOTIFY usually seeds current values, so do not fetch before watching: an already-cached value can suppress the first change notification. Startup values remain optional until observed.
 
-Real architectural fact, not documented in the upstream READMEs. The `sonos-stream` broker maintains GENA subscriptions **and** runs a polling scheduler that re-queries AVTransport + RenderingControl on each speaker. Observed `BrokerConfig` defaults:
+Historical hardware runs found delayed or missing seed notifications on repeated subscriptions. The cause was not established; do not promise a seed deadline for every service or infer speaker failure from a missing seed alone. Live tests check that seeding works across the household, then use actual value changes for per-speaker coverage.
 
-```text
-callback_port_range:    (3400, 3500)
-polling_activation_delay: 5 s   (poll starts 5s after broker init)
-base_polling_interval:    5 s   (per-service poll cadence)
-max_polling_interval:    30 s   (back-off ceiling)
-subscription_timeout: 1800 s   (UPnP SUBSCRIBE TIMEOUT)
-renewal_threshold:    300 s    (renew 5 min before expiry)
-```
+### SDK polling and renewal
 
-Implication: the reactive event stack surfaces ~2 s `position` cadence on a playing speaker - that's polling, not real GENA. Raw GENA AVTransport NOTIFYs on a playing speaker arrive **~every 3 minutes in bursts of 2–3 messages within ~250 ms** (4-speaker LAN, 27 min idle session, music playing on the Beam). If real-time position matters in a future implementation that doesn't use `sonos-stream`, polling has to come from somewhere.
+The SDK supplements GENA with polling. Historical SDK 0.5.2 traces saw periodic position updates and renewals near 25 minutes for an 1800-second subscription. These timings are observations, not oto latency guarantees. oto does not expose the SDK position stream; Now Playing anchors its clock from `GetPositionInfo`.
 
-LAN-politeness cost of polling: ~0.5 events/sec/playing-speaker. Trivial in absolute terms but real network traffic. Recorded.
+The callback listener uses the SDK's configured TCP port range (3400-3500 in the pinned default configuration). The speakers must be able to connect back to it.
 
-### One NOTIFY = many property events (when decomposed)
+### Shutdown
 
-UPnP `LastChange` semantics: each service bundles all changed properties into one NOTIFY's `<LastChange>` element. Observed bundles:
+SDK 0.8 manager clones share an event fanout. A held manager keeps it alive, so channel closure cannot stop a pump that itself holds a manager.
 
-- **RenderingControl** NOTIFY: Volume (Master / LF / RF), Mute (Master / LF / RF), Bass, Treble, Loudness, OutputFixed, SpeakerSize, SubGain, SubCrossover.
-- **AVTransport** NOTIFY: TransportState, CurrentTrack, CurrentTrackURI, CurrentTrackDuration, CurrentTrackMetaData (DIDL-Lite), CurrentPlayMode, NumberOfTracks, CurrentSection, ...
+`EventPump::Drop` first calls `SonosEventManager::shutdown()` to release the SDK worker's self-owned reference cycle, then sets oto's stop flag and joins its pump after the next `recv_timeout` boundary. SDK cleanup can complete asynchronously. Both the stop/join and explicit SDK shutdown are necessary; the strong-reference regression test covers eventual release.
 
-If a raw-callback-server implementation is ever written, decompose one NOTIFY into N typed property events before emitting to the rest of the stack.
+### Topology change events
 
-### Doubly-escaped `LastChange` XML
+`ZoneGroupTopology` is a service; the watchable property is speaker-scoped `GroupMembership`. Several speakers can emit for one regroup, so Dart debounces for 250 ms and re-pulls authoritative topology.
 
-GENA payloads come over HTTP as:
+The initial subscription also emits membership seeds. `TopologyFilter` suppresses the first membership event per speaker only within a five-second startup window. A later first event is treated as a real regroup. This bounds the risk of swallowing a change when a seed never arrives.
 
-```text
-POST /notify
-NT: upnp:event
-NTS: upnp:propchange
-SID: uuid:RINCON_<uuid>_sub<NNN>
-SEQ: <n>
+After a regroup, the old pump's coordinator maps are stale. It temporarily drops group-addressed events until a fresh wire is installed. If both fast refresh and full discovery fail, its dirty flag expires after 60 seconds, checked on the next event. That bounds silence while accepting possibly stale routing. See [Architecture](ARCHITECTURE.md#live-events) for the wire-generation lifecycle.
 
-<e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">
-  <e:property>
-    <LastChange>&lt;Event ...&gt;&lt;InstanceID val="0"&gt;...&lt;/Event&gt;</LastChange>
-  </e:property>
-</e:propertyset>
-```
+### Repeated events and connectivity
 
-The `LastChange` *text* is the URI-encoded inner `<Event>` XML. Inside that Event, `<CurrentTrackMetaData>` is URI-encoded **again** (DIDL-Lite inside Event inside propertyset → three levels of nesting, two of them URI-encoded). A correct parser unescapes twice, then DIDL-parses the inner `<r:streamInfo>` / `<dc:title>` / etc. per the existing `oto-wire::control::parse_track_didl`. Don't roll your own with regex.
+Track changes can emit intermediate and resolved metadata; apply later values rather than assuming one event per track. `Transitioning` is a real playback state. Group-volume writes can also emit per-member volume changes; the group master uses the separate `GroupVolume` event, not an inferred average of room volumes.
 
-### Group volume propagation
+Historical acceptance observed subscriptions recovering after a 20-30 second host-network outage. That does not establish recovery after longer outages or guarantee that every missed value is replayed. Health events currently report command-time network failure/recovery; idle silence can remain undetected.
 
-When a Sonos client (the official app or oto) issues a group-volume change, the device fires **per-member `Volume` events** on each group member within ~6 ms of each other (observed: two pairs of LR/KT volume NOTIFYs at 6 ms and 6 ms intervals). v0.4's UI / StateManager has to either (a) collapse simultaneous volume events from group-mates inside a small time window, or (b) render group volume from a `GroupVolume` property (separate evented variable) rather than from per-speaker `Volume`. Implementation choice for v0.4; documented as a behavioral fact here.
+### Raw GENA alternative
 
-### Subscription renewal
+A raw callback-server spike also worked, but would require oto to own subscription renewal, XML parsing, and change detection. Retain the SDK path unless maintenance or reliability problems justify that cost. [The spike record](evidence/v0.4-spike/findings.md) preserves the comparison and raw logs.
 
-The reactive event stack (`sonos-event-manager` + `sonos-stream`) handles GENA renewal automatically per the `renewal_threshold` setting above - observed firing 4 renewals (one per speaker × service) at ~25 min into a 27 min run. Re-verified in v0.4 release acceptance: renewals at 24.6 min in idle dogfood and 24.75 min in active dogfood (music continued playing through the active-session renewal - no event-stream interruption). No intervention required.
-
-If a future raw-callback-server implementation is built, renewal is the implementer's responsibility - UPnP `SUBSCRIBE` returns a `TIMEOUT` (default 1800 s in our spike) and a follow-up `SUBSCRIBE` with the same `SID` header before expiry. Without renewal, all subscriptions silently expire after the timeout.
-
-### Per-speaker seed NOTIFY behavior is non-uniform
-
-Not every subscribed RenderingControl/AVTransport service emits an initial NOTIFY on every fresh `SUBSCRIBE`. Empirically (v0.4 release acceptance, 2026-05-26, against an Era 100 + Beam LAN): the Era 100 reliably did NOT send its initial RC NOTIFY on three back-to-back test runs in the same process. The Beam, on the same LAN at the same time, did. Once the operator drove a real Volume change, Era's RC subscription started emitting normally.
-
-The most likely cause is an SDK-internal subscription-cooldown / dedupe on the speaker side when subscribe-unsubscribe-subscribe cycles happen quickly (tests dropping `SonosWire` then immediately creating another). The behavior is not reproducible from the SDK or wire-side code; it's a real speaker-firmware quirk that varies by model.
-
-**Implications for v0.4 (and any v0.5 design):**
-
-- **Don't assume "every subscribed service emits seed within X seconds"** in tests or production. The cache-`None` state during cold-start can persist past the SUBSCRIBE round-trip for some speakers.
-- **`speaker_state` returning honest-partial (`None` for properties not yet seen) is load-bearing**, not a transitional state - for some speakers, a property's first observable event might come only when something actually changes.
-- The `live_events::subscribe_then_seed_notifies_arrive` test asserts ≥ 1 seed across all discovered speakers within 5 s (was ≥ 2 of 4) for exactly this reason; multi-speaker coverage is verified by the active operator tests.
-
-### Short connectivity outages recover organically
-
-Surprised us during the v0.4 § 8.10 acceptance: disabling the host's Ethernet adapter for ~20–30 s and re-enabling it caused existing GENA subscriptions to RESUME delivering events without needing a fresh `discover()`. The recovery is the combined effect of:
-
-- Sonos's UPnP retry on the NOTIFY delivery path - the speaker keeps trying for a while when the callback TCP fails
-- `sonos-stream`'s polling layer kicking back in after the NIC comes back, which catches any state that drifted during the outage
-
-This is much better behavior than the spec § 8.10 framing assumed ("recover or fail-loud"). Two caveats:
-
-- **Short outages only.** The UPnP `SUBSCRIBE TIMEOUT` is 1800 s; if the outage exceeds that (~30 min), the subscription is genuinely dead and the speaker stops retrying.
-- **Silent stale state is still possible** - if a Volume change happens during the disconnect and the retry queue drops it, the cache holds the prior value. This is the v0.5 in-band SubscriptionError surfacing target.
-
-Useful real-world data for the v0.5 reactive-vs-NOTIFY revisit: for typical home WiFi disruptions (router reboot, NIC sleep), the SDK + polling combo self-heals without oto needing to do anything.
-
-### Ergonomic footgun: bare `StateManager::new()`
-
-`sonos_state::StateManager::new()` constructs a manager **without an event manager attached**. `register_watch(speaker, key)` on such a manager registers the watch *intent* but **never sends a UPnP SUBSCRIBE** - no error, no warning, just 0 events forever. The v0.4 spike rev 1 hit this and produced 25 min of empty stdout before the cause was identified.
-
-**Use one of these two patterns instead:**
-
-```rust
-// Recommended - combines watch intent + subscription in one call.
-let em = Arc::new(SonosEventManager::new()?);
-let manager = StateManager::builder().with_event_manager(em.clone()).build()?;
-manager.add_devices(devices)?;
-manager.initialize(topology);  // ← NON-OPTIONAL; see warning below.
-let events = manager.iter();   // SDK 0.8: subscribe BEFORE watches; no replay.
-let cached_volume: Option<Volume> =
-    manager.watch_property_with_subscription::<Volume>(&speaker_id)?;
-
-// Equivalent long form.
-manager.register_watch(&speaker_id, Volume::KEY);
-em.ensure_service_subscribed(speaker_ip, Volume::SERVICE)?;
-```
-
-**`manager.initialize(topology)` is non-negotiable** even for solo speakers. The SDK's `resolve_subscription_target` for AVTransport routes subscriptions to the **coordinator** of each speaker's group; without an initialized topology, the routing falls back silently and AVTransport SUBSCRIBE is never sent. RenderingControl (Volume / Mute) works because it's per-speaker and doesn't need coordinator routing - which makes the failure mode particularly nasty: half the events work, the other half silently never arrive. The first hardware test failure ([PR #45 follow-up](https://github.com/Oszkar/oto/pulls?q=is%3Apr+initialize-topology+merged%3A%3E2026-05-23)) was exactly this: operator play/pause produced zero `ChangeEvent::Playback` because the implementer skipped this line. Construct the `Topology` from the discover snapshot's `speakers` + `groups`; see `oto-wire::events::build_sdk_topology` for the canonical reconstruction.
-
-### SDK gotcha: `StateManager::Clone` fans out independent senders
-
-Historical SDK 0.5.2 detail: cloning produced an independent `mpsc::Sender`. SDK 0.8 shares an event fanout instead. The shutdown consequences still apply:
-
-1. **Dropping a clone does not close the channel.** The channel only closes when *every* outstanding clone is dropped. This makes "sender-close as shutdown signal" impossible for any pump thread that holds its own clone of the manager.
-2. **Pump-thread shutdown must be out-of-band and two-stage.** The pump in
-   `oto-wire::events` first calls `SonosEventManager::shutdown()` to break the
-   SDK worker's self-owned `Arc` cycle, then flips an `Arc<AtomicBool>` stop flag
-   and joins oto's thread after its next `recv_timeout(POLL_INTERVAL)` boundary.
-   Dropping manager clones alone does neither job. An earlier design held a
-   "keepalive" clone and expected sender-close to stop the pump; that
-   self-deadlocked on the second `discover_with`. A later version stopped only
-   oto's thread and leaked the SDK worker; v0.6.4 fixed that second lifecycle
-   hole with explicit SDK shutdown.
-
-SDK 0.8 recheck: `StateManager::clone` shares an `Arc<EventFanout>` rather than creating a separate sender for each clone. The held manager still keeps the fanout alive, so sender-close is still not a shutdown signal. Explicit SDK shutdown plus oto's stop flag/join remain required; the strong-reference release regression test covers this lifecycle.
-
-### SDK `.get()` and `get_property` are cache reads, not fetches
-
-`manager.get_property::<P>(&speaker_id) -> Option<P>` reads the in-memory cache only. oto uses direct SOAP for one-shot reads. With SDK 0.8, event mapping reads `ChangeEvent.change` (`PropertyChange`) directly: each queued event retains its observed value even if the mutable cache has since advanced. This removes cache lookup races and special group-store lookups from oto's event adapter.
-
-### Topology change events - how regrouping surfaces (v0.5)
-
-Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe --features live-tests`, 2-speaker LAN, form-then-break in the Sonos app).
-
-**There is no `ZoneGroupTopology` *property* to watch.** `ZoneGroupTopology` is a `Service`, not a `SonosProperty` - the original v0.5 plan's `watch_property_with_subscription::<ZoneGroupTopology>` does not compile. Topology changes surface through the watchable property **`GroupMembership`**:
-
-- `GroupMembership`: `KEY = "group_membership"`, `SERVICE = Service::ZoneGroupTopology`, `SCOPE = Scope::Speaker` (`sonos-sdk-state-0.5.2/src/property.rs:419-462`).
-- ZGT NOTIFYs are handled on a **special path** in `event_worker.rs:49-61`: `decode_topology()` returns an empty `Vec<PropertyChange>` (`decoder.rs:277`); instead `apply_topology_changes()` rebuilds the store and, at its final step, emits `ChangeEvent::new(speaker_id, "group_membership", Service::ZoneGroupTopology)` for **each speaker whose membership changed AND is in the `watched` set** (`event_worker.rs:228-243`).
-- In SDK 0.8 the change arrives on `manager.iter()` as `PropertyChange::GroupMembership` inside `ChangeEvent.change` (`property_key()` returns `"group_membership"`).
-
-**Implications for topology events:**
-- Register `manager.watch_property_with_subscription::<GroupMembership>(&sid)` **per speaker** (it is `Scope::Speaker` - NOT per-coordinator like AVTransport).
-- Map `"group_membership" => ChangeEvent::TopologyChanged` in `map_upstream_event`.
-
-**Observed on the 2-speaker LAN:** **both** speakers fire (not one household-wide event), and a single regroup yields multiple `group_membership` events - so the Dart-side 250 ms trailing debounce + `refresh_topology()` re-pull is load-bearing, not optional. NOTIFY→event latency was sub-second once regrouping. Payload is opaque/notification-only at this layer (we re-pull authoritative topology via `GetZoneGroupState` SOAP regardless), exactly what Option 3 assumes.
-
-**Seed NOTIFY on subscribe (load-bearing).** The subscription emits one `group_membership` event **per speaker at startup, before any user action** - the same "the initial SUBSCRIBE NOTIFY *is* the seed" behaviour the property events have (see § Cold-start). In the hardware run, 2 of the observed events were these startup seeds (they arrived *after* the probe's 3 s drain window, so seed latency for `GroupMembership` can exceed 3 s - consistent with § "Per-speaker seed NOTIFY behavior is non-uniform"); the rest were the actual regroup.
-
-  **Outcome (shipped, refined in v0.6.4).** `subscribe_topology` runs inside
-  `discover_with` right after `discover()`. `TopologyFilter` suppresses the
-  first `group_membership` per speaker only inside a bounded five-second seed
-  window. That prevents the seed → rediscover → new seed loop, while a
-  first-ever membership event arriving after the window is treated as a real
-  regroup rather than swallowed forever. Once a real regroup makes the pump's
-  frozen group-routing maps stale, group-addressed events are dropped until a
-  fresh pump is installed; that dirty state also has a bounded self-heal so
-  failed fast-refresh and rediscovery cannot suppress group events for the
-  wire's remaining lifetime. The stale-`GroupId` → `WireError::NotFound`
-  rediscovery path remains the final fallback.
-
-### Reactive event stack: reliability evidence through v0.5.1
-
-The v0.3-era notes flagged `sonos-state` / `sonos-stream` / `sonos-event-manager` as the only known live-correctness concern (intermittent `position` updates, no upstream hardware CI). It did not pan out:
-
-- **v0.4 spike** (35 min combined idle + active, 4-speaker LAN): no intermittent-position behaviour - `position` arrived at a consistent ~2 s cadence throughout. One session / LAN / playing speaker, so not conclusive alone.
-- **v0.5 validation** (2026-06-01, `cargo run -p oto_native --example event-tail --features oto-wire/live-tests`, 2-speaker LAN):
-
-| Session | Duration | Renewals | Errors | Spurious events |
-|---|---|---|---|---|
-| Idle | ~50 min | 4/4 clean (~1475 s, ~82% of 1800 s TTL) | 0 | 0 |
-| Active | ~28 min | 4/4 clean (~1481 s, same timing) | 0 | 0 |
-
-The active session exercised play/pause on both speakers independently, 25 rapid-fire volume events, 10+ track skips, and `Transitioning` transitions - every action produced the expected event within ~1 s, correct speaker/group IDs, no cross-speaker bleed, no drops.
-
-**Decision (settled): oto stays on the `sonos-sdk-state` reactive layer.** The lower layers (`soap-client`, `sonos-api`, `callback-server`) are likewise solid - v0.2/v0.3 confirm `sonos-api` SOAP, the v0.4 spike confirms `callback-server` HTTP NOTIFY reception.
-
-Behavioural quirks the map/UI layer must handle (still true):
-
-- **Double `Track` events.** Every track change emits 2+ consecutive `(group_id, Track, same_title)` events within 0–2 s (an intermediate-metadata NOTIFY then the resolved-metadata NOTIFY; the SDK delivers both). Apply last-wins dedup with a ~200 ms window on consecutive identical `(group_id, Track)` pairs. Same pattern on `group_membership` (§ Topology change events, above) and `group_volume` (§ Group operations).
-- **`Transitioning` playback state.** Appears briefly on skip / play-start; map to a `Loading` variant or suppress - don't surface as "unknown."
-- **Renewal timing.** Both sessions renewed at ~82% of the 1800 s TTL (~1475–1481 s) - consistent and predictable.
-
-### Off-ramp: raw callback-server (not used)
-
-A raw `sonos-sdk-callback-server` + own `SUBSCRIBE` + own XML parsing + own change-detection was prototyped in the v0.4 spike, ran correctly with zero warnings, and stays a viable alternative - but the reliability data above means oto has no reason to switch. **Out of scope for oto** (a side project bounded at v1.0); recorded so the work isn't lost.
-
-- **When to revisit:** if upstream `sonos-sdk-*` stops being maintained, or the documented SDK footguns start biting in production. (The earlier "if v0.5 topology events surface reliability issues" trigger was not met - see above.)
-- **Migration cost is bounded.** The seam - `Wire` trait, `ChangeEvent`, the FRB stream surface, `oto-app::StateManager` - is designed for the swap; the `spike-callback-server.rs` commits in git history are a working starting point.
-- **What an implementer owns:** GENA renewal (§ Subscription renewal), decomposing one NOTIFY into N typed property events (§ One NOTIFY = many property events), and the doubly-escaped `LastChange` parser (§ Doubly-escaped `LastChange` XML). The same spike binary is the starting point for anyone building a standalone raw-GENA Rust library (own change-detection, transparent debugging, smaller dep tree).
-
-## Concurrency
-
-`sonos-api` command calls are sync-first at oto's boundary; the v0.4 event stack may carry an upstream-managed async runtime internally.
-
-- **Commands:** non-sync FRB fns (Dart `Future`) into blocking `sonos-api` SOAP. `oto-app` holds a `Mutex<Option<HeldWire>>` **locked across the SOAP call**. Deliberate: commands are user-initiated and low-frequency; serializing them is the LAN-politeness story (no command storms against the user's speakers).
-- **Events (v0.4):** a `ChangeIterator`-equivalent `recv()` blocks. Each event stream exposed to Dart is pumped by a dedicated OS thread that reads the iterator and pushes onto an FRB `Stream`. Revisit lock granularity only if v0.4 event threads contend with command threads on the slot lock.
-
-No async/await in oto's own surface code. Direct SOAP uses blocking ureq; the SDK reactive worker and axum callback server use Tokio internally. SDK 0.8 removed reqwest from the consumer graph. Commands stay synchronous and oto's event-pump thread waits on `recv_timeout`.
+If revisited, one NOTIFY can contain many property changes. `LastChange` contains XML-escaped inner XML, and `CurrentTrackMetaData` can contain another escaped DIDL-Lite document. Decode the XML layers with a parser, not URI decoding or regular expressions. Renew each subscription before its returned `TIMEOUT` using the same `SID`.
 
 ## ZoneGroupState fixture XML
 
@@ -446,36 +287,27 @@ Two captured topologies:
 - **Grouped (`.103` view):** 1 group containing both Living Room (with satellite) and Kitchen, coordinator = Living Room; vanished LR still present.
 - **Coordinator-not-first (`.105` view of the grouped topology):** member order is `[Kitchen, Living Room(coordinator)]` - exercises the D3 reorder.
 
-## Group operations (v0.5.1 spike) - hardware-confirmed 2026-06-04
+## Group operations
 
-Confirmed on the 2-zone LAN (Beam "Living Room" `.103` = `RINCON_542A1B9463A801400`; Sonos One "Kitchen" `.105` = `RINCON_7828CAE858CA01400`; the Beam's bonded surrounds fold in → only **2 controllable zones**, so a 3+-member group can't be formed here). Probe: `cargo run -p oto-wire --example group_ops_probe --features live-tests`.
+The original SDK 0.5.2 probe used two controllable zones (Beam and Sonos One); bonded surrounds were folded into the primary. It did not validate three-member coordinator re-election. Current integration code lives in `native/crates/wire/src/control.rs`; hardware tests are in `native/crates/wire/tests/live_grouping.rs` and `live_seeded_fast_rediscover.rs`.
 
-### Form a group - `SetAVTransportURI` x-rincon
+### Join and leave
 
-To make speaker X join coordinator C's group: `av_transport::set_av_transport_uri(format!("x-rincon:{C_uuid}"), String::new())` (two `String` args: current_uri, current_uri_meta_data) on **X's** IP. Confirmed: Living Room joined Kitchen → one group `RINCON_7828CAE858CA01400:386373682`, coord=Kitchen, members=[Living Room, Kitchen]. **The joiner folds into the coordinator's existing group** - the result carries the **coordinator's** GroupId (here unchanged); the joiner's old standalone group dissolves.
+- Join: send `SetAVTransportURI` with `x-rincon:<coordinator UUID>` and empty metadata to the joining speaker. It joins the coordinator's existing group.
+- Leave: send `BecomeCoordinatorOfStandaloneGroup` to the leaving speaker, including when that speaker is the coordinator. Firmware delegates the old group's coordination; oto needs no special coordinator branch.
 
-### Break / leave - `BecomeCoordinatorOfStandaloneGroup`
+An immediate post-mutation `GetZoneGroupState` can return a transitional topology. The UI refreshes from debounced membership events instead of immediately after the command. Hardware tests poll for the expected settled topology within a bounded deadline; fixed sleeps have flaked.
 
-`av_transport::become_coordinator_of_standalone_group()` (no args) on **the leaving speaker's** IP. Returns a **structured** response `{ delegated_group_coordinator_id, new_group_id }` (NOT `()`). Sent to the **coordinator** of a 2-member group (Kitchen) → OK, `delegated_group_coordinator_id=Living Room`, `new_group_id=...:386373683`: the leaver delegates the old group's coordination to a remaining member and forms its own new standalone group. **`leave_group(speaker)` is uniform** - same primitive whether or not the speaker coordinates; firmware delegates coordination; no oto-side branch. The 3+-member re-election path is firmware-handled and untested on this 2-zone LAN.
+### Group volume and mute
 
-### ⚠ Topology settle latency (load-bearing for the refresh design)
+`GroupRenderingControl` reads and writes target the coordinator. Volume builders reject values outside 0-100; the FRB shim clamps signed input through `Volume::clamped` before dispatch. Group volume/mute events carry the coordinator's speaker ID, which oto maps to its group ID.
 
-The probe's **immediate** post-BCOS `GetZoneGroupState` re-poll returned a **transitional** state (old group `...682`, coordinator flipped to Living Room, Kitchen still listed - the split had not propagated). The post-JOIN re-poll happened to catch the settled state; the post-leave one did not. **Lesson: do not trust an immediate post-mutation topology re-pull.** Drive the view refresh off the settled `GroupMembership` event (debounced 250 ms), which fires after the household settles. Consequence for v0.5.1: a Dart-side *self-triggered* refresh right after a form/break command would race the settle - so form/break relies on the existing topology-event path instead (the mutation fires `GroupMembership` NOTIFYs exactly like a Sonos-app regroup). Integration/live tests must assert the **settled** topology by **polling `refresh_topology` until the expected state** (with a generous cap), never an immediate re-poll and never a single *fixed* delay - settle latency is variable: a 3 s fixed wait flaked once on real hardware (`leave` not yet propagated) and passed on retry, which is why `live_grouping.rs` polls.
+SDK 0.8 carries values in typed payloads. The old SDK 0.5.2 trap of reading group events from the speaker-property cache no longer applies; do not restore cache lookups in event mapping.
 
-### Group volume / mute - `GroupRenderingControl`
+Unchanged writes need not emit NOTIFY. An event test must prime one value and write a different one, then wait for the matching event. A fixed target can silently match the value left by an earlier run.
 
-`group_rendering_control::{get_group_volume, set_group_volume(u16), set_relative_group_volume(i16), get_group_mute, set_group_mute(bool)}` on the **coordinator** IP. Confirmed: GetGroupVolume=18; Set 30/50 OK; SetRelative +5→55 / −5→50 (returns the new volume); GetGroupMute=false; SetGroupMute true/false OK. **`set_group_volume(101)` is rejected at `.build()`** with `RangeError { parameter: "desired_volume", min:0, max:100 }` - client-side, like per-speaker `set_volume`. The FRB shim must clamp BEFORE the call (signed i32 → `Volume::clamped`), same pattern as `set_volume`.
+### Fast topology refresh
 
-### Group volume / mute events
+Refresh builds a fresh seeded wire from cached IPs, without SSDP, and installs it through `discover_with`. This rebuilds every subscription, including AVTransport when a speaker becomes coordinator. In-place SDK topology reinitialization was only probed for group-volume events, so it is not evidence that new-coordinator subscriptions work.
 
-`sonos_state::{GroupVolume, GroupMute}` (need `use sonos_state::property::Property` in scope for `::KEY`), watched per **coordinator** via `watch_property_with_subscription`, fire correctly. A single group-volume drag produced **23 `group_volume` events** (rapid-fire - **last-wins dedup needed**, ~200 ms window, same as Track / per-speaker Volume). Events arrive stamped with the **coordinator's** `speaker_id` → route via `av_transport_group_id` (coordinator → GroupId). `group_mute` *events* were not exercised this run (operator changed volume only); the `set_group_mute` command works and the watch is registered identically - confirm the mute event in the live grouping test.
-
-**Historical SDK 0.5.2 pitfall:** group volume/mute required `get_group_property(GroupId)`, not `get_property(SpeakerId)`; the latter silently returned `None`. SDK 0.8 carries these values in typed event payloads, so oto no longer queries either store while mapping events. The queued-payload regression test checks group routing without a cache, and `live_seeded_fast_rediscover` verifies real command-to-event delivery after regrouping.
-
-**No-change → no NOTIFY (event tests must change the value).** `set_group_volume(X)` (and per-speaker `set_volume`) on a device already at `X` produces NO `group_volume`/`volume` NOTIFY - Sonos suppresses unchanged values. A hardware event test that sets a fixed target therefore flakes across re-runs (the group may already be at that value from a prior run): observed on the 2-zone LAN, where `set_group_volume(35)` passed on a fresh group but emitted nothing once the group was already at 35. Prime with one value then set a different one to guarantee a change - see `live_grouping.rs::assert_group_volume_event`.
-
-### Fast topology refresh - in-place `manager.initialize()` option (investigated, not chosen)
-
-Calling `manager.initialize(new_topology)` a **second time on the running manager** after a regroup returned OK (no panic) and group_volume events kept flowing, routing to the new topology's coordinators. **But this exercised only GroupRenderingControl events - NOT AVTransport (Playback/Track) re-routing, and not the hardest case (a speaker becoming a NEW coordinator needing a fresh AVTransport SUBSCRIBE).** AVTransport is the load-bearing routing (`resolve_subscription_target` fixed at `initialize`). **Decision: fast topology refresh = SSDP-skipped pump respawn** - drop the `EventPump` + `EventPump::spawn` a fresh one from refreshed caches (no SSDP), reusing the already-hardened spawn/drop machinery; it definitively rebuilds ALL subscriptions (incl. AVTransport for new coordinators) with a clean `TopologyFilter`. In-place re-initialize is a viable future optimization (doesn't crash) but is unverified for AVTransport new-coordinator routing, so it is not the v0.5.1 default.
-
-**Shipped (v0.5.1) - fast RE-DISCOVER, not a same-wire respawn.** The respawn idea was refined once more during implementation: `refresh_topology()` installs a wholly **fresh wire** (`SonosWire::new_seeded(ips)` - skip SSDP, `GetZoneGroupState` from a cached IP) through the existing `discover_with` lifecycle, rather than respawning the pump on the same wire. Reason: the Dart event stream re-subscribes only on a `discoveryProvider` **transition** (keyed on the wire generation, bumped by `discover_with`); a same-wire respawn bumps the generation but does NOT trigger that transition, so the new event receiver is never taken and events silently stop. A fast re-discover IS a genuine wire replacement (minus SSDP), so it reuses the hardware-proven path verbatim. **Value-equality gotcha (codex PR #74):** when the new `Topology` is value-equal to the old (a no-op `TopologyChanged`), the Dart `AsyncData` is `==` the current state and Riverpod suppresses the transition - the `TopologyController` invalidates `wireGenerationProvider` after a successful refresh to force the re-subscribe regardless.
+Dart re-subscribes using the successful wire-install generation signal. This must not depend on topology value equality: a wire replacement needs a fresh receiver even when the visible household is unchanged. Failed replacement preserves the old wire and its one-shot receiver.
