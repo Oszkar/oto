@@ -24,7 +24,7 @@ oto is a side project, primarily built with agentic engineering methods. The nam
 
 - Discover Sonos rooms on your LAN, including hosts with multiple network interfaces.
 - Play, pause, skip tracks, and control room or group volume and mute.
-- Group and ungroup rooms, with live topology and playback updates.
+- Group and ungroup rooms, with live topology and playback updates. Unchanged topology notifications preserve subscriptions even when startup notifications arrive late.
 - View Now Playing metadata and track progress.
 - Use phone, tablet, and desktop layouts with light/dark themes and local preferences.
 
@@ -74,6 +74,8 @@ Regenerate after changing the bridge API or an `@riverpod` provider. The [contri
 The app and speakers must be able to reach each other on the LAN. Guest-network isolation or multicast filtering can prevent discovery.
 
 Allow oto's outbound SSDP multicast to UDP port 1900 and the replies to its per-interface ephemeral UDP sockets. SOAP uses TCP port 1400 on the speakers; GENA notifications require speakers to reach the app's callback listener (SDK range 3400-3500). Prefer an application-scoped firewall rule on the private LAN.
+
+Discovery validates SSDP replies against their sender and retains up to 32 distinct hosts. Each topology lookup tries at most 8 distinct hosts, with a 30-second check before each attempt. The three-second SSDP receive window is shared across interfaces; the complete scan can take longer due to SOAP and initialization. These limits do not cap the speakers returned by a successful topology lookup or authenticate LAN peers.
 
 On Android, oto acquires a Wi-Fi `MulticastLock` around discovery. GENA notifications use unicast TCP. Protocol details and discovery limitations are in [Sonos notes](docs/sonos-notes.md#ssdp-discovery).
 

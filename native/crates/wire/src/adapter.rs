@@ -18,16 +18,13 @@ use crate::events::{EventPump, PumpInputs};
 use crate::{control, grouping, ssdp};
 
 const SSDP_TIMEOUT: Duration = Duration::from_secs(3);
+// Allow fallback without unbounded serial requests to failed responders.
+const MAX_TOPOLOGY_ATTEMPTS: usize = 8;
 
-/// Total budget for `refresh_topology`'s per-IP `GetZoneGroupState` retry
-/// loop. Each attempt can itself take up to ~15s (`sonos-sdk-soap-client`'s
-/// fixed 5s connect + 10s read timeout, outside oto's control) and the loop
-/// runs under `oto_app`'s global SLOT mutex - unbounded, a household with N
-/// cached-but-now-unreachable IPs would stall every other command for up to
-/// N x 15s. 30s (~2 full worst-case attempts) preserves the loop's purpose
-/// (fall through a sleeping speaker to a reachable one) while capping the
-/// pathological "whole household unreachable" case instead of letting it
-/// scale with household size.
+/// Stop starting topology attempts after 30s on discovery and refresh paths.
+/// The SDK's 5s connect and 10s read timeouts are not a global request deadline;
+/// an in-flight call can outlast this budget. Refresh runs under oto-app's SLOT
+/// lock, making the between-attempt guard important for command availability.
 const TOPOLOGY_REFRESH_DEADLINE: Duration = Duration::from_secs(30);
 
 /// The wire's interior-mutable resolution caches, populated together by
@@ -338,8 +335,8 @@ fn populate_models(snapshot: &mut DiscoverySnapshot) {
 /// Try each candidate IP for `GetZoneGroupState` until one succeeds or
 /// `deadline` elapses since the first attempt - whichever comes first.
 /// Extracted so tests can inject a short deadline instead of waiting out
-/// the real `TOPOLOGY_REFRESH_DEADLINE`; production always passes that
-/// constant. Bounding by elapsed time (not candidate count) is load-bearing:
+/// the real `TOPOLOGY_REFRESH_DEADLINE`; production passes that
+/// constant alongside a distinct-host attempt cap. Bounding elapsed time is load-bearing:
 /// `refresh_topology` runs under `oto_app`'s global SLOT mutex, so trying
 /// every cached IP unconditionally would stall every other command for as
 /// long as it takes a dead household to exhaust its full candidate list.
@@ -348,15 +345,33 @@ fn fetch_group_state_with_deadline(
     ips: &[String],
     deadline: Duration,
 ) -> Result<Vec<ZoneGroupInfo>, WireError> {
+    try_topology_candidates(ips, deadline, |ip| {
+        crate::control::fetch_zone_group_state(client, ip)
+    })
+}
+
+/// The same distinct-host attempt budget applies to SSDP, seeded discovery,
+/// and cached topology refresh. The deadline only prevents starting another
+/// call; it does not cancel an in-flight SDK request.
+fn try_topology_candidates(
+    ips: &[String],
+    deadline: Duration,
+    mut fetch: impl FnMut(&str) -> Result<Vec<ZoneGroupInfo>, WireError>,
+) -> Result<Vec<ZoneGroupInfo>, WireError> {
     let started = std::time::Instant::now();
+    let mut attempted = Vec::new();
     let mut last_err = WireError::NoDevicesFound;
     for ip in ips {
-        if started.elapsed() >= deadline {
+        if attempted.len() >= MAX_TOPOLOGY_ATTEMPTS || started.elapsed() >= deadline {
             break;
         }
-        match crate::control::fetch_zone_group_state(client, ip) {
-            Ok(g) => return Ok(g),
-            Err(e) => last_err = e,
+        if attempted.contains(&ip) {
+            continue;
+        }
+        attempted.push(ip);
+        match fetch(ip) {
+            Ok(groups) => return Ok(groups),
+            Err(error) => last_err = error,
         }
     }
     Err(last_err)
@@ -370,42 +385,17 @@ impl Wire for SonosWire {
         // is the "discover() minus SSDP" fast path a regroup re-discover uses.
         // Unseeded (`new()`) runs the full multi-NIC SSDP path as before.
         let candidates: Vec<String> = if self.seed_ips.is_empty() {
-            let locations = ssdp::discover_locations(SSDP_TIMEOUT)?;
-            if locations.is_empty() {
-                return Err(WireError::NoDevicesFound);
-            }
-            // C2: a LOCATION that doesn't yield a parseable IP is dropped here;
-            // if every one drops, `candidates` is empty and the diagnostic
-            // below fires (distinct from the empty-LAN NoDevicesFound above).
-            locations.iter().filter_map(|loc| extract_ip(loc)).collect()
+            ssdp::discover_hosts(SSDP_TIMEOUT)?
+                .iter()
+                .map(ToString::to_string)
+                .collect()
         } else {
             self.seed_ips.iter().map(IpAddr::to_string).collect()
         };
-        if candidates.is_empty() {
-            // Only reachable on the SSDP path: responders were found but none
-            // had a parseable LOCATION. (Seeded candidates are always valid
-            // IPs.) Surface a precise diagnostic, not the misleading
-            // NoDevicesFound.
-            return Err(WireError::Backend(
-                "SSDP found responder(s) but none had a parseable LOCATION; \
-                 cannot reach ZoneGroupTopology"
-                    .into(),
-            ));
-        }
-        // PerNetwork: any reachable speaker returns the whole household.
-        // Try responders until one answers (a vanished/asleep unit fails).
-        let mut last_err = WireError::NoDevicesFound;
-        let mut groups = None;
-        for ip in &candidates {
-            match control::fetch_zone_group_state(&self.client, ip) {
-                Ok(g) => {
-                    groups = Some(g);
-                    break;
-                }
-                Err(e) => last_err = e,
-            }
-        }
-        let groups = groups.ok_or(last_err)?;
+        // Any reachable speaker can return the whole household. Limit failed
+        // follow-ups on both discovery paths; empty candidates yield NoDevicesFound.
+        let groups =
+            fetch_group_state_with_deadline(&self.client, &candidates, TOPOLOGY_REFRESH_DEADLINE)?;
         let mut snapshot = to_snapshot(groups);
         if snapshot.speakers.is_empty() {
             return Err(WireError::Backend(
@@ -546,7 +536,7 @@ impl Wire for SonosWire {
         if ips.is_empty() {
             return Err(WireError::NoSpeakersDiscovered);
         }
-        // Bounded by TOPOLOGY_REFRESH_DEADLINE, not by candidate count - this
+        // Bounded by TOPOLOGY_REFRESH_DEADLINE and MAX_TOPOLOGY_ATTEMPTS - this
         // runs under oto_app's global SLOT mutex (see the constant's doc).
         // On total failure, leave every cache untouched and surface the
         // last error - the caller keeps its previous topology view.
@@ -620,6 +610,56 @@ impl Wire for SonosWire {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn topology_attempts_deduplicate_cap_and_preserve_last_error() {
+        let ips: Vec<String> = (1..=20)
+            .flat_map(|n| [format!("10.0.0.{n}"), format!("10.0.0.{n}")])
+            .collect();
+        let mut calls = Vec::new();
+        let result = try_topology_candidates(&ips, Duration::from_secs(30), |ip| {
+            calls.push(ip.to_string());
+            Err(WireError::Network(ip.to_string()))
+        });
+        assert_eq!(calls.len(), MAX_TOPOLOGY_ATTEMPTS);
+        assert_eq!(
+            calls,
+            ips.iter()
+                .step_by(2)
+                .take(MAX_TOPOLOGY_ATTEMPTS)
+                .cloned()
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            WireError::Network(calls.last().unwrap().clone())
+        );
+    }
+
+    #[test]
+    fn topology_fallback_stops_on_success_and_respects_deadline() {
+        let ips = vec!["10.0.0.1".into(), "10.0.0.2".into(), "10.0.0.3".into()];
+        let mut calls = 0;
+        assert!(
+            try_topology_candidates(&ips, Duration::from_secs(30), |_| {
+                calls += 1;
+                if calls == 1 {
+                    Err(WireError::Network("failed".into()))
+                } else {
+                    Ok(Vec::new())
+                }
+            })
+            .is_ok()
+        );
+        assert_eq!(calls, 2);
+        assert_eq!(
+            try_topology_candidates(&ips, Duration::ZERO, |_| panic!(
+                "expired budget must not dispatch"
+            ))
+            .unwrap_err(),
+            WireError::NoDevicesFound
+        );
+    }
 
     #[test]
     fn extract_ip_from_location() {

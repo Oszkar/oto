@@ -195,10 +195,10 @@ The same single FRB stream also carries:
   no-SSDP `refresh_topology()` path, with full re-discovery as the fallback.
   Two pump-side guards make this safe:
 
-  1. The first `GroupMembership` per speaker inside the short post-spawn seed
-     window is suppressed. Otherwise seed → re-discover → new pump → new seed
-     would loop forever. A first event after the window is treated as a real
-     regroup, so a missed seed cannot permanently swallow a later change.
+  1. Membership payloads are compared with the discovered group ID and
+     coordinator role. Unchanged seeds are suppressed regardless of arrival
+     time, including delayed NOTIFYs and polling fallback. A genuine change
+     is admitted even during startup; there is no timing-based seed window.
   2. A real regroup marks the pump's frozen coordinator→group routing `dirty`
      and temporarily drops group-addressed
      `Playback`/`Track`/`GroupVolume`/`GroupMute` events. Normally the debounced
@@ -249,4 +249,6 @@ The Flutter shell is responsive over the same providers (no backend change). Lay
 
 - **Event initialization and teardown ordering.** Attach the SDK event manager, initialize topology, attach the iterator before watches, and explicitly shut down the SDK worker before joining oto's pump. See [live events](#live-events) and [Sonos event notes](sonos-notes.md#event-model).
 - **Android multicast.** `MulticastLockHandler` holds a Wi-Fi multicast lock around discovery through the `me.oszkar.oto/multicast_lock` MethodChannel. Acquisition is best-effort. Historical debug success without the lock does not establish release reliability; GENA itself uses unicast TCP.
-- **SSDP response validation is incomplete.** Discovery accepts any datagram carrying a `LOCATION` header - it does not validate the status line / `ST`, match the LOCATION host to the responder's source IP, or cap the candidate count. A hostile device on the user's LAN could therefore redirect discovery's follow-up `GetZoneGroupState` SOAP to an arbitrary host (port 1400 only). LAN-local and low-impact: a non-Sonos host fails to parse and is skipped, and `discover()` stops at the first responder that returns a parseable topology. Hardening (200 + `ST` + sender-IP match + candidate cap) is tracked for v0.7 (the hardening + polish bucket) - see the SSDP-hardening `TODO` in `native/crates/wire/src/ssdp.rs`.
+- **Discovery bounds and trust.** SSDP requires an HTTP/1.1 status `200`, the exact ZonePlayer `ST`, and an HTTP `LOCATION` with a literal IPv4 host matching the datagram sender. Duplicate required headers, incomplete headers, malformed authorities, and datagrams larger than 2048 bytes are rejected. It retains the first 32 distinct validated hosts in arrival order; excess hosts are ignored. Ready sockets receive turns of at most 32 datagrams, with deadline checks inside each turn and retained readiness until drained. Explicit multicast egress and send-all multi-interface probing remain in place.
+- **Topology attempt budget.** Full discovery, seeded discovery, and cached topology refresh each attempt at most 8 distinct hosts, sequentially, stopping at the first successful topology read or before starting another call after 30 seconds. Limits apply to candidate hosts, not speakers returned in topology. Failed wire replacement preserves the installed wire. These are receive and request-count bounds, not a strict end-to-end discovery deadline: socket setup, in-flight SOAP, model enrichment, and subscription setup can extend total time.
+- **LAN peers remain unauthenticated.** Sender matching restricts initial candidate destinations; a peer can still supply malicious topology/XML, including further member addresses used for model enrichment and subscriptions. The XML/trust reassessment remains in v0.7 item 3. Hardware acceptance must cover Windows and Android discovery and a non-default LAN interface.
