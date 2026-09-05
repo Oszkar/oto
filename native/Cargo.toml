@@ -27,21 +27,17 @@ oto-mock = { path = "crates/mock" }
 oto-wire = { path = "crates/wire" }
 
 # Low-level UPnP SOAP client used directly in oto-wire for production
-# control operations (play/pause/vol/mute/state). Exact pin =0.5.2.
+# control operations (play/pause/vol/mute/state). Exact pin =0.8.0.
 # See AGENTS.md §4.
-sonos-api = "=0.5.2"
+sonos-api = "=0.8.0"
 
-# v0.4 reactive event stack — the `tatimblin/sonos-sdk` family's
-# `sonos-sdk-state` + `sonos-sdk-event-manager` + `sonos-sdk-stream` +
-# `sonos-sdk-callback-server` crates. Wrap upstream GENA-driven property
-# events into one `ChangeEvent` stream inside `oto-wire`. Pinned exact
-# (same precedent as `sonos-api`); the v0.4 spike (see
-# `docs/evidence/v0.4-spike/findings.md`) validated the 0.5.2 surface on
-# real hardware. Do NOT bump without re-running the v0.4 acceptance gate.
-sonos-sdk-state = "=0.5.2"
-sonos-sdk-event-manager = "=0.5.2"
-sonos-sdk-stream = "=0.5.2"
-sonos-sdk-callback-server = "=0.5.2"
+# Reactive event stack from upstream crates.io. Keep the whole SDK family
+# aligned and re-run the hardware acceptance checks when upgrading.
+# SDK 0.8 removes the reqwest/native-tls dependencies that required our fork.
+sonos-sdk-state = "=0.8.0"
+sonos-sdk-event-manager = "=0.8.0"
+sonos-sdk-stream = "=0.8.0"
+sonos-sdk-callback-server = "=0.8.0"
 
 # XML parser used by oto-wire's DIDL-Lite track-metadata parser
 # (parse_track_didl in control.rs). Already in the locked graph via
@@ -50,8 +46,8 @@ quick-xml = "=0.31.0"
 
 # Raw socket options for SSDP — std::net has no API to pin a socket's
 # outgoing multicast interface (IP_MULTICAST_IF), which is the multi-NIC
-# fix in oto-wire/src/ssdp.rs (tatimblin/sonos-sdk#76). Already in the
-# locked graph (transitive via reqwest/hyper); promoted to a direct dep.
+# fix in oto-wire/src/ssdp.rs (tatimblin/sonos-sdk#76). The integration
+# uses socket2 directly to select multicast egress per NIC.
 # §7-approved (review follow-up). Contained to oto-wire.
 socket2 = "0.5"
 
@@ -60,11 +56,9 @@ socket2 = "0.5"
 # `<modelName>`. Sonos's embedded server replies chunked even to an
 # HTTP/1.0 request, which a raw TcpStream mis-frames (sonos-notes § SSDP
 # "HTTP fetch quirk"); ureq handles chunked + bounded timeouts with a sync
-# API matching the SOAP path. ALREADY in the locked graph (transitive via
-# sonos-api's SOAP client / webpki-roots — see deny.toml); this only adds a
-# direct edge to the already-resolved version. §7-approved (2026-05-29).
-# Exact pin so no second ureq major enters the build.
-ureq = "=2.12.1"
+# API matching the SOAP path. Share 3.4 with SDK discovery; the upstream SOAP
+# client still requires ureq 2.x, so both majors remain in the resolved graph.
+ureq = "=3.4.0"
 
 # Log-emission facade for oto-wire's own diagnostics (per AGENTS.md §3:
 # "oto-wire/oto-app may use anyhow at boundaries and tracing for logs").
@@ -101,35 +95,6 @@ oto-core = { workspace = true }
 # workspace crate ends up in the release binary (negligible — no
 # third-party transitive deps; `oto-mock` is std-only).
 oto-mock = { workspace = true }
-
-# `sonos-api` transitively pulled `reqwest` with default features (→
-# `native-tls` → `openssl-sys`) via three `sonos-sdk` crates
-# (sonos-sdk-discovery, sonos-sdk-callback-server, sonos-sdk-stream),
-# which forced a vendored (Perl-driven) OpenSSL build on Android and a
-# WSL/Linux/macOS build-host requirement - see CONTRIBUTING.md history.
-# We make zero HTTPS calls anywhere in this graph (ureq + raw UDP for
-# oto's own SOAP/SSDP; the sonos-sdk crates only ever hit plain
-# http:// on the LAN, and two of the three didn't even reference
-# `reqwest` in source). Patched below instead of carrying the vendored
-# OpenSSL workaround. See LOCAL_PATCHES.md #2.
-
-[patch.crates-io]
-# LOCAL PATCH (oto): fork of tatimblin/sonos-sdk with default-features
-# disabled / the dependency removed on the 3 crates' unused `reqwest`
-# TLS backend. Tracked in LOCAL_PATCHES.md #2; retire when upstream
-# lands a fix. Pinned to an exact commit for reproducibility.
-#
-# `sonos-api` is included unmodified - it isn't patched itself, but it
-# path-depends on `sonos-discovery` within the same fork checkout. Without
-# also redirecting `sonos-api` here, the graph ends up with two distinct
-# `sonos-api` instances (registry vs git, e.g. via sonos-sdk-event-manager
-# and sonos-sdk-state, which are unpatched and still resolve `sonos-api`
-# from crates.io) and their types don't unify. Patching all four keeps a
-# single `sonos-api` instance across the whole graph.
-sonos-api = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
-sonos-sdk-discovery = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
-sonos-sdk-callback-server = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
-sonos-sdk-stream = { git = "https://github.com/Oszkar/sonos-sdk", rev = "181e6bf6ac23d57a2c5b0f0766f220b55866afd6" }
 
 [dev-dependencies]
 oto-app = { workspace = true }

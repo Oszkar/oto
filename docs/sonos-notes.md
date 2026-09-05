@@ -1,6 +1,6 @@
 # Sonos protocol & SDK notes
 
-Durable reference for how oto talks to Sonos: UPnP/SOAP behaviors, the `sonos-api` crate at the pinned `=0.5.2`, and the load-bearing facts learned from hardware spikes on a 4-speaker LAN. Preserved here so we don't re-discover them.
+Durable reference for how oto talks to Sonos: UPnP/SOAP behaviors, the `sonos-api` crate at the pinned `=0.8.0`, and the load-bearing facts learned from hardware spikes. Historical observations below name the SDK version used at the time.
 
 Audience: anyone touching `oto-wire`. If you're touching the GENA event path, the [Event model](#event-model-v04-load-bearing) section is the one to read first.
 
@@ -8,22 +8,22 @@ Audience: anyone touching `oto-wire`. If you're touching the GENA event path, th
 
 ## Dependency pin
 
-- `sonos-api = "=0.5.2"` (exact). Don't bump without re-checking the SOAP surface here and the multi-NIC SSDP issue [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76).
-- `sonos-api` and three SDK crates resolve through a local fork ([`Oszkar/sonos-sdk`](https://github.com/Oszkar/sonos-sdk)) via `[patch.crates-io]` in `native/Cargo.toml` - strips an unused `native-tls` backend that forced a vendored Android OpenSSL build. The version string stays `=0.5.2`; only the source is redirected. Re-cut the fork branch and update the pinned commit if the `=0.5.2` pin ever moves. Full rationale and re-application procedure: [`LOCAL_PATCHES.md`](../LOCAL_PATCHES.md) #2.
+- `sonos-api = "=0.8.0"` (exact), aligned with the reactive SDK crates. Re-check SOAP, discovery, events, and hardware acceptance when upgrading.
+- All Sonos crates now resolve from crates.io. Upstream 0.8 removed the reqwest/native-TLS dependencies that required our fork; [`LOCAL_PATCHES.md`](../LOCAL_PATCHES.md) #2 records its retirement. SDK discovery uses ureq 3.4, shared with oto's model fetches; upstream SOAP still uses ureq 2.x.
 - `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl`. Already in the locked graph via `sonos-api` - unify, don't bump.
 - The `sonos-sdk` umbrella and its `test-support` tree are **not** in oto-wire's dependency graph (dropped at v0.3). v0.4 live events add the upstream reactive state/event crates from the same SDK family; `sonos-api` remains the only Sonos crate used for direct SOAP commands and discovery.
 - Raw `callback-server` + own change-detection was prototyped but not chosen; oto uses the upstream reactive stack - see [Event model](#event-model-v04-load-bearing).
 
 ## SSDP discovery
 
-oto-wire runs its own multi-interface SSDP (`crates/wire/src/ssdp.rs`) and does **not** use `sonos-sdk-discovery`'s built-in SSDP. The reason is one bug:
+oto-wire runs its own multi-interface SSDP (`crates/wire/src/ssdp.rs`). The original reason was this SDK 0.5.2 bug:
 
 ```rust
 // sonos-sdk-discovery-0.5.2/src/ssdp.rs:27
 let socket = UdpSocket::bind("0.0.0.0:0")
 ```
 
-The SSDP socket binds to `0.0.0.0` and the M-SEARCH multicast is sent without setting `IP_MULTICAST_IF` (`set_multicast_if_v4`) and without enumerating interfaces. On a multi-NIC host the OS picks the egress interface from the routing table; on a Windows dev box with a WSL Hyper-V vEthernet, that vEthernet wins and the query never reaches the actual LAN. Single-NIC hosts work by accident. Tracked upstream as [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76); oto's own SSDP enumerates IPv4 interfaces, binds per-NIC, and calls `set_multicast_if_v4`. The library is otherwise sound - only discovery interface binding is broken.
+Upstream closed [#76](https://github.com/tatimblin/sonos-sdk/issues/76) with [#80](https://github.com/tatimblin/sonos-sdk/pull/80), released in 0.5.3: discovery binds per interface and probes concurrently. Source review at [0.8.0](https://github.com/tatimblin/sonos-sdk/blob/sonos-sdk-v0.8.0/sonos-discovery/src/ssdp.rs) still shows two gaps: it does not set `IP_MULTICAST_IF`, and each successful receive restarts the socket timeout rather than enforcing an absolute deadline. Binding a unicast address alone does not select multicast egress. oto therefore retains `set_multicast_if_v4` and `mio::Poll` with one shared bounded receive window. Replacing this module requires equivalent safeguards and multi-NIC hardware validation.
 
 Mechanics:
 
@@ -31,7 +31,7 @@ Mechanics:
 - **IPv6 SSDP group:** `[FF02::C]:1900`. Sonos S2 also advertises here. oto-wire does **not** join - see [ROADMAP § IPv6 SSDP coverage](ROADMAP.md#ipv6-ssdp-coverage).
 - **Responder `LOCATION`** header → `http://<ip>:1400/xml/device_description.xml`.
 - **Identity proof.** As of v0.3, success of `GetZoneGroupState` SOAP on any responder *is* the "this is a Sonos" proof. oto-wire no longer fetches `device_description.xml` in the identity path.
-- **HTTP fetch quirk (`device_description.xml`).** Sonos's embedded server replies `HTTP/1.1` with `Transfer-Encoding: chunked` (no `Content-Length`, many tiny chunks) **even to an HTTP/1.0 request**. A raw `TcpStream` GET hands chunk-framed bytes to whatever XML parser receives them and breaks. Use `ureq` (already a locked transitive dep via `sonos-api`); it handles chunked + UTF-8 and bounds `timeout_connect` + `timeout`. **Now used** by `oto-wire/src/device_description.rs` (v0.5 `model` repopulate): parallel per-speaker fetch of `<modelName>` inside `discover()` + `refresh_topology()`, best-effort (a failed fetch leaves `model = None`, discovery still succeeds).
+- **HTTP fetch quirk (`device_description.xml`).** Sonos's embedded server replies with chunked HTTP even to an HTTP/1.0 request. A raw `TcpStream` hands chunk framing to the XML parser. `oto-wire/src/device_description.rs` uses ureq 3.4 with `timeout_connect` (1 s) and `timeout_global` (2 s), shared with upstream discovery's dependency. Parallel per-speaker model fetches remain best-effort: failure leaves `model = None` and discovery still succeeds.
 - **Per-NIC bind ≠ per-NIC egress.** Binding a socket to a NIC's unicast address does **not** select which interface a *multicast* datagram leaves by - the OS picks that from its multicast routing table (usually one default NIC). You must set `IP_MULTICAST_IF` (`socket2::set_multicast_if_v4`) per socket; oto-wire does this as of the v0.5 egress fix (the `set_multicast_if_v4` claim in this section's intro was aspirational until then). Verify with `examples/ssdp_multicast_if_probe`: it sends the M-SEARCH per NIC twice - with and without the pin - and counts responders each way. On the 4-speaker dev LAN both columns match (the LAN NIC is the OS default multicast interface, so #76 stays dormant - the "works by accident" case); a host where Sonos sits behind a non-default NIC is where the pinned column wins.
 
 Multi-responder behavior: `ServiceScope::PerNetwork` - any reachable Sonos returns the whole household, so on `GetZoneGroupState` failure (e.g. an asleep first responder) fall through to another. Validated: of 4 LAN speakers, the vanished `.115` returned `NetworkError(connection timed out)`; `.103/.105/.187` each returned the complete topology, 10/10.
@@ -326,6 +326,7 @@ let em = Arc::new(SonosEventManager::new()?);
 let manager = StateManager::builder().with_event_manager(em.clone()).build()?;
 manager.add_devices(devices)?;
 manager.initialize(topology);  // ← NON-OPTIONAL; see warning below.
+let events = manager.iter();   // SDK 0.8: subscribe BEFORE watches; no replay.
 let cached_volume: Option<Volume> =
     manager.watch_property_with_subscription::<Volume>(&speaker_id)?;
 
@@ -338,7 +339,7 @@ em.ensure_service_subscribed(speaker_ip, Volume::SERVICE)?;
 
 ### SDK gotcha: `StateManager::Clone` fans out independent senders
 
-Non-obvious SDK detail with no upstream README. `StateManager` implements `Clone`, and cloning produces a manager whose event channel uses an **independent** `mpsc::Sender` - not a shared `Arc<Sender>`. Two consequences:
+Historical SDK 0.5.2 detail: cloning produced an independent `mpsc::Sender`. SDK 0.8 shares an event fanout instead. The shutdown consequences still apply:
 
 1. **Dropping a clone does not close the channel.** The channel only closes when *every* outstanding clone is dropped. This makes "sender-close as shutdown signal" impossible for any pump thread that holds its own clone of the manager.
 2. **Pump-thread shutdown must be out-of-band and two-stage.** The pump in
@@ -351,11 +352,11 @@ Non-obvious SDK detail with no upstream README. `StateManager` implements `Clone
    oto's thread and leaked the SDK worker; v0.6.4 fixed that second lifecycle
    hole with explicit SDK shutdown.
 
-Verified in the SDK source around `state.rs:855` at the time of v0.4 implementation. If the SDK pin moves off `=0.5.2`, re-verify this invariant - `Clone` semantics aren't part of the SDK's public contract.
+SDK 0.8 recheck: `StateManager::clone` shares an `Arc<EventFanout>` rather than creating a separate sender for each clone. The held manager still keeps the fanout alive, so sender-close is still not a shutdown signal. Explicit SDK shutdown plus oto's stop flag/join remain required; the strong-reference release regression test covers this lifecycle.
 
 ### SDK `.get()` and `get_property` are cache reads, not fetches
 
-`manager.get_property::<P>(&speaker_id) -> Option<P>` reads the in-memory cache only. Returns `None` until a NOTIFY populates the property. There is **no public `.fetch()` method** for one-shot SOAP-driven cache priming on `sonos-sdk-state` - the only ways to populate the cache are `.watch()` (subscribe and wait for the first NOTIFY) or a direct `sonos-api` SOAP call (`oto-wire`'s existing v0.3 path for one-shot reads).
+`manager.get_property::<P>(&speaker_id) -> Option<P>` reads the in-memory cache only. oto uses direct SOAP for one-shot reads. With SDK 0.8, event mapping reads `ChangeEvent.change` (`PropertyChange`) directly: each queued event retains its observed value even if the mutable cache has since advanced. This removes cache lookup races and special group-store lookups from oto's event adapter.
 
 ### Topology change events - how regrouping surfaces (v0.5)
 
@@ -365,7 +366,7 @@ Hardware-confirmed 2026-05-30 (`cargo run -p oto-wire --example topology_probe -
 
 - `GroupMembership`: `KEY = "group_membership"`, `SERVICE = Service::ZoneGroupTopology`, `SCOPE = Scope::Speaker` (`sonos-sdk-state-0.5.2/src/property.rs:419-462`).
 - ZGT NOTIFYs are handled on a **special path** in `event_worker.rs:49-61`: `decode_topology()` returns an empty `Vec<PropertyChange>` (`decoder.rs:277`); instead `apply_topology_changes()` rebuilds the store and, at its final step, emits `ChangeEvent::new(speaker_id, "group_membership", Service::ZoneGroupTopology)` for **each speaker whose membership changed AND is in the `watched` set** (`event_worker.rs:228-243`).
-- So the change arrives on `manager.iter()` as an ordinary `ChangeEvent { property_key: "group_membership", .. }`.
+- In SDK 0.8 the change arrives on `manager.iter()` as `PropertyChange::GroupMembership` inside `ChangeEvent.change` (`property_key()` returns `"group_membership"`).
 
 **Implications for topology events:**
 - Register `manager.watch_property_with_subscription::<GroupMembership>(&sid)` **per speaker** (it is `Scope::Speaker` - NOT per-coordinator like AVTransport).
@@ -424,7 +425,7 @@ A raw `sonos-sdk-callback-server` + own `SUBSCRIBE` + own XML parsing + own chan
 - **Commands:** non-sync FRB fns (Dart `Future`) into blocking `sonos-api` SOAP. `oto-app` holds a `Mutex<Option<HeldWire>>` **locked across the SOAP call**. Deliberate: commands are user-initiated and low-frequency; serializing them is the LAN-politeness story (no command storms against the user's speakers).
 - **Events (v0.4):** a `ChangeIterator`-equivalent `recv()` blocks. Each event stream exposed to Dart is pumped by a dedicated OS thread that reads the iterator and pushes onto an FRB `Stream`. Revisit lock granularity only if v0.4 event threads contend with command threads on the slot lock.
 
-No async/await in oto's own surface code. `sonos-api` uses async internally via `reqwest`; v0.4 also pulls a tokio runtime transitively via `sonos-event-manager` (the reactive event stack's worker thread). Tokio in the lockfile is the cost of any event-stream architecture for Sonos - the reactive layer and any raw-callback-server alternative both require it. The principle is "no async syntax in oto's own surface code" (commands stay sync; the event-pump thread blocks on `manager.iter()`), not "no tokio in the lockfile."
+No async/await in oto's own surface code. Direct SOAP uses blocking ureq; the SDK reactive worker and axum callback server use Tokio internally. SDK 0.8 removed reqwest from the consumer graph. Commands stay synchronous and oto's event-pump thread waits on `recv_timeout`.
 
 ## ZoneGroupState fixture XML
 
@@ -469,7 +470,7 @@ The probe's **immediate** post-BCOS `GetZoneGroupState` re-poll returned a **tra
 
 `sonos_state::{GroupVolume, GroupMute}` (need `use sonos_state::property::Property` in scope for `::KEY`), watched per **coordinator** via `watch_property_with_subscription`, fire correctly. A single group-volume drag produced **23 `group_volume` events** (rapid-fire - **last-wins dedup needed**, ~200 ms window, same as Track / per-speaker Volume). Events arrive stamped with the **coordinator's** `speaker_id` → route via `av_transport_group_id` (coordinator → GroupId). `group_mute` *events* were not exercised this run (operator changed volume only); the `set_group_mute` command works and the watch is registered identically - confirm the mute event in the live grouping test.
 
-**⚠ Read group-scoped values via `get_group_property`, not `get_property`.** `GroupVolume`/`GroupMute` are `Scope::Group` and the SDK stores them in `group_props` keyed by `GroupId`, NOT in the coordinator's `speaker_props` (`sonos-sdk-state-0.5.2/src/state.rs:182-187`). `manager.get_property::<GroupVolume>(&speaker_id)` reads `speaker_props` → returns `None` → the pump silently drops every group event. Use `manager.get_group_property::<GroupVolume>(&GroupId::new(group.as_str()))`. **Unit tests cannot catch this** - `MockWire` auto-emits the `ChangeEvent` directly, bypassing the SDK property lookup; and the spike read `ChangeEvent.property_key` straight off `manager.iter()`, never via `get_property`. Caught only by codex review of PR #73; the corrected `live_grouping.rs` is the sole real-hardware proof. (Per-speaker `volume`/`mute` and coordinator-routed `playback_state`/`current_track` are fine - those live in `speaker_props`.)
+**Historical SDK 0.5.2 pitfall:** group volume/mute required `get_group_property(GroupId)`, not `get_property(SpeakerId)`; the latter silently returned `None`. SDK 0.8 carries these values in typed event payloads, so oto no longer queries either store while mapping events. The queued-payload regression test checks group routing without a cache, and `live_seeded_fast_rediscover` verifies real command-to-event delivery after regrouping.
 
 **No-change → no NOTIFY (event tests must change the value).** `set_group_volume(X)` (and per-speaker `set_volume`) on a device already at `X` produces NO `group_volume`/`volume` NOTIFY - Sonos suppresses unchanged values. A hardware event test that sets a fixed target therefore flakes across re-runs (the group may already be at that value from a prior run): observed on the 2-zone LAN, where `set_group_volume(35)` passed on a fresh group but emitted nothing once the group was already at 35. Prime with one value then set a different one to guarantee a change - see `live_grouping.rs::assert_group_volume_event`.
 

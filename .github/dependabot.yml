@@ -33,18 +33,22 @@ updates:
       timezone: Asia/Tokyo
     open-pull-requests-limit: 5
     groups:
+      sonos:
+        patterns: ["sonos-api", "sonos-sdk-*"]
       cargo:
         patterns: ["*"]
+        exclude-patterns: ["sonos-api", "sonos-sdk-*"]
     ignore:
+      # FRB Rust/Dart/codegen must move together; tracked in #168.
+      - dependency-name: "flutter_rust_bridge"
       # quick-xml is exact-pinned (=0.31.0) to share ONE version with
       # sonos-api / the sonos-sdk-* family ("unify, don't bump", see
       # workspace Cargo.toml). Bumping it (→0.40) breaks the DIDL parser
       # in control.rs AND splits the graph into two quick-xml versions.
       # Track sonos-api — bump only when it does (closed PR #57).
       - dependency-name: "quick-xml"
-      # socket2 is held at 0.5 to share ONE version with hyper's
-      # transitive 0.5.x (reqwest <- sonos-api); a 0.6 bump duplicates it.
-      # Patch updates within 0.5 still flow; the 0.6 minor jump is ignored.
+      # Hold socket2 at the validated 0.5 API for multicast egress selection.
+      # An API migration needs the multi-NIC hardware checks.
       - dependency-name: "socket2"
         update-types:
           - "version-update:semver-minor"
@@ -62,6 +66,16 @@ updates:
     groups:
       pub:
         patterns: ["*"]
+    # Coordinated generator/SDK upgrade is tracked in #168. Keep unrelated
+    # updates flowing until a compatible package set has been validated.
+    ignore:
+      - dependency-name: "flutter_rust_bridge"
+      - dependency-name: "flutter_riverpod"
+      - dependency-name: "riverpod_annotation"
+      - dependency-name: "riverpod_generator"
+      - dependency-name: "freezed"
+      - dependency-name: "freezed_annotation"
+      - dependency-name: "build_runner"
 
   # Cargokit FFI shim — vendored boilerplate carrying a local patch
   # (see LOCAL_PATCHES.md). `ffigen` / `flutter_lints` are dev-only deps

@@ -47,7 +47,7 @@ jobs:
         # ('github_actions', 'cargo', 'pub'), NOT the dependabot.yml names.
         #
         # Contract-pinned dependencies are NEVER auto-merged, not even as
-        # patches: AGENTS.md 2.1 pins sonos-api / sonos-sdk-* exact (=0.5.2,
+        # patches: AGENTS.md 2.1 pins sonos-api / sonos-sdk-* exact (=0.8.0,
         # bumps require re-running the v0.4 acceptance gate on hardware),
         # quick-xml must stay unified with sonos-api, ureq is pinned exact,
         # and flutter_rust_bridge must stay aligned with the codegen version

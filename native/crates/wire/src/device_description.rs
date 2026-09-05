@@ -31,11 +31,18 @@ const READ_TIMEOUT: Duration = Duration::from_secs(2);
 /// as "model unknown for this speaker" and does not fail discovery.
 fn fetch_model(ip: IpAddr) -> Option<String> {
     let url = format!("http://{ip}:1400/xml/device_description.xml");
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(CONNECT_TIMEOUT)
-        .timeout(READ_TIMEOUT)
-        .build();
-    let body = agent.get(&url).call().ok()?.into_string().ok()?;
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .timeout_global(Some(READ_TIMEOUT))
+        .build()
+        .into();
+    let body = agent
+        .get(&url)
+        .call()
+        .ok()?
+        .body_mut()
+        .read_to_string()
+        .ok()?;
     parse_model_name(&body)
 }
 

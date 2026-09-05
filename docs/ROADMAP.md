@@ -175,15 +175,13 @@ v0.5 ships the **reactive strategy** (emit on command-dispatch failure): a speak
 
 `oto-wire/src/ssdp.rs` is a near-drop-in better implementation of `sonos-sdk-discovery`'s `SsdpClient`. The fix is localized - enumerate interfaces, per-NIC bind, `set_multicast_if_v4` - and need not change the public `DiscoveryIterator` API.
 
-**Status:** the `set_multicast_if_v4` egress pin now actually exists in oto-wire (it was described here before it was implemented - closed that drift). Landed + hardware-validated non-regressive on the 4-speaker LAN; #76 stays dormant on the dev host (its LAN NIC is the OS default multicast interface), so the upstream value is for hosts where Sonos sits behind a non-default NIC. Remaining work is purely **offering** the localized fix upstream - adapting it onto upstream's `SsdpClient` shape (more than a copy-paste) and testing against their code.
+**Status:** upstream closed #76 in SDK 0.5.3 by probing interfaces concurrently. SDK 0.8 still lacks oto's explicit `set_multicast_if_v4` egress selection and absolute receive deadline; oto retains both. The egress pin was hardware-validated non-regressive on the dev LAN, where the LAN NIC is already the default multicast interface. Remaining upstream work is offering those two safeguards and validating a non-default-NIC setup.
 
-Offer as a PR against [`tatimblin/sonos-sdk#76`](https://github.com/tatimblin/sonos-sdk/issues/76). Acceptance is upside-only: oto-wire keeps its own SSDP either way (the [`oto-wire` boundary](ARCHITECTURE.md#crates) - only crate that touches the SDK), so there's no fork-maintenance burden if upstream declines.
+Use [#76](https://github.com/tatimblin/sonos-sdk/issues/76) as background for a follow-up. Replacing oto's SSDP is conditional on equivalent safeguards and hardware validation; no discovery replacement is part of the SDK 0.8 migration.
 
 ### Upstream TLS-feature cleanup
 
-oto now carries a local `sonos-sdk` fork (see [LOCAL_PATCHES.md](../LOCAL_PATCHES.md) #2) that strips an unused/unnecessary `native-tls` backend from three `sonos-sdk` crates - it was forcing a vendored, Perl-driven OpenSSL build on Android for a TLS backend nothing ever invokes at runtime. The fix is small (drop or feature-gate one `reqwest` line per crate) and evidence-backed (two of the three crates never reference `reqwest` in source at all).
-
-Filing this upstream is a follow-up, not yet done. Same shape as the SSDP item above: acceptance is upside-only, oto keeps the local patch either way.
+Resolved by the aligned SDK 0.8 upgrade. Upstream [#107](https://github.com/tatimblin/sonos-sdk/pull/107) removed the affected HTTP dependencies; oto now resolves from crates.io and retires its TLS fork ([LOCAL_PATCHES.md](../LOCAL_PATCHES.md) #2). No upstream TLS patch remains to file.
 
 ### IPv6 SSDP coverage
 
