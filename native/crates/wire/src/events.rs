@@ -107,12 +107,10 @@ pub(crate) struct PumpInputs {
 /// `POLL_INTERVAL` (~250 ms).
 ///
 /// **Shutdown design:** we do NOT rely on dropping a `StateManager`
-/// "keepalive" to close the SDK's event channel. `StateManager::Clone`
-/// fans out independent `mpsc::Sender`s (see
-/// `sonos-sdk-state-0.5.2/src/state.rs:855`); the pump thread also
-/// holds its own clone (via the `move` closure on the manager argument)
-/// and would block forever on its own sender otherwise. The poll-loop +
-/// atomic-stop pattern avoids the fan-out trap entirely.
+/// "keepalive" to close the SDK's event channel. SDK 0.8 manager clones
+/// share the event fanout; the pump thread's manager keeps it alive.
+/// Waiting for channel-close from that thread would therefore deadlock.
+/// The poll-loop + atomic-stop pattern avoids that trap.
 pub(crate) struct EventPump {
     /// Set only while the thread is live. Cleared in `Drop` before join.
     handle: Option<JoinHandle<()>>,
@@ -199,12 +197,17 @@ impl EventPump {
         let topology = build_sdk_topology(&inputs);
         manager.initialize(topology);
 
+        // SDK 0.8 iterators subscribe without replay. Install our receiver
+        // before any watch can emit its initial NOTIFY, then move that same
+        // queue into the pump thread so startup scheduling cannot lose seeds.
+        let iter = manager.iter();
+
         // Register per-(speaker × property) watches. The SDK's first
         // NOTIFY per subscription seeds the cache (sonos-notes § "the
         // initial SUBSCRIBE NOTIFY *is* the seed probe").
         //
         // We do NOT attempt to surface per-speaker subscription
-        // failures here. The SDK at `=0.5.2` does not expose the
+        // failures here. The SDK at `=0.8.0` still does not expose the
         // information - see `register_watches` for the full citation.
         // This is a known shortfall of the spec's "in-band per-speaker
         // failure surfacing" contract; tracked as v0.5 follow-up.
@@ -225,6 +228,7 @@ impl EventPump {
             .spawn(move || {
                 pump_loop(
                     manager,
+                    iter,
                     coord_to_group,
                     speaker_to_coord,
                     tx,
@@ -270,8 +274,8 @@ impl Drop for EventPump {
         // (≤ POLL_INTERVAL). Then join.
         //
         // Why this works where an earlier design didn't:
-        // `StateManager::Clone` fans out independent `mpsc::Sender`s
-        // (state.rs:855). The previous design held a "keepalive"
+        // SDK 0.8 manager clones share the event fanout (0.5.2 used
+        // independent senders). The previous design held a "keepalive"
         // manager clone in this struct AND moved another clone into
         // the pump thread, on the (mistaken) assumption that the SDK's
         // event channel would close when the keepalive dropped. It
@@ -376,21 +380,21 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
 /// "ergonomic footgun").
 ///
 /// **No per-speaker error reporting.** The
-/// SDK at `=0.5.2` does not expose per-speaker subscription failures:
+/// SDK at `=0.8.0` still does not expose per-speaker subscription failures:
 ///
 ///   - `watch_property_with_subscription::<P>` swallows
 ///     `ensure_service_subscribed` errors with `tracing::warn!` and
 ///     returns `Ok(...)`. See
-///     `sonos-sdk-state-0.5.2/src/state.rs:610-633`.
+///     `sonos-sdk-state-0.8.0/src/state.rs::watch_property_with_subscription`.
 ///   - `ensure_service_subscribed` itself only fails if the broker's
 ///     command channel is closed; it returns `Ok` and queues a
 ///     `Subscribe` command for an async worker even when the target
 ///     device is unreachable. See
-///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:381-410`.
+///     `sonos-sdk-event-manager-0.8.0/src/manager.rs::ensure_service_subscribed`.
 ///   - `is_service_subscribed` is a ref-count check (true iff a
 ///     `Subscribe` command was *queued*), not a "device responded to
 ///     SUBSCRIBE" probe. See
-///     `sonos-sdk-event-manager-0.5.2/src/manager.rs:497-502`.
+///     `sonos-sdk-event-manager-0.8.0/src/manager.rs::is_service_subscribed`.
 ///
 /// The previous version of this fn carried `if let Err(e) = manager
 /// .watch_property_with_subscription::<P>(...)` branches emitting
@@ -457,18 +461,17 @@ fn register_watches(manager: &sonos_state::StateManager, inputs: &PumpInputs) {
 ///   - the downstream consumer drops `rx`, so our `tx.send` returns Err.
 ///
 /// We deliberately do NOT rely on `iter.recv()` returning `None` to
-/// drive shutdown - `StateManager::Clone` fans out independent
-/// `mpsc::Sender`s and this thread holds one transitively (via its
-/// `manager` argument). Blocking-recv would self-deadlock on our own
-/// sender clone. See `EventPump::drop` for the longer explanation.
+/// drive shutdown - this thread's manager keeps the SDK event fanout
+/// alive. Blocking-recv would self-deadlock waiting for that fanout to
+/// close. See `EventPump::drop` for the longer explanation.
 fn pump_loop(
-    manager: sonos_state::StateManager,
+    _manager: sonos_state::StateManager,
+    iter: sonos_state::ChangeIterator,
     coord_to_group: HashMap<SpeakerId, GroupId>,
     speaker_to_coord: HashMap<SpeakerId, SpeakerId>,
     tx: Sender<ChangeEvent>,
     stop: Arc<AtomicBool>,
 ) {
-    let iter = manager.iter();
     let mut topology = TopologyFilter::new();
     while !stop.load(Ordering::Acquire) {
         let Some(upstream) = iter.recv_timeout(POLL_INTERVAL) else {
@@ -483,13 +486,9 @@ fn pump_loop(
             continue;
         };
         let speaker = SpeakerId::new(upstream.speaker_id.as_str());
-        let Some(event) = map_upstream_event(
-            &manager,
-            &upstream,
-            &speaker,
-            &coord_to_group,
-            &speaker_to_coord,
-        ) else {
+        let Some(event) =
+            map_upstream_event(&upstream, &speaker, &coord_to_group, &speaker_to_coord)
+        else {
             continue;
         };
         // Apply the topology filter (seed suppression + post-regroup
@@ -630,84 +629,42 @@ impl TopologyFilter {
 
 /// Pure mapping: upstream `sonos_state::ChangeEvent` → optional
 /// `oto_core::ChangeEvent`. Returns `None` if:
-///   - the property key is unknown (we only handle 4)
-///   - the property value isn't in the cache yet (cold-start race;
-///     next NOTIFY will resend)
-///   - AVTransport event from a non-coordinator (coordinator-only
+///   - the typed property is outside oto's watched surface
+///   - a group-addressed event comes from a non-coordinator (coordinator-only
 ///     filter - see `av_transport_group_id`)
 fn map_upstream_event(
-    manager: &sonos_state::StateManager,
     upstream: &sonos_state::ChangeEvent,
     speaker: &SpeakerId,
     coord_to_group: &HashMap<SpeakerId, GroupId>,
     speaker_to_coord: &HashMap<SpeakerId, SpeakerId>,
 ) -> Option<ChangeEvent> {
-    use sonos_state::{
-        CurrentTrack, GroupMute, GroupVolume, Mute, PlaybackState as SdkPlaybackState, Volume,
-    };
+    use sonos_state::PropertyChange;
 
-    let sdk_sid = sonos_state::SpeakerId::new(speaker.as_str());
-
-    match upstream.property_key {
-        "volume" => {
-            let v: Volume = manager.get_property::<Volume>(&sdk_sid)?;
-            Some(volume_event(speaker.clone(), v))
-        }
-        "mute" => {
-            let m: Mute = manager.get_property::<Mute>(&sdk_sid)?;
-            Some(mute_event(speaker.clone(), m))
-        }
-        "playback_state" => {
-            let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            let s: SdkPlaybackState = manager.get_property::<SdkPlaybackState>(&sdk_sid)?;
-            Some(ChangeEvent::Playback {
-                group,
-                state: map_playback_state(s),
-            })
-        }
-        "current_track" => {
-            let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            let t: CurrentTrack = manager.get_property::<CurrentTrack>(&sdk_sid)?;
-            Some(ChangeEvent::Track {
-                group,
-                track: map_current_track(t),
-            })
-        }
-        // v0.5.1: GroupRenderingControl group volume/mute. Group-scoped,
-        // coordinator-routed - same coordinator-only filter as AVTransport
-        // (events arrive stamped with the coordinator's speaker_id;
-        // sonos-notes § Group operations). No dedup: a volume drag fires
-        // ~23 distinct events and the StateManager cache is last-wins,
-        // exactly like per-speaker `volume`.
-        "group_volume" => {
-            let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            // GroupRenderingControl values are `Scope::Group` - the SDK stores
-            // them in `group_props` keyed by GroupId, NOT in the coordinator's
-            // `speaker_props` (sonos-sdk-state state.rs:182-187). `get_property`
-            // reads speaker_props and would return None here, silently dropping
-            // every group event; read via `get_group_property` by GroupId.
-            let sdk_gid = sonos_state::GroupId::new(group.as_str());
-            let v: GroupVolume = manager.get_group_property::<GroupVolume>(&sdk_gid)?;
-            Some(group_volume_event(group, v))
-        }
-        "group_mute" => {
-            let group = av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?;
-            let sdk_gid = sonos_state::GroupId::new(group.as_str());
-            let m: GroupMute = manager.get_group_property::<GroupMute>(&sdk_gid)?;
-            Some(group_mute_event(group, m))
-        }
-        // v0.5: ZoneGroupTopology change. The SDK emits one
-        // `group_membership` event per affected speaker on a regroup
-        // (see sonos-notes § "Topology change events"). No usable payload -
-        // the authoritative topology is re-pulled via `refresh_topology`
-        // SOAP downstream - so this maps to the payload-less
-        // `TopologyChanged`. Emitted from EVERY speaker (not
-        // coordinator-filtered like AVTransport): the per-speaker fan-out
-        // is deduped by the Dart `TopologyController`'s debounce.
-        "group_membership" => Some(ChangeEvent::TopologyChanged),
-        // Any other property key (e.g. "position" if some future code
-        // path registers it) is silently dropped here. Document
-        // explicitly so the silence is intentional.
+    // SDK 0.8 carries the value observed for this event. Reading its mutable
+    // cache instead could replace queued transitions with a later value.
+    match &upstream.change {
+        PropertyChange::Volume(v) => Some(volume_event(speaker.clone(), v.clone())),
+        PropertyChange::Mute(m) => Some(mute_event(speaker.clone(), m.clone())),
+        PropertyChange::PlaybackState(state) => Some(ChangeEvent::Playback {
+            group: av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?,
+            state: map_playback_state(state.clone()),
+        }),
+        PropertyChange::CurrentTrack(track) => Some(ChangeEvent::Track {
+            group: av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?,
+            track: map_current_track(track.clone()),
+        }),
+        PropertyChange::GroupVolume(v) => Some(group_volume_event(
+            av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?,
+            v.clone(),
+        )),
+        PropertyChange::GroupMute(m) => Some(group_mute_event(
+            av_transport_group_id(speaker, speaker_to_coord, coord_to_group)?,
+            m.clone(),
+        )),
+        // The authoritative topology is still re-read through direct SOAP.
+        // Keep seed suppression and stale-group filtering in TopologyFilter.
+        PropertyChange::GroupMembership(_) => Some(ChangeEvent::TopologyChanged),
+        // Properties outside oto's watched surface are intentionally ignored.
         _ => None,
     }
 }
@@ -805,6 +762,107 @@ mod tests {
     }
     fn gid(s: &str) -> GroupId {
         GroupId::new(s)
+    }
+
+    #[test]
+    fn seed_queued_before_pump_thread_starts_is_delivered() {
+        let inputs = fake_inputs_one_speaker();
+        // No event manager: exercise the real SDK fanout without networking.
+        let manager = sonos_state::StateManager::new().expect("cache-only manager");
+        manager.initialize(build_sdk_topology(&inputs));
+        let iter = manager.iter();
+        register_watches(&manager, &inputs);
+        let speaker = inputs.speaker_ips.keys().next().unwrap().clone();
+        manager.set_property(
+            &sonos_state::SpeakerId::new(speaker.as_str()),
+            sonos_state::Volume::new(23),
+        );
+        let (tx, rx) = mpsc::channel();
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread_stop = Arc::clone(&stop);
+        let handle = std::thread::spawn(move || {
+            pump_loop(
+                manager,
+                iter,
+                inputs.coord_to_group,
+                inputs.speaker_to_coord,
+                tx,
+                thread_stop,
+            );
+        });
+        let received = rx.recv_timeout(Duration::from_secs(2));
+        // Always stop/join before asserting, including on a regression.
+        stop.store(true, Ordering::Release);
+        handle.join().expect("pump exits");
+        assert_eq!(
+            received.unwrap(),
+            ChangeEvent::Volume {
+                speaker,
+                volume: oto_core::Volume::new(23).unwrap(),
+            }
+        );
+    }
+
+    #[test]
+    fn queued_payloads_preserve_observed_values_and_group_routing() {
+        use sonos_state::{ChangeSource, PropertyChange, WriteStamp};
+        let coordinator = sid("RINCON_C");
+        let follower = sid("RINCON_F");
+        let group = gid("RINCON_C:1");
+        let s2c = HashMap::from([
+            (coordinator.clone(), coordinator.clone()),
+            (follower.clone(), coordinator.clone()),
+        ]);
+        let c2g = HashMap::from([(coordinator.clone(), group.clone())]);
+        let changes = [
+            PropertyChange::PlaybackState(sonos_state::PlaybackState::Playing),
+            PropertyChange::PlaybackState(sonos_state::PlaybackState::Transitioning),
+            PropertyChange::PlaybackState(sonos_state::PlaybackState::Playing),
+            PropertyChange::GroupVolume(sonos_state::GroupVolume::new(23)),
+            PropertyChange::GroupMute(sonos_state::GroupMute::new(true)),
+        ];
+        // Queue observations before mapping: a later cache value must not
+        // replace an earlier transition. Group values need no store lookup.
+        let queued: Vec<_> = changes
+            .into_iter()
+            .map(|change| {
+                sonos_state::ChangeEvent::new(
+                    sonos_state::SpeakerId::new(coordinator.as_str()),
+                    change,
+                    WriteStamp::now(ChangeSource::Event),
+                )
+            })
+            .collect();
+        let mapped: Vec<_> = queued
+            .iter()
+            .filter_map(|event| map_upstream_event(event, &coordinator, &c2g, &s2c))
+            .collect();
+        assert_eq!(
+            mapped,
+            vec![
+                ChangeEvent::Playback {
+                    group: group.clone(),
+                    state: oto_core::PlaybackState::Playing
+                },
+                ChangeEvent::Playback {
+                    group: group.clone(),
+                    state: oto_core::PlaybackState::Transitioning
+                },
+                ChangeEvent::Playback {
+                    group: group.clone(),
+                    state: oto_core::PlaybackState::Playing
+                },
+                ChangeEvent::GroupVolume {
+                    group: group.clone(),
+                    volume: oto_core::Volume::new(23).unwrap()
+                },
+                ChangeEvent::GroupMute { group, muted: true },
+            ]
+        );
+        for mut event in queued {
+            event.speaker_id = sonos_state::SpeakerId::new(follower.as_str());
+            assert!(map_upstream_event(&event, &follower, &c2g, &s2c).is_none());
+        }
     }
 
     // ── av_transport_group_id ─────────────────────────────────────────

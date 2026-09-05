@@ -123,6 +123,8 @@ fn main() {
         .expect("state manager build");
     manager.add_devices(devices).expect("add_devices");
     manager.initialize(Topology::new(sdk_speakers, groups));
+    // SDK 0.8 iterators do not replay events emitted before subscription.
+    let iter = manager.iter();
 
     // 3. Watch GroupMembership PER SPEAKER (membership is speaker-scoped).
     for s in &snap.speakers {
@@ -131,7 +133,6 @@ fn main() {
     }
 
     // 4. Drain the seed NOTIFYs (~3 s) so we only count regroup-driven events.
-    let iter = manager.iter();
     let drain_end = Instant::now() + Duration::from_secs(3);
     while Instant::now() < drain_end {
         let _ = iter.recv_timeout(Duration::from_millis(100));
@@ -148,7 +149,7 @@ fn main() {
     let deadline = Instant::now() + Duration::from_secs(300);
     while Instant::now() < deadline {
         if let Some(ev) = iter.recv_timeout(Duration::from_millis(500)) {
-            let marker = if ev.property_key == GROUP_MEMBERSHIP_KEY {
+            let marker = if ev.property_key() == GROUP_MEMBERSHIP_KEY {
                 gm_count += 1;
                 ">>> TOPOLOGY"
             } else {
@@ -157,8 +158,8 @@ fn main() {
             println!(
                 "{marker}  speaker={}  key={}  service={:?}",
                 ev.speaker_id.as_str(),
-                ev.property_key,
-                ev.service
+                ev.property_key(),
+                ev.service()
             );
             std::io::stdout().flush().unwrap();
         }

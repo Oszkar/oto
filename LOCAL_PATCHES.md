@@ -1,14 +1,14 @@
 # Local patches
 
-Catalog of every file under `app/rust_builder/cargokit/` (and any other vendored or forked third-party code, including crates patched via `[patch.crates-io]`) that we've modified locally. Anyone syncing the vendored source from upstream **must** re-apply each entry here, or the upstream version will silently replace our patch and reintroduce the bug it fixed.
+Catalog of local changes to vendored or forked third-party code. Re-apply active entries when syncing their upstream source. Retired entries preserve history and must not be reintroduced automatically.
 
 ## Inventory
 
 | # | File | Patch summary | Why | Status |
 |---|------|---------------|-----|--------|
 | 1 | `app/rust_builder/cargokit/gradle/plugin.gradle` | Drop 32-bit Android ABIs from the Rust build target list | Project targets `minSdk = 35` (Android 15+, arm64 + x86_64 only); building `i686-linux-android` and `armv7-linux-androideabi` is wasted work and the targets aren't installed by `rust-toolchain.toml` | Active |
-| 2 | `sonos-api` / `sonos-sdk-discovery` / `sonos-sdk-callback-server` / `sonos-sdk-stream` (forked, via `[patch.crates-io]`) | Drop the unused/unnecessary `native-tls` TLS backend from `reqwest` on the 3 `sonos-sdk` crates that pull it | Forced a vendored, Perl-driven OpenSSL build on Android (and a Linux/macOS/WSL build-host requirement) for a TLS backend that's never invoked at runtime | Active |
-| 3 | `app/rust_builder/macos/oto_native.podspec` | Append `-framework SystemConfiguration` to `OTHER_LDFLAGS` | `liboto_native` pulls `system_configuration` (via `reqwest` proxy detection); the staticlib can't carry the framework link directive, so the macOS Runner fails to link with undefined `_SCDynamicStore*` / `_SCNetwork*` / `_kSCNetworkInterface*` symbols. macOS is a dev-only target (not shipped; oto ships Windows + Android) | Active |
+| 2 | Former `sonos-sdk` fork via `[patch.crates-io]` | Strip unused native TLS | Upstream 0.8 removes the affected dependencies | Retired 2026-09-05 |
+| 3 | `app/rust_builder/macos/oto_native.podspec` | Append `-framework SystemConfiguration` to `OTHER_LDFLAGS` | Historically required by `reqwest` proxy detection. That dependency disappeared with SDK 0.8.0; remove the flag after a macOS build confirms it is unnecessary. macOS is a dev-only target (not shipped; oto ships Windows + Android) | Retained pending macOS validation |
 
 ---
 
@@ -66,6 +66,13 @@ mapped onto cargo target triples internally. Until then: patch.
 
 ## 2. sonos-sdk fork - drop unused `native-tls` backend
 
+**Retired 2026-09-05 with the aligned SDK 0.8.0 upgrade.** Upstream
+[#107](https://github.com/tatimblin/sonos-sdk/pull/107) replaced the old HTTP
+dependencies. oto now resolves the full SDK family from crates.io, with no
+`[patch.crates-io]` block or fork allowlist. `reqwest`, `warp`, `h2`,
+`native-tls`, and OpenSSL are absent from the resolved graph. The rationale
+and diff below describe the former 0.5.2 workaround, not current setup.
+
 **Repo:** [`Oszkar/sonos-sdk`](https://github.com/Oszkar/sonos-sdk) (fork of [`tatimblin/sonos-sdk`](https://github.com/tatimblin/sonos-sdk)) **Branch/tag:** `oto-android-tls-patch` / `oto-android-tls-patch-v0.5.2`, cut from upstream tag `sonos-api-v0.5.2`. **Wired in via:** `[patch.crates-io]` in `native/Cargo.toml`, pinned to commit `181e6bf6ac23d57a2c5b0f0766f220b55866afd6`. Also requires `native/deny.toml`'s `[sources] allow-git` to list the fork URL.
 
 ### What the patch does
@@ -107,6 +114,11 @@ No upstream issue filed yet. Link it here once one exists.
 
 **File:** `app/rust_builder/macos/oto_native.podspec` **Affected block:** the second `s.pod_target_xcconfig` (`OTHER_LDFLAGS`).
 
+The explanation below records the original failure. SDK 0.8.0 removed
+`reqwest` and `system-configuration` from our dependency graph. The flag is
+retained until a macOS build validates its removal; it is no longer a
+known requirement of the current dependency graph.
+
 ### What the patch does
 
 Appends `-framework SystemConfiguration` to the existing `-force_load ${BUILT_PRODUCTS_DIR}/liboto_native.a`:
@@ -135,6 +147,9 @@ Appends `-framework SystemConfiguration` to the existing `-force_load ${BUILT_PR
 4. Update this file if the patch's location or content changed.
 
 ### sonos-sdk fork (entry #2)
+
+Historical procedure only: entry #2 is retired. Future SDK upgrades should
+first check upstream dependencies rather than recreate this fork.
 
 1. If bumping the `sonos-api`/`sonos-sdk-*` pin, re-cut the `oto-android-tls-patch` branch from the new upstream tag in the `Oszkar/sonos-sdk` fork and re-apply the three edits above.
 2. Update the `rev` in `native/Cargo.toml`'s `[patch.crates-io]` block to the new commit.

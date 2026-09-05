@@ -11,13 +11,13 @@ ignore = [
     # `paste` is an unmaintained proc-macro crate (advisory = unmaintained only,
     # no security impact). It is a transitive dependency of sonos-api: the full
     # path is paste → sonos-api → oto-wire. No upgrade path while sonos-api is
-    # pinned =0.5.2.
+    # pinned =0.8.0.
     # TODO(v0.7): re-evaluate if the sonos-api pin is changed.
-    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api (paste → sonos-api → oto-wire); no upgrade path on pinned sonos-api =0.5.2" },
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api; still present in pinned sonos-api =0.8.0" },
     # `quick-xml v0.31.0` - two DoS-class parsing advisories (RUSTSEC-2026-0194
     # quadratic duplicate-attribute check; RUSTSEC-2026-0195 unbounded
     # namespace-declaration allocation), both fixed in >=0.41.0. quick-xml is
-    # pinned =0.31.0 transitively via sonos-api =0.5.2 (DIDL-Lite parsing), so
+    # pinned =0.31.0 transitively via sonos-api =0.8.0 (DIDL-Lite parsing), so
     # there is no local upgrade path while that pin holds. Practical exposure:
     # discovery does not validate the SSDP LOCATION host (accepted risk,
     # tracked as v0.7 hardening - see ARCHITECTURE.md "SSDP responses are
@@ -29,16 +29,10 @@ ignore = [
     # unsafety - and requires the attacker to already be on the LAN. Revisit
     # alongside the v0.7 SSDP hardening work and when the sonos-api pin is
     # bumped to a release that depends on quick-xml >=0.41.0.
-    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
-    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.5.2, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
-    # `h2 v0.3.27` can queue empty DATA frames without limit
-    # (RUSTSEC-2026-0258, fixed only in h2 >=0.4.16). It is locked to the old
-    # h2 line through both reqwest 0.11 and warp 0.3 in the exact-pinned Sonos
-    # SDK stack, so there is no compatible leaf update. Exposure is LAN-local
-    # DoS against HTTP clients / the callback server, not memory unsafety.
-    # TODO(v0.7): remove when the sonos-api pin or local SDK patch moves its
-    # HTTP stack to h2 >=0.4.16.
-    { id = "RUSTSEC-2026-0258", reason = "LAN-local DoS in h2 0.3.27; transitive via reqwest 0.11 / warp 0.3 in exact-pinned sonos-api stack; no compatible leaf update, fixed only on h2 >=0.4.16" },
+    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.8.0, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
+    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.8.0, no upgrade path; LAN-local XML input (any SSDP responder, LOCATION unvalidated until v0.7), DoS-only exposure" },
+    # RUSTSEC-2026-0258 (h2 0.3) retired with SDK 0.8: reqwest, warp,
+    # and h2 left the resolved graph. No exception is needed now.
     # RUSTSEC-2025-0134 (rustls-pemfile v1) formerly ignored here: it came
     # in via sonos-sdk-discovery's default-tls reqwest feature. Retired
     # 2026-07-01 when that feature was dropped (LOCAL_PATCHES.md #2) and
@@ -80,6 +74,4 @@ allow-wildcard-paths = true
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# LOCAL PATCH (oto) fork - see native/Cargo.toml [patch.crates-io] and
-# LOCAL_PATCHES.md #2.
-allow-git = ["https://github.com/Oszkar/sonos-sdk"]
+allow-git = []

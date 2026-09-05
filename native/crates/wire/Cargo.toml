@@ -26,7 +26,7 @@ oto-core = { workspace = true }
 # UPnP SOAP client for control operations (play/pause/next/previous/
 # volume/mute/state). Direct dep; SonosClient + services::av_transport /
 # rendering_control are not re-exported by any other dep.
-# Pin =0.5.2 (workspace).
+# Pin =0.8.0 (workspace).
 sonos-api = { workspace = true }
 # Local interface enumeration for multi-NIC SSDP — std has no API for
 # this. §7-approved (2026-05-15); contained to oto-wire. Win+Android+*nix.
@@ -51,7 +51,7 @@ mio = { version = "1.2", features = ["net", "os-poll"] }
 quick-xml = { workspace = true }
 # Blocking HTTP client for the v0.5 model repopulate — fetches each
 # speaker's device_description.xml for `<modelName>`. Already in the locked
-# graph (transitive via sonos-api); direct edge only. See workspace dep.
+# graph (transitive via SDK discovery); direct edge only. See workspace dep.
 ureq = { workspace = true }
 # Log-emission facade for oto-wire's own diagnostics (e.g. a panicked event
 # pump thread - see events.rs). AGENTS.md §3 allows this at the oto-wire
@@ -67,10 +67,10 @@ sonos-sdk-state = { workspace = true }
 sonos-sdk-event-manager = { workspace = true }
 # `stream` + `callback-server` are reached transitively (event-manager →
 # stream → callback-server); their types are not named directly in `src/`.
-# Declared explicitly anyway so the workspace `=0.5.2` pin actually binds
+# Declared explicitly anyway so the workspace `=0.8.0` pin actually binds
 # them (a `[workspace.dependencies]` entry only pins what a crate
 # references) — this holds the WHOLE reactive stack at the
-# hardware-validated 0.5.2. Not dead deps; do not drop.
+# aligned SDK 0.8.0. Not dead deps; do not drop.
 sonos-sdk-stream = { workspace = true }
 sonos-sdk-callback-server = { workspace = true }
 

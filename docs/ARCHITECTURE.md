@@ -44,7 +44,7 @@ Solid arrows are command-direction (UI → FRB → ... → speakers); dashed arr
 | `oto_native` | `native/` | FRB cdylib. Thin shim - `discover()` / `refresh_topology()` + non-sync commands (playback, group volume/mute, form/break, `track_position`) + identity/playback/event DTOs + `CommandError`; delegates to `oto-app`. Also exposes a `dev_*` mock-injection seam (`dev_discover_mock`, `dev_push_subscription_error_on_mock`, `dev_push_topology_change_on_mock`, a `MockWireArc` adapter) so `app/integration_test/` can drive the v0.4 event surface without a LAN. The `pub fn` symbols are unconditional (FRB's generated glue references every one, so `cfg`-gating them would break the release cdylib's link), but each body is internally `cfg(debug_assertions)`-gated - inert (returns an error) in release builds, never touching the production wire. |
 | `oto-app` | `native/crates/app` | Owns runtime state (the active `Wire` in a process-global, lock held across SOAP); routes `discover()` / `refresh_topology()`, the playback + group commands, and `track_position` reads. |
 | `oto-core` | `native/crates/core` | Pure domain types (`Speaker`, `Group`, `TransportState`, `Track`, `Volume`, identifiers, `SpeakerState`, `SpeakerIdentity`, `GroupIdentity`, `DiscoverySnapshot`) + the `Wire` trait + `WireError`. No networking, no async, no third-party deps. |
-| `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP + direct `sonos_api` (=0.5.2) SOAP for discovery, playback control, group operations (v0.5.1: form/break + group volume/mute), and one-shot state reads; v0.4 live property events (+ v0.5.1 group volume/mute) use the upstream reactive state/event layer from the same SDK family. No `SonosSystem`. Interior-mutable id→addr / group→coordinator / speaker→coordinator cache populated by `discover()`. A no-SSDP seeded constructor (`new_seeded`) backs the v0.5.1 fast re-discover. |
+| `oto-wire` | `native/crates/wire` | Production `Wire`: own multi-NIC SSDP + direct `sonos_api` (=0.8.0) SOAP for discovery, playback control, group operations (v0.5.1: form/break + group volume/mute), and one-shot state reads; live property events use typed payloads from the aligned upstream reactive SDK crates. No `SonosSystem`. Interior-mutable id→addr / group→coordinator / speaker→coordinator cache populated by `discover()`. A no-SSDP seeded constructor (`new_seeded`) backs fast re-discover. |
 | `oto-mock` | `native/crates/mock` | Stateful `Wire` implementation (`MockWire`) - in-memory per-speaker model (commands mutate it, `speaker_state` reflects it); integration tests run without a LAN. |
 
 The Dart side is Flutter + Riverpod 3 (codegen). Providers live in `app/lib/src/state/`; FRB-generated bindings in `app/lib/src/rust/`.
@@ -198,7 +198,7 @@ pub trait Wire {
 
 `DiscoverySnapshot` is built from lean identity types (`SpeakerIdentity` / `GroupIdentity`).
 
-**Discovery.** `oto-wire` runs its own multi-interface SSDP to collect responder IPs, then issues a direct `sonos_api` `GetZoneGroupState` SOAP call to any responding speaker to retrieve the full household topology. The snapshot is built from ZoneGroupTopology members; `<Satellite Invisible="1">` children are folded into their primary speaker and never surfaced as standalone players (the v0.1 bonded-as-standalone bug is fixed by construction); `<VanishedDevices>` are ignored. The direct discovery/control path uses `sonos-api =0.5.2` (+ `quick-xml =0.31.0` for DIDL-Lite); v0.4 events add the upstream reactive state/event crates. Protocol detail: [sonos-notes.md § SSDP discovery](sonos-notes.md#ssdp-discovery), [§ Topology](sonos-notes.md#topology---getzonegroupstate-soap).
+**Discovery.** `oto-wire` runs its own multi-interface SSDP to collect responder IPs, then issues a direct `sonos_api` `GetZoneGroupState` SOAP call to any responding speaker to retrieve the full household topology. The snapshot is built from ZoneGroupTopology members; `<Satellite Invisible="1">` children are folded into their primary speaker and never surfaced as standalone players; `<VanishedDevices>` are ignored. The direct discovery/control path uses `sonos-api =0.8.0` (+ `quick-xml =0.31.0` for DIDL-Lite), aligned with the upstream reactive SDK crates. All resolve from crates.io: SDK 0.8 removed the dependencies that required the TLS fork. Upstream discovery now probes per interface, but oto retains explicit multicast egress selection and a single absolute receive deadline. Protocol detail: [sonos-notes.md § SSDP discovery](sonos-notes.md#ssdp-discovery), [§ Topology](sonos-notes.md#topology---getzonegroupstate-soap).
 
 **Playback control.** `oto-wire` holds an interior-mutable id→addr / group→coordinator / speaker→coordinator cache (populated by `discover()`). Commands issue direct `sonos_api::SonosClient::execute_enhanced(ip, op)` SOAP calls. `quick-xml` is used for DIDL-Lite track-metadata parsing.
 
@@ -206,17 +206,19 @@ pub trait Wire {
 (`crates/wire/src/events.rs`). The pump wraps the upstream SDK's `StateManager` +
 `SonosEventManager` + `EventBroker` stack (`sonos-sdk-state` /
 `sonos-sdk-event-manager` / `sonos-sdk-stream` /
-`sonos-sdk-callback-server`, all pinned `=0.5.2`), registers a per-property
-`watch_property_with_subscription` for every known speaker, and converts each
-upstream property change into an `oto_core::ChangeEvent` that it sends down an
+`sonos-sdk-callback-server`, all pinned `=0.8.0`). It creates the iterator before
+registering any `watch_property_with_subscription`: SDK 0.8 has no event replay,
+so subscribing later could lose initial NOTIFYs. It then converts each
+upstream typed property payload into an `oto_core::ChangeEvent` that it sends down an
 unbounded `std::sync::mpsc` channel. Dropping the wire performs two distinct
 shutdown steps. First, `EventPump::Drop` explicitly calls
 `SonosEventManager::shutdown()` to break the SDK worker's self-owned `Arc` cycle
 and let its reactive stack release asynchronously. It then sets an
 `Arc<AtomicBool>` stop flag and joins oto's pump thread within one polling
-interval. Both steps are load-bearing: `StateManager::Clone` fans out independent
-senders, so dropping a clone neither closes the pump channel nor asks the SDK
-worker to stop.
+interval. Both steps remain load-bearing: SDK 0.8 manager clones share the
+event fanout, so dropping a clone neither closes the pump channel nor asks
+the SDK worker to stop. Mapping uses each event's observed value rather than
+re-reading the mutable SDK cache, preserving queued intermediate transitions.
 
 ```mermaid
 sequenceDiagram
@@ -270,7 +272,7 @@ The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when
   with Dart's identity-based `List ==`, so a freshly deserialized topology is
   never equal to the previous one and today it *does* transition - an
   implementation detail of the generated equality, not a contract.)
-- **Group volume/mute events (v0.5.1).** The pump also watches `GroupVolume` / `GroupMute` (GroupRenderingControl, `Scope::Group`, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}`. These are read from the SDK's group-property store via `get_group_property(GroupId)` - NOT the per-speaker `get_property`, which reads `speaker_props` and would silently drop every group event (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike---hardware-confirmed-2026-06-04)).
+- **Group volume/mute events (v0.5.1).** The pump watches `GroupVolume` / `GroupMute` (GroupRenderingControl, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}` from the SDK's typed payload. No per-speaker or group cache lookup is needed. Coordinator filtering and post-regroup stale-group suppression still apply (see [sonos-notes § Group operations](sonos-notes.md#group-operations-v051-spike---hardware-confirmed-2026-06-04)).
 - **Subscription health.** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
 
 ## Frontend shell (responsive, v0.6.3-v0.6.4)

@@ -582,9 +582,9 @@ impl Wire for SonosWire {
         // shot per wire - repeated calls error with `AlreadySubscribed`.
         //
         // Per-speaker subscription failures do NOT currently surface
-        // in-band. The SDK at `=0.5.2` swallows
+        // in-band. The SDK at `=0.8.0` still swallows
         // `watch_property_with_subscription` failures internally
-        // (state.rs:610-633 - tracing::warn + Ok(option)) and
+        // (state.rs - tracing::warn + Ok(option)) and
         // `is_service_subscribed` only reports queue state, not
         // device reachability. A silent subscription failure
         // manifests as the speaker's events simply never arriving

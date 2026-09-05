@@ -66,6 +66,11 @@ oto/
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design - layers, crate responsibilities, state ownership, and the command/event flow.
 
+The Sonos SOAP and reactive event crates are aligned at upstream 0.8.0;
+the former TLS fork is retired. oto retains its bounded SSDP receive window
+and explicit multicast egress selection, which upstream discovery still lacks.
+Events use the SDK's typed payloads directly, preserving queued transitions.
+
 Flutter command controllers share one app-lifetime scheduler that preserves
 user-intent order per physical speaker and reconciles optimistic writes per
 operation lane, including across group-id churn.

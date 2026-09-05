@@ -499,6 +499,8 @@ fn main() {
         .expect("state manager build");
     manager.add_devices(devices.clone()).expect("add_devices");
     manager.initialize(Topology::new(sdk_speakers.clone(), sdk_groups.clone()));
+    // SDK 0.8 iterators do not replay events emitted before subscription.
+    let iter = manager.iter();
 
     // Watch GroupVolume and GroupMute per coordinator.
     for g in &snap.groups {
@@ -508,7 +510,6 @@ fn main() {
     }
 
     // Drain seed NOTIFYs (~3 s).
-    let iter = manager.iter();
     let drain_end = Instant::now() + Duration::from_secs(3);
     while Instant::now() < drain_end {
         let _ = iter.recv_timeout(Duration::from_millis(100));
@@ -526,10 +527,10 @@ fn main() {
     let deadline = Instant::now() + Duration::from_secs(120);
     while Instant::now() < deadline {
         if let Some(ev) = iter.recv_timeout(Duration::from_millis(500)) {
-            let marker = if ev.property_key == GroupVolume::KEY {
+            let marker = if ev.property_key() == GroupVolume::KEY {
                 group_vol_count += 1;
                 ">>> GROUP_VOLUME"
-            } else if ev.property_key == GroupMute::KEY {
+            } else if ev.property_key() == GroupMute::KEY {
                 group_mute_count += 1;
                 ">>> GROUP_MUTE  "
             } else {
@@ -538,8 +539,8 @@ fn main() {
             println!(
                 "{marker}  speaker={}  key={}  service={:?}",
                 ev.speaker_id.as_str(),
-                ev.property_key,
-                ev.service
+                ev.property_key(),
+                ev.service()
             );
             std::io::stdout().flush().unwrap();
         }
@@ -628,8 +629,8 @@ fn main() {
                 while Instant::now() < obs_end {
                     if let Some(ev) = iter.recv_timeout(Duration::from_millis(500)) {
                         post_reinit_count += 1;
-                        let marker = if ev.property_key == GroupVolume::KEY
-                            || ev.property_key == GroupMute::KEY
+                        let marker = if ev.property_key() == GroupVolume::KEY
+                            || ev.property_key() == GroupMute::KEY
                         {
                             ">>> GROUP_VOL/MUTE"
                         } else {
@@ -638,7 +639,7 @@ fn main() {
                         println!(
                             "  {marker}  speaker={}  key={}",
                             ev.speaker_id.as_str(),
-                            ev.property_key
+                            ev.property_key()
                         );
                         std::io::stdout().flush().unwrap();
                     }

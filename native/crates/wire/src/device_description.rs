@@ -7,7 +7,7 @@
 //! Per `docs/sonos-notes.md` § SSDP "HTTP fetch quirk": Sonos's embedded
 //! server replies `Transfer-Encoding: chunked` (no `Content-Length`) even
 //! to an HTTP/1.0 request, which a raw `TcpStream` mis-frames. `ureq`
-//! handles chunked + UTF-8 and bounds connect/read timeouts with a
+//! handles chunked + UTF-8 and bounds connect/overall request timeouts with a
 //! blocking, runtime-free API. Fetches are best-effort: any failure
 //! (timeout, network, parse) yields `None` for that speaker - discovery
 //! does NOT fail, the speaker just keeps `model = None`.
@@ -23,7 +23,8 @@ use quick_xml::events::Event;
 /// Per-speaker connect timeout. Short - the speaker is on the LAN and was
 /// just reached for ZGT; a slow connect means it's gone, skip it.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
-/// Per-speaker overall read timeout. The document is tiny (a few KB).
+/// Per-speaker overall request deadline, including connect and body reads.
+/// The document is tiny (a few KB).
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Fetch `device_description.xml` from `ip` and extract `<modelName>`.
@@ -31,11 +32,18 @@ const READ_TIMEOUT: Duration = Duration::from_secs(2);
 /// as "model unknown for this speaker" and does not fail discovery.
 fn fetch_model(ip: IpAddr) -> Option<String> {
     let url = format!("http://{ip}:1400/xml/device_description.xml");
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(CONNECT_TIMEOUT)
-        .timeout(READ_TIMEOUT)
-        .build();
-    let body = agent.get(&url).call().ok()?.into_string().ok()?;
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .timeout_global(Some(READ_TIMEOUT))
+        .build()
+        .into();
+    let body = agent
+        .get(&url)
+        .call()
+        .ok()?
+        .body_mut()
+        .read_to_string()
+        .ok()?;
     parse_model_name(&body)
 }
 
