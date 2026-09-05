@@ -19,9 +19,7 @@ Generated source (`app/lib/src/rust/`, `native/src/frb_generated*`, `**/*.g.dart
 
 `just build-apk` builds natively on Windows, Linux, or macOS - no WSL required.
 
-That wasn't always true. Through 2026-06, the workspace carried `[target.'cfg(target_os = "android")'.dependencies] openssl = { features = ["vendored"] }`, because `sonos-api` transitively pulled `reqwest` with default features (→ `native-tls` → `openssl-sys`) via three `sonos-sdk` crates, and the Android NDK ships no system OpenSSL. That forced a from-source, Perl-driven OpenSSL build, and Windows' common Perl distributions (Strawberry Perl, Git's bundled msys Perl) don't produce output OpenSSL's `Configure` accepts - so building the APK meant Linux, macOS, or WSL.
-
-Investigation showed the TLS backend was never actually used: two SDK crates did not reference `reqwest`, and the third only fetched plain HTTP device descriptions. oto initially stripped the backend through a fork. Upstream SDK 0.8 removes those dependencies, so oto now uses crates.io directly and the fork is retired (see [LOCAL_PATCHES.md](LOCAL_PATCHES.md) #2). `openssl`/`openssl-sys`/`native-tls` remain absent from the dependency graph, with no vendored OpenSSL build or Perl requirement.
+The resolved SDK graph has no OpenSSL/native-TLS build requirement. The retired workaround is recorded in [Local patches](LOCAL_PATCHES.md#2-retired-sonos-sdk-tls-fork); Perl and WSL are not prerequisites.
 
 Toolchain needed: Java 21, Android SDK platform 36 + build-tools 36, NDK auto-selected by Gradle via `flutter.ndkVersion` (install nothing manually - the first build pulls the exact NDK it wants). For a phone attached over USB, `adb` works directly - no WSL bridging needed.
 
@@ -42,12 +40,12 @@ When the `dtolnay/rust-toolchain` Dependabot PR lands, update **in the same PR**
 - `rust-toolchain.toml` - `channel = "X.Y.Z"`
 - `native/Cargo.toml` - `rust-version = "X.Y"` under `[workspace.package]`
 
-For Flutter, no Dependabot coverage exists. `.fvmrc` at the repo root is the canonical Flutter version - the CI workflows read it (the `Read Flutter version` step in `ci.yml` / `build.yml`), so bumping `.fvmrc` (`{"flutter": "X.Y.Z"}`) propagates automatically. Update the "currently X.Y.Z" mention in `README.md` in the same PR.
+For Flutter, no Dependabot coverage exists. `.fvmrc` at the repo root is the canonical Flutter version - the CI workflows read it (the `Read Flutter version` steps in the workflows), so bumping `.fvmrc` (`{"flutter": "X.Y.Z"}`) propagates automatically.
 
 Other inline pins to grep for when a coordinated bump is needed:
 
-- `cargo install flutter_rust_bridge_codegen --version X.Y.Z` (both workflows)
-- `flutter_rust_bridge = "=X.Y.Z"` in `native/Cargo.toml`
+- `cargo install flutter_rust_bridge_codegen --version X.Y.Z` (search all workflows and the README)
+- `flutter_rust_bridge = "=X.Y.Z"` in `native/Cargo.toml` and `flutter_rust_bridge: X.Y.Z` in `app/pubspec.yaml`
 
 The FRB codegen version and FRB crate version **must** stay aligned, or generated source will drift.
 
@@ -57,7 +55,7 @@ Dependabot opens grouped weekly PRs for `cargo` (in `native/`) and `pub` (in `ap
 
 ## Branch protection
 
-`main` is protected by the `main-protect` ruleset (**Settings → Rules → Rulesets**, not the older Settings → Branches protection - `gh api .../branches/main/protection` reports "not protected"). Four checks are required: `Generated source freshness`, `Rust (lint + test)`, `Rust (supply-chain)`, and `Flutter (analyze + test)`. This gates manual merges (including Dependabot PRs) so nothing lands red.
+`main` is protected by the `main-protect` ruleset (**Settings → Rules → Rulesets**, not the older Settings → Branches protection - `gh api .../branches/main/protection` reports "not protected"). Four checks are required: `Generated source freshness`, `Rust (lint + test)`, `Rust (supply-chain)`, and `Flutter (analyze + test)`. Check the live ruleset when changing merge policy; workflow definitions alone do not establish which checks are required.
 
 `Android cross-compile (oto_native)` runs on every PR but is **not** in the required set, so it does not block a merge on its own.
 
@@ -69,8 +67,8 @@ Conventional Commits, lowercase scope when relevant. Enforced locally by the lef
 
 ```
 chore(app): polish scaffolding, target Android 15+ (64-bit only)
-feat(core): add SSDP discovery loop
-fix(android): widen multicast lock to cover event subscription
+feat(wire): add SSDP discovery loop
+fix(android): release multicast lock after discovery fails
 ```
 
 Keep the subject under ~72 chars and let the body explain _why_.
