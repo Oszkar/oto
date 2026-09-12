@@ -352,8 +352,8 @@ class ShowcasePreview extends StatelessWidget {
       overrides: [
         householdProvider.overrideWith(() => FixtureHousehold(entry.household)),
         discoveryProvider.overrideWith(InertDiscovery.new),
-        changeEventsProvider.overrideWith(
-          (ref) => const Stream<rust_api.ChangeEventDto>.empty(),
+        changeEventsProvider.overrideWithBuild(
+          (ref, notifier) => const Stream<rust_api.ChangeEventDto>.empty(),
         ),
         commandApiProvider.overrideWithValue(const InertCommandApi()),
         positionApiProvider.overrideWithValue(const InertPositionApi()),
@@ -373,16 +373,14 @@ class ShowcasePreview extends StatelessWidget {
             theme: otoTheme(Brightness.light, s.accent),
             darkTheme: otoTheme(Brightness.dark, s.accent),
             themeMode: s.mode,
-            // Override the MediaQuery size below the MaterialApp so the
-            // previewed screen sees the selected viewport, not the real
-            // window - this is what makes the Phone/Tablet/Desktop toggle
-            // actually flip `context.layoutTier`.
-            home: Builder(
-              builder: (context) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(size: size),
-                child: entry.build(),
-              ),
+            // Include the Navigator and all its routes in the preview size.
+            // App-lived navigation contexts must see the same breakpoint as
+            // the screen that opened a sheet or dialog.
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(size: size),
+              child: child!,
             ),
+            home: entry.build(),
           );
         },
       ),

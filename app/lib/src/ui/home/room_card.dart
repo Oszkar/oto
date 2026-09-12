@@ -233,6 +233,7 @@ class RoomCard extends ConsumerWidget {
           child: Opacity(
             opacity: muted ? 0.45 : 1,
             child: OtoSlider(
+              key: ValueKey('room-volume-$speakerId'),
               value: value,
               // No known volume yet: render a disabled (non-interactive) track.
               onChanged: hasVolume

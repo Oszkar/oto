@@ -7,6 +7,9 @@ extension ResponsivePopExtension on BuildContext {
   bool checkResponsivePop() {
     if (isWide) {
       final route = ModalRoute.of(this);
+      // Keep the subtree alive while a modal still uses its context or ref.
+      // ModalRoute.of also rebuilds this route when the modal is dismissed.
+      if (!(route?.isCurrent ?? false)) return false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Re-check `isCurrent` at pop time, not schedule time: if a sheet or
         // dialog is now on top, or this route already popped from an earlier
@@ -28,6 +31,7 @@ extension ResponsivePopExtension on BuildContext {
   bool checkResponsiveCollapse(WidgetBuilder openPhoneRoute) {
     if (!isWide) {
       final route = ModalRoute.of(this);
+      if (!(route?.isCurrent ?? false)) return false;
       final navigator = Navigator.of(this);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Same guard as checkResponsivePop: skip if something else (e.g. a

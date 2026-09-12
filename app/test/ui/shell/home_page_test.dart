@@ -44,8 +44,8 @@ void main() {
         ),
         // topologyController listens to changeEvents; stub it so activation
         // doesn't reach currentWireGeneration()'s FFI in a unit test.
-        changeEventsProvider.overrideWith(
-          (ref) => const Stream<rust_api.ChangeEventDto>.empty(),
+        changeEventsProvider.overrideWithBuild(
+          (ref, notifier) => const Stream<rust_api.ChangeEventDto>.empty(),
         ),
         prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
         playbackControllerProvider.overrideWith((ref) => SpyPlayback(ref)),

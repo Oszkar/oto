@@ -29,10 +29,16 @@ const _topo = Topology(
 
 class _FakeDiscovery extends Discovery {
   int buildCount = 0;
+  Topology _topology = _topo;
   @override
   Future<Topology> build() async {
     buildCount++;
-    return _topo;
+    return _topology;
+  }
+
+  void publish(Topology topology) {
+    _topology = topology;
+    state = AsyncData(topology);
   }
 }
 
@@ -158,14 +164,15 @@ class _SpyApi extends CommandApi {
 /// Build a container wired entirely off Rust: fake discovery, empty event
 /// stream (bypasses the real `currentWireGeneration()`), spy command api.
 ({ProviderContainer container, _FakeDiscovery discovery}) _container(
-  _SpyApi spy,
-) {
+  _SpyApi spy, {
+  Stream<ChangeEventDto>? events,
+}) {
   final discovery = _FakeDiscovery();
   final container = ProviderContainer(
     overrides: [
       discoveryProvider.overrideWith(() => discovery),
-      changeEventsProvider.overrideWith(
-        (ref) => const Stream<ChangeEventDto>.empty(),
+      changeEventsProvider.overrideWithBuild(
+        (ref, notifier) => events ?? const Stream<ChangeEventDto>.empty(),
       ),
       commandApiProvider.overrideWithValue(spy),
     ],
@@ -187,6 +194,333 @@ Future<void> _settleQueue() async {
 }
 
 void main() {
+  group('authoritative command reconciliation', () {
+    late StreamController<ChangeEventDto> events;
+    late ProviderContainer container;
+    late _FakeDiscovery discovery;
+    late _SpyApi spy;
+
+    Future<void> observe(ChangeEventDto event) async {
+      events.add(event);
+      await _settleQueue();
+    }
+
+    Topology topology(String groupId, {bool withKitchen = true}) => Topology(
+      speakers: _topo.speakers
+          .where((s) => withKitchen || s.id != 'KT')
+          .toList(),
+      groups: [
+        DiscoveredGroup(
+          id: groupId,
+          coordinator: 'LR',
+          members: ['LR', if (withKitchen) 'KT'],
+        ),
+      ],
+    );
+
+    const rejected = CommandError.network('unreachable');
+
+    setUp(() async {
+      events = StreamController<ChangeEventDto>.broadcast();
+      addTearDown(events.close);
+      spy = _SpyApi();
+      final harness = _container(spy, events: events.stream);
+      container = harness.container;
+      discovery = harness.discovery;
+      container.listen(householdProvider, (_, _) {});
+      container.listen(changeEventsProvider, (_, _) {});
+      await _seedHousehold(container);
+      await _settleQueue();
+    });
+
+    test(
+      'room volume failure preserves an event newer than the intent',
+      () async {
+        await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
+        spy.deferVolume = true;
+        container.read(playbackControllerProvider).setVolumeEnd('KT', 20);
+        await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 30));
+        spy.volumeCompleters.single.completeError(rejected);
+        await _settleQueue();
+        expect(container.read(householdProvider).rooms['KT']!.volume, 30);
+      },
+    );
+
+    test(
+      'equal-valued events replace the baseline before another intent',
+      () async {
+        await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
+        spy.deferVolume = true;
+        final playback = container.read(playbackControllerProvider);
+        playback.setVolumeEnd('KT', 20);
+        // Equal to the rendered optimistic value, but still new device evidence.
+        await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 20));
+        playback.setVolumeEnd('KT', 30);
+        spy.volumeCompleters[0].completeError(rejected);
+        await _settleQueue();
+        expect(container.read(householdProvider).rooms['KT']!.volume, 30);
+        spy.volumeCompleters[1].completeError(rejected);
+        await _settleQueue();
+        expect(container.read(householdProvider).rooms['KT']!.volume, 20);
+      },
+    );
+
+    test('identical consecutive DTOs reconcile intervening optimism', () async {
+      const volume = ChangeEventDto.volume(speakerId: 'KT', volume: 10);
+      await observe(volume);
+      final household = container.read(householdProvider.notifier);
+      final before = household.observation('KT', CommandField.roomVolume);
+      spy.deferVolume = true;
+      container.read(playbackControllerProvider).setVolumeEnd('KT', 20);
+      await observe(volume);
+      expect(
+        household.observation('KT', CommandField.roomVolume),
+        isNot(before),
+      );
+      expect(container.read(householdProvider).rooms['KT']!.volume, 10);
+      spy.volumeCompleters.single.completeError(rejected);
+      await _settleQueue();
+      expect(container.read(householdProvider).rooms['KT']!.volume, 10);
+    });
+
+    test('late predecessor success cannot erase a newer observation', () async {
+      await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
+      spy.deferVolume = true;
+      final playback = container.read(playbackControllerProvider);
+      playback.setVolumeEnd('KT', 20);
+      await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 25));
+      playback.setVolumeEnd('KT', 30);
+      spy.volumeCompleters[0].complete();
+      await _settleQueue();
+      expect(container.read(householdProvider).rooms['KT']!.volume, 30);
+      spy.volumeCompleters[1].completeError(rejected);
+      await _settleQueue();
+      expect(container.read(householdProvider).rooms['KT']!.volume, 25);
+    });
+
+    test(
+      'unrelated room and field events do not erase a successful baseline',
+      () async {
+        await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
+        spy.deferVolume = true;
+        final playback = container.read(playbackControllerProvider);
+        playback.setVolumeEnd('KT', 20);
+        playback.setVolumeEnd('KT', 30);
+        spy.volumeCompleters[0].complete();
+        await _settleQueue();
+        await observe(const ChangeEventDto.mute(speakerId: 'KT', muted: true));
+        await observe(const ChangeEventDto.volume(speakerId: 'LR', volume: 70));
+        spy.volumeCompleters[1].completeError(rejected);
+        await _settleQueue();
+        expect(container.read(householdProvider).rooms['KT']!.volume, 20);
+      },
+    );
+
+    test(
+      'mute and transport failures restore their latest observed fields',
+      () async {
+        await observe(const ChangeEventDto.mute(speakerId: 'KT', muted: false));
+        await observe(
+          const ChangeEventDto.playback(
+            groupId: 'G1',
+            state: PlaybackStateDto.paused,
+          ),
+        );
+        spy.deferMute = true;
+        spy.deferPlay = true;
+        final playback = container.read(playbackControllerProvider);
+        final mute = playback.setMute('KT', true);
+        final play = playback.togglePlay('G1', PlaybackState.paused);
+        await observe(const ChangeEventDto.mute(speakerId: 'KT', muted: true));
+        await observe(
+          const ChangeEventDto.playback(
+            groupId: 'G1',
+            state: PlaybackStateDto.stopped,
+          ),
+        );
+        spy.muteCompleters.single.completeError(rejected);
+        spy.playCompleters.single.completeError(rejected);
+        await Future.wait([mute, play]);
+        expect(container.read(householdProvider).rooms['KT']!.muted, true);
+        expect(
+          container.read(householdProvider).groups['G1']!.transport,
+          PlaybackState.stopped,
+        );
+      },
+    );
+
+    test(
+      'group volume and mute observations survive failed commands',
+      () async {
+        await observe(
+          const ChangeEventDto.groupVolume(groupId: 'G1', volume: 10),
+        );
+        await observe(
+          const ChangeEventDto.groupMute(groupId: 'G1', muted: false),
+        );
+        spy.deferGroupVolume = true;
+        spy.deferGroupMute = true;
+        final grouping = container.read(groupingControllerProvider);
+        grouping.setGroupVolumeEnd('G1', 20);
+        final mute = grouping.setGroupMute('G1', true);
+        await observe(
+          const ChangeEventDto.groupVolume(groupId: 'G1', volume: 30),
+        );
+        await observe(
+          const ChangeEventDto.groupMute(groupId: 'G1', muted: true),
+        );
+        spy.groupVolumeCompleters.single.completeError(rejected);
+        await _settleQueue();
+        spy.groupMuteCompleters.single.completeError(rejected);
+        await mute;
+        expect(container.read(householdProvider).groups['G1']!.groupVolume, 30);
+        expect(
+          container.read(householdProvider).groups['G1']!.groupMuted,
+          true,
+        );
+      },
+    );
+
+    test(
+      'rediscovery carries confirmed values instead of in-flight guesses',
+      () async {
+        await observe(
+          const ChangeEventDto.groupVolume(groupId: 'G1', volume: 10),
+        );
+        spy.deferGroupVolume = true;
+        container.read(groupingControllerProvider).setGroupVolumeEnd('G1', 20);
+        discovery.publish(topology('G2'));
+        await _settleQueue();
+        expect(container.read(householdProvider).groups['G2']!.groupVolume, 10);
+        await observe(
+          const ChangeEventDto.groupVolume(groupId: 'G2', volume: 35),
+        );
+        spy.groupVolumeCompleters.single.completeError(rejected);
+        await _settleQueue();
+        expect(container.read(householdProvider).groups['G2']!.groupVolume, 35);
+        expect(
+          container.read(householdProvider).groups.containsKey('G1'),
+          false,
+        );
+      },
+    );
+
+    test(
+      'successful no-echo command remains confirmed across rediscovery',
+      () async {
+        await observe(const ChangeEventDto.volume(speakerId: 'KT', volume: 10));
+        container.read(playbackControllerProvider).setVolumeEnd('KT', 20);
+        await _settleQueue();
+        discovery.publish(topology('G2'));
+        await _settleQueue();
+        expect(container.read(householdProvider).rooms['KT']!.volume, 20);
+      },
+    );
+
+    test('old group rollback cannot clear a replacement coordinator', () async {
+      await observe(
+        const ChangeEventDto.groupVolume(groupId: 'G1', volume: 10),
+      );
+      spy.deferGroupVolume = true;
+      container.read(groupingControllerProvider).setGroupVolumeEnd('G1', 20);
+      discovery.publish(
+        Topology(
+          speakers: _topo.speakers,
+          groups: const [
+            DiscoveredGroup(id: 'G1', coordinator: 'KT', members: ['LR', 'KT']),
+          ],
+        ),
+      );
+      await _settleQueue();
+      await observe(
+        const ChangeEventDto.groupVolume(groupId: 'G1', volume: 35),
+      );
+      spy.groupVolumeCompleters.single.completeError(rejected);
+      await _settleQueue();
+      expect(container.read(householdProvider).groups['G1']!.groupVolume, 35);
+    });
+
+    test(
+      'queued group commands cannot dispatch to a replacement coordinator',
+      () async {
+        await observe(const ChangeEventDto.volume(speakerId: 'LR', volume: 10));
+        spy.deferVolume = true;
+        container.read(playbackControllerProvider).setVolumeEnd('LR', 20);
+        final grouping = container.read(groupingControllerProvider);
+        grouping.setGroupVolume('G1', 30);
+        // Hold both a scalar gesture and an ordered transport command behind LR.
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+        final next = container.read(playbackControllerProvider).next('G1');
+        discovery.publish(
+          Topology(
+            speakers: _topo.speakers,
+            groups: const [
+              DiscoveredGroup(
+                id: 'G1',
+                coordinator: 'KT',
+                members: ['LR', 'KT'],
+              ),
+            ],
+          ),
+        );
+        await _settleQueue();
+        await observe(
+          const ChangeEventDto.groupVolume(groupId: 'G1', volume: 35),
+        );
+        // Release the old gesture after its id was reused. Even the optimistic
+        // write must leave the replacement group's observed value alone.
+        grouping.setGroupVolumeEnd('G1', 40);
+        expect(container.read(householdProvider).groups['G1']!.groupVolume, 35);
+        spy.volumeCompleters.single.complete();
+        await next;
+        await _settleQueue();
+        expect(spy.calls, ['setVolume(LR,20)']);
+        expect(discovery.buildCount, greaterThan(1));
+      },
+    );
+
+    for (final succeeds in [false, true]) {
+      test(
+        'old ${succeeds ? 'success' : 'failure'} cannot resurrect removed speaker state',
+        () async {
+          await observe(
+            const ChangeEventDto.volume(speakerId: 'KT', volume: 10),
+          );
+          spy.deferVolume = true;
+          container.read(playbackControllerProvider).setVolumeEnd('KT', 20);
+          discovery.publish(topology('G2', withKitchen: false));
+          await _settleQueue();
+          await observe(
+            const ChangeEventDto.volume(speakerId: 'KT', volume: 99),
+          );
+          discovery.publish(topology('G3'));
+          await _settleQueue();
+          if (succeeds) {
+            spy.volumeCompleters.single.complete();
+          } else {
+            spy.volumeCompleters.single.completeError(rejected);
+          }
+          await _settleQueue();
+          expect(container.read(householdProvider).rooms['KT']!.volume, isNull);
+        },
+      );
+    }
+
+    test(
+      'failed cold-start transport command restores unknown state',
+      () async {
+        spy.throwOn = rejected;
+        await container
+            .read(playbackControllerProvider)
+            .togglePlay('G1', PlaybackState.paused);
+        expect(
+          container.read(householdProvider).groups['G1']!.transport,
+          isNull,
+        );
+      },
+    );
+  });
+
   test(
     'togglePlay flips transport optimistically and sends play once',
     () async {
@@ -593,10 +927,10 @@ void main() {
 
       expect(
         container.read(householdProvider).groups['G1']!.transport,
-        PlaybackState.paused,
+        isNull,
         reason:
-            'NotFound rolls the optimistic playing back to paused, rather '
-            'than carrying a wrong guess across re-discovery',
+            'NotFound restores the unobserved transport, rather than treating '
+            'the UI fallback of paused as an authoritative value',
       );
       expect(
         discovery.buildCount,

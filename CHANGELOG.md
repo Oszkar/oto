@@ -14,6 +14,13 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ### Fixed
 
+- Failed controls preserve newer speaker updates, including updates received
+  during rediscovery. A repeated failed command after a user scan restores the
+  room's unreachable indication.
+- Solo-room volume drags retain their speaker target when rooms reorder.
+  Phone Now Playing follows a source through group ID changes, room-options
+  actions remain usable across resizing, and Ungroup all asks the user to review
+  the group if its membership changed during confirmation.
 - Malformed track times reported by a speaker no longer produce a wrong or
   overflowing position; they are now discarded. A discovery run whose network
   poller fails is reported as a network error instead of as "no speakers

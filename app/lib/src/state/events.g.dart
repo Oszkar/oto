@@ -192,14 +192,14 @@ final class WireGenerationProvider
 String _$wireGenerationHash() => r'9d424df16478f6b7516d1bd050ddda7138fa7342';
 
 /// Builds the raw FRB change-event stream. Extracted behind an overridable
-/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// provider so [ChangeEvents]'s re-subscription is observable in tests (count
 /// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
 
 @ProviderFor(changeEventStreamFactory)
 final changeEventStreamFactoryProvider = ChangeEventStreamFactoryProvider._();
 
 /// Builds the raw FRB change-event stream. Extracted behind an overridable
-/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// provider so [ChangeEvents]'s re-subscription is observable in tests (count
 /// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
 
 final class ChangeEventStreamFactoryProvider
@@ -211,7 +211,7 @@ final class ChangeEventStreamFactoryProvider
         >
     with $Provider<Stream<rust_api.ChangeEventDto> Function()> {
   /// Builds the raw FRB change-event stream. Extracted behind an overridable
-  /// provider so [changeEvents]'s re-subscription is observable in tests (count
+  /// provider so [ChangeEvents]'s re-subscription is observable in tests (count
   /// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
   ChangeEventStreamFactoryProvider._()
     : super(
@@ -272,7 +272,7 @@ String _$changeEventStreamFactoryHash() =>
 /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
 /// wire replacement - the intended lifecycle boundary.
 
-@ProviderFor(changeEvents)
+@ProviderFor(ChangeEvents)
 final changeEventsProvider = ChangeEventsProvider._();
 
 /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
@@ -295,17 +295,8 @@ final changeEventsProvider = ChangeEventsProvider._();
 /// Keeping it alive for the app lifetime avoids that class of bug; it still
 /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
 /// wire replacement - the intended lifecycle boundary.
-
 final class ChangeEventsProvider
-    extends
-        $FunctionalProvider<
-          AsyncValue<rust_api.ChangeEventDto>,
-          rust_api.ChangeEventDto,
-          Stream<rust_api.ChangeEventDto>
-        >
-    with
-        $FutureModifier<rust_api.ChangeEventDto>,
-        $StreamProvider<rust_api.ChangeEventDto> {
+    extends $StreamNotifierProvider<ChangeEvents, rust_api.ChangeEventDto> {
   /// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
   /// **new wire** - keyed on [wireGenerationProvider], which only changes on a
   /// successful `discover_with`. A failed/loading re-discover does NOT rebuild
@@ -342,14 +333,54 @@ final class ChangeEventsProvider
 
   @$internal
   @override
-  $StreamProviderElement<rust_api.ChangeEventDto> $createElement(
-    $ProviderPointer pointer,
-  ) => $StreamProviderElement(pointer);
-
-  @override
-  Stream<rust_api.ChangeEventDto> create(Ref ref) {
-    return changeEvents(ref);
-  }
+  ChangeEvents create() => ChangeEvents();
 }
 
-String _$changeEventsHash() => r'5ab0efe7273ceff530275f62f3d7a79510938332';
+String _$changeEventsHash() => r'1dd90e7e2877c21b85d92fb6dfcf147b22c87394';
+
+/// Single-consumer stream of ChangeEvents from Rust. Re-subscribes once per
+/// **new wire** - keyed on [wireGenerationProvider], which only changes on a
+/// successful `discover_with`. A failed/loading re-discover does NOT rebuild
+/// this provider: `discover_with` keeps the old wire on failure, and its
+/// `take_event_stream` receiver is one-shot and can't be retaken, so
+/// re-subscribing then would strand events on a dead receiver (codex review
+/// #67-followup #2).
+///
+/// Downstream consumers `ref.watch(changeEventsProvider)` and filter
+/// client-side (Volume/Mute/Playback/Track/Subscription*/TopologyChanged).
+///
+/// **keepAlive: true** (per /codex review on PR #43, finding P1 #1): the
+/// Rust consumer loop in `api.rs::subscribe_change_events` blocks on
+/// `recv_timeout` and only observes Dart cancellation on the next
+/// `sink.add(...)`. With `keepAlive: false`, normal provider disposal (no
+/// widgets listening) could strand the Rust loop while it holds the
+/// one-shot receiver, making the wire unable to re-stream until rediscovery.
+/// Keeping it alive for the app lifetime avoids that class of bug; it still
+/// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
+/// wire replacement - the intended lifecycle boundary.
+
+abstract class _$ChangeEvents extends $StreamNotifier<rust_api.ChangeEventDto> {
+  Stream<rust_api.ChangeEventDto> build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<rust_api.ChangeEventDto>,
+              rust_api.ChangeEventDto
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<rust_api.ChangeEventDto>,
+                rust_api.ChangeEventDto
+              >,
+              AsyncValue<rust_api.ChangeEventDto>,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}

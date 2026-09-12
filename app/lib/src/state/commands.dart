@@ -48,20 +48,13 @@ class CommandApi {
       rust_api.setGroupMute(groupId: groupId, muted: m);
 }
 
-enum _CommandLane {
-  roomVolume,
-  roomMute,
-  groupVolume,
-  groupMute,
-  transportToggle,
-}
-
-typedef _LaneKey = ({String speakerId, _CommandLane lane});
+typedef _LaneKey = ({String speakerId, CommandField lane});
 
 class _LaneState {
   int generation = 0;
   int activeIntents = 0;
   Object? committed;
+  CommandObservation? observation;
 }
 
 class _GroupTarget {
@@ -135,12 +128,15 @@ class CommandScheduler {
   /// Re-resolve immediately before dispatch or rollback. Following the captured
   /// coordinator even when the old id still exists avoids sending a queued
   /// command to a newly re-coordinated group that happens to reuse that id.
-  String _currentGroupId(_GroupTarget target) {
+  String? _currentGroupId(_GroupTarget target) {
     final coordinator = target.coordinatorId;
     if (coordinator != null) {
       for (final group in ref.read(householdProvider).groups.values) {
         if (group.coordinatorId == coordinator) return group.id;
       }
+      // The captured physical target no longer hosts a group. Reusing the
+      // original id must not redirect this intent to a different coordinator.
+      return null;
     }
     return target.originalGroupId;
   }
@@ -174,7 +170,7 @@ class CommandScheduler {
 
   _CommandIntent<T> _beginRoomIntent<T>({
     required String speakerId,
-    required _CommandLane lane,
+    required CommandField lane,
     required T Function() readCommitted,
     required T optimisticValue,
     required void Function() applyOptimistic,
@@ -191,7 +187,7 @@ class CommandScheduler {
 
   _CommandIntent<T> _beginGroupIntent<T>({
     required String groupId,
-    required _CommandLane lane,
+    required CommandField lane,
     required T Function(String currentGroupId) readCommitted,
     required T optimisticValue,
     required void Function(String currentGroupId) applyOptimistic,
@@ -202,9 +198,11 @@ class CommandScheduler {
     return _beginIntent(
       dispatchKey: target.dispatchKey,
       lane: lane,
-      readCommitted: () => readCommitted(currentGroupId),
+      readCommitted: () => readCommitted(currentGroupId ?? groupId),
       optimisticValue: optimisticValue,
-      applyOptimistic: () => applyOptimistic(currentGroupId),
+      applyOptimistic: () {
+        if (currentGroupId != null) applyOptimistic(currentGroupId);
+      },
       restore: (value, currentGroupId) {
         if (currentGroupId != null) restore(currentGroupId, value);
       },
@@ -215,7 +213,7 @@ class CommandScheduler {
 
   _CommandIntent<T> _beginIntent<T>({
     required String dispatchKey,
-    required _CommandLane lane,
+    required CommandField lane,
     required T Function() readCommitted,
     required T optimisticValue,
     required void Function() applyOptimistic,
@@ -225,7 +223,12 @@ class CommandScheduler {
   }) {
     final key = (speakerId: dispatchKey, lane: lane);
     final state = _lanes.putIfAbsent(key, _LaneState.new);
-    if (state.activeIntents == 0) state.committed = readCommitted();
+    if (state.activeIntents == 0) {
+      state.committed = readCommitted();
+      state.observation = _household.observation(dispatchKey, lane);
+    } else {
+      _refreshCommitted(key, state);
+    }
     state.activeIntents++;
     final generation = ++state.generation;
 
@@ -247,6 +250,18 @@ class CommandScheduler {
   bool _isLatest<T>(_CommandIntent<T> intent) =>
       intent.state.generation == intent.generation;
 
+  HouseholdNotifier get _household => ref.read(householdProvider.notifier);
+
+  /// A field event (even an equal value) or topology replacement supersedes
+  /// the saved rollback baseline. Unrelated field events do not.
+  void _refreshCommitted(_LaneKey key, _LaneState state) {
+    final observation = _household.observation(key.speakerId, key.lane);
+    if (state.observation != observation) {
+      state.committed = _household.confirmedValue(key.speakerId, key.lane);
+      state.observation = observation;
+    }
+  }
+
   void _cancelIntent<T>(_CommandIntent<T> intent) => _finishIntent(intent);
 
   Future<void> _dispatchRoomIntent<T>(
@@ -262,7 +277,7 @@ class CommandScheduler {
     () => _runIntent(intent, (groupId) {
       if (groupId == null) {
         return Future<void>.error(
-          StateError('group intent has no captured group target'),
+          CommandError.notFound(intent.groupTarget!.originalGroupId),
         );
       }
       return command(groupId);
@@ -275,13 +290,33 @@ class CommandScheduler {
   ) async {
     final groupTarget = intent.groupTarget;
     final groupId = groupTarget == null ? null : _currentGroupId(groupTarget);
+    final dispatchObservation = _household.observation(
+      intent.key.speakerId,
+      intent.key.lane,
+    );
     try {
       await command(groupId);
       // A superseded success is still the committed predecessor for any newer
-      // queued operation that may fail.
-      intent.state.committed = intent.optimisticValue;
+      // queued operation that may fail, unless a newer device observation or
+      // wire replacement has already supplied the authoritative value.
+      if (_household.observation(intent.key.speakerId, intent.key.lane) ==
+          dispatchObservation) {
+        _household.confirmCommand(
+          intent.key.speakerId,
+          intent.key.lane,
+          intent.optimisticValue,
+        );
+        intent.state.committed = intent.optimisticValue;
+        intent.state.observation = _household.observation(
+          intent.key.speakerId,
+          intent.key.lane,
+        );
+      } else {
+        _refreshCommitted(intent.key, intent.state);
+      }
     } on CommandError catch (error) {
       if (_isLatest(intent)) {
+        _refreshCommitted(intent.key, intent.state);
         final rollbackGroupId = groupTarget == null
             ? null
             : _currentGroupId(groupTarget);
@@ -306,10 +341,13 @@ class CommandScheduler {
     final target = _captureGroup(groupId);
     return _enqueue(
       target.dispatchKey,
-      () => _runOrdered(
-        () => command(_currentGroupId(target)),
-        _labelFor(target),
-      ),
+      () => _runOrdered(() {
+        final currentGroupId = _currentGroupId(target);
+        if (currentGroupId == null) {
+          throw CommandError.notFound(target.originalGroupId);
+        }
+        return command(currentGroupId);
+      }, _labelFor(target)),
     );
   }
 
@@ -439,7 +477,7 @@ class PlaybackController {
     _volume = _ThrottledScalar(
       beginIntent: (id, value) => scheduler._beginRoomIntent<int?>(
         speakerId: id,
-        lane: _CommandLane.roomVolume,
+        lane: CommandField.roomVolume,
         readCommitted: () => ref.read(householdProvider).rooms[id]?.volume,
         optimisticValue: value,
         applyOptimistic: () => _h.setOptimisticVolume(id, value),
@@ -464,17 +502,16 @@ class PlaybackController {
     final next = current == PlaybackState.playing
         ? PlaybackState.paused
         : PlaybackState.playing;
-    final intent = scheduler._beginGroupIntent<PlaybackState>(
+    final intent = scheduler._beginGroupIntent<PlaybackState?>(
       groupId: groupId,
-      lane: _CommandLane.transportToggle,
+      lane: CommandField.transportToggle,
       readCommitted: (currentGroupId) =>
-          ref.read(householdProvider).groups[currentGroupId]?.transport ??
-          current,
+          ref.read(householdProvider).groups[currentGroupId]?.transport,
       optimisticValue: next,
       applyOptimistic: (currentGroupId) =>
           _h.setOptimisticTransport(currentGroupId, next),
       restore: (currentGroupId, committed) =>
-          _h.setOptimisticTransport(currentGroupId, committed),
+          _h.restoreTransport(currentGroupId, committed),
     );
     await scheduler._dispatchGroupIntent(
       intent,
@@ -507,7 +544,7 @@ class PlaybackController {
   Future<void> setMute(String speakerId, bool muted) {
     final intent = scheduler._beginRoomIntent<bool?>(
       speakerId: speakerId,
-      lane: _CommandLane.roomMute,
+      lane: CommandField.roomMute,
       readCommitted: () => ref.read(householdProvider).rooms[speakerId]?.muted,
       optimisticValue: muted,
       applyOptimistic: () => _h.setOptimisticMuted(speakerId, muted),
@@ -528,7 +565,7 @@ class GroupingController {
     _groupVolume = _ThrottledScalar(
       beginIntent: (id, value) => scheduler._beginGroupIntent<int?>(
         groupId: id,
-        lane: _CommandLane.groupVolume,
+        lane: CommandField.groupVolume,
         readCommitted: (currentGroupId) =>
             ref.read(householdProvider).groups[currentGroupId]?.groupVolume,
         optimisticValue: value,
@@ -572,7 +609,7 @@ class GroupingController {
   Future<void> setGroupMute(String groupId, bool muted) {
     final intent = scheduler._beginGroupIntent<bool?>(
       groupId: groupId,
-      lane: _CommandLane.groupMute,
+      lane: CommandField.groupMute,
       readCommitted: (currentGroupId) =>
           ref.read(householdProvider).groups[currentGroupId]?.groupMuted,
       optimisticValue: muted,

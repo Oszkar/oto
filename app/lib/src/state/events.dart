@@ -61,7 +61,7 @@ BigInt? wireGeneration(Ref ref) {
 }
 
 /// Builds the raw FRB change-event stream. Extracted behind an overridable
-/// provider so [changeEvents]'s re-subscription is observable in tests (count
+/// provider so [ChangeEvents]'s re-subscription is observable in tests (count
 /// the factory calls) without FRB. The default tears off `subscribeChangeEvents`.
 @riverpod
 Stream<rust_api.ChangeEventDto> Function() changeEventStreamFactory(Ref ref) =>
@@ -88,11 +88,23 @@ Stream<rust_api.ChangeEventDto> Function() changeEventStreamFactory(Ref ref) =>
 /// rebuilds on a new wire generation, so the FRB stream restarts cleanly on
 /// wire replacement - the intended lifecycle boundary.
 @Riverpod(keepAlive: true)
-Stream<rust_api.ChangeEventDto> changeEvents(Ref ref) {
-  final generation = ref.watch(wireGenerationProvider);
-  if (generation == null) {
-    // No wire installed yet - nothing to subscribe to.
-    return const Stream<rust_api.ChangeEventDto>.empty();
+class ChangeEvents extends _$ChangeEvents {
+  @override
+  Stream<rust_api.ChangeEventDto> build() {
+    final generation = ref.watch(wireGenerationProvider);
+    if (generation == null) {
+      // No wire installed yet - nothing to subscribe to.
+      return const Stream<rust_api.ChangeEventDto>.empty();
+    }
+    return ref.watch(changeEventStreamFactoryProvider)();
   }
-  return ref.watch(changeEventStreamFactoryProvider)();
+
+  /// These are observations, not a value snapshot. An equal consecutive event
+  /// must still reconcile an intervening optimistic command or health reset.
+  /// The household/model providers perform value deduplication after folding.
+  @override
+  bool updateShouldNotify(
+    AsyncValue<rust_api.ChangeEventDto> previous,
+    AsyncValue<rust_api.ChangeEventDto> next,
+  ) => true;
 }

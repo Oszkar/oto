@@ -151,6 +151,14 @@ class _GroupEditorBodyState extends ConsumerState<GroupEditorBody> {
     BuildContext context,
     Set<String> currentMembers,
   ) async {
+    final originalGroupId = ref
+        .read(householdProvider)
+        .rooms[widget.hostId]
+        ?.groupId;
+    final originalCoordinator = ref
+        .read(householdProvider)
+        .groups[originalGroupId]
+        ?.coordinatorId;
     final roomsToUngroup = currentMembers
         .where((m) => m != widget.hostId)
         .length;
@@ -162,6 +170,25 @@ class _GroupEditorBodyState extends ConsumerState<GroupEditorBody> {
     );
     if (!context.mounted || confirmed != true) return;
 
+    final household = ref.read(householdProvider);
+    final currentGroup = household.groups[originalGroupId];
+    final sameMembership =
+        currentGroup != null &&
+        currentGroup.coordinatorId == originalCoordinator &&
+        household.rooms[widget.hostId]?.groupId == originalGroupId &&
+        currentGroup.memberIds.length == currentMembers.length &&
+        currentGroup.memberIds.every(currentMembers.contains) &&
+        currentMembers.every(
+          (id) => household.rooms[id]?.groupId == originalGroupId,
+        );
+    if (!sameMembership) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rooms changed. Review the group and try again.'),
+        ),
+      );
+      return;
+    }
     _onUngroupAll(context, currentMembers);
   }
 }
