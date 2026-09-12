@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/breakpoints.dart';
+import '../../state/household.dart';
 import '../../state/selected_source.dart';
 import '../group/group_editor_screen.dart';
 import '../now_playing/now_playing_screen.dart';
@@ -14,9 +15,14 @@ import 'responsive_pop.dart';
 void openSource(BuildContext context, WidgetRef ref, String groupId) {
   ref.read(selectedSourceProvider.notifier).select(groupId);
   if (!context.isWide) {
+    final coordinatorId = ref
+        .read(householdProvider)
+        .groups[groupId]
+        ?.coordinatorId;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => NowPlayingScreen(groupId: groupId),
+        builder: (_) =>
+            NowPlayingScreen(groupId: groupId, coordinatorId: coordinatorId),
       ),
     );
   }
@@ -83,6 +89,9 @@ Future<void> _showPaneDialog(
 ) {
   return showDialog<void>(
     context: context,
+    // Match the push path's Navigator, preserving its provider scope when
+    // hosted inside a nested app such as the fixture showcase.
+    useRootNavigator: false,
     builder: (ctx) => Builder(
       builder: (ctx) {
         ctx.checkResponsiveCollapse(phoneRoute);

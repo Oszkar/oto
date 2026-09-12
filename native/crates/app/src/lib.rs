@@ -119,28 +119,18 @@ fn state_manager() -> &'static StateManager {
     SM.get_or_init(StateManager::new)
 }
 
-/// Process-global per-speaker subscription-health tracker (v0.5).
-/// Observed by command dispatch; reset by `discover_with` on wire
-/// replacement. Emits `SubscriptionError`/`Recovered` onto the app event
-/// bus (`events::push`) on health transitions.
+/// Process-global reachability state. Wire replacement retains known speakers;
+/// every conclusive command result emits a repeatable observation on the bus.
 fn health_tracker() -> &'static HealthTracker {
     static HT: OnceLock<HealthTracker> = OnceLock::new();
     HT.get_or_init(HealthTracker::new)
 }
 
-/// Observe a per-speaker command's result and emit a health-transition
-/// event onto the app bus if the speaker's `Healthy ↔ Errored` state flips.
-///
-/// `cmd_gen` is the wire generation the command actually ran under (captured
-/// under SLOT by [`with_wire_gen`]). If a rediscover has since replaced the
-/// wire - bumping the generation - the observation belongs to a dead wire:
-/// applying it here would stamp a stale transition onto the new stream. The
-/// generation is re-checked **under the tracker's write lock** inside
-/// [`HealthTracker::observe`] (which shares that lock with `retain_known`),
-/// so the check and the health mutation are atomic w.r.t. a concurrent wire
-/// replacement - no stale transition can land against a speaker `retain_known`
-/// just GC'd. The event is also stamped with `cmd_gen` so the FRB consumer
-/// drops it if a bump slips in between the observe and the push.
+/// Publish a command's health observation under the generation it ran against.
+/// Commands hold SLOT through observation and enqueue so their health events
+/// preserve dispatch order. Discovery can bump the generation before acquiring
+/// SLOT, so both the tracker check and the event's generation stamp remain
+/// necessary to reject observations from a replaced wire.
 fn observe_speaker_health<R>(cmd_gen: u64, speaker: &SpeakerId, result: &Result<R, WireError>) {
     if let Some(event) = health_tracker().observe(
         cmd_gen,
@@ -169,29 +159,26 @@ fn observe_group_health<R>(cmd_gen: u64, group: &GroupId, result: &Result<R, Wir
 /// the blocking SOAP call inside the `Wire` implementation.  See the
 /// module-level doc comment for the rationale.
 fn with_wire<R>(f: impl FnOnce(&dyn Wire) -> Result<R, WireError>) -> Result<R, WireError> {
-    with_wire_gen(f).1
+    with_wire_observed(f, |_, _| {})
 }
 
-/// Like [`with_wire`], but also returns the `StateManager` generation the
-/// held wire was installed under (read under the same SLOT acquisition, so
-/// it's the generation the command ran against - not a later one a concurrent
-/// rediscover may have bumped to). Command paths capture this to gate health
-/// observation; see [`observe_speaker_health`]. The no-wire case returns
-/// generation `0`, which is harmless: the synthetic `NotFound` never flips
-/// health.
-fn with_wire_gen<R>(
+/// Execute and observe while holding the same slot lock. Releasing it between
+/// SOAP completion and observation would let a newer command publish first,
+/// then be overwritten by the older result. Best-effort reads use `with_wire`
+/// with no observer. The no-wire precondition does not observe health.
+fn with_wire_observed<R>(
     f: impl FnOnce(&dyn Wire) -> Result<R, WireError>,
-) -> (u64, Result<R, WireError>) {
+    observe: impl FnOnce(u64, &Result<R, WireError>),
+) -> Result<R, WireError> {
     let guard = slot()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    match guard.as_ref() {
-        None => (
-            0,
-            Err(WireError::NotFound("no wire - discover first".into())),
-        ),
-        Some(held) => (held.generation, f(&*held.wire)),
-    }
+    let held = guard
+        .as_ref()
+        .ok_or_else(|| WireError::NotFound("no wire - discover first".into()))?;
+    let result = f(&*held.wire);
+    observe(held.generation, &result);
+    result
 }
 
 /// Construct a wire, run discovery, and on success replace the held
@@ -314,60 +301,84 @@ pub fn refresh_topology_with(
 
 /// Start playback on `group` (routed to its coordinator).
 pub fn play(group: &GroupId) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.play(group));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire_observed(
+        |w| w.play(group),
+        |wire_gen, result| {
+            observe_group_health(wire_gen, group, result);
+        },
+    )
 }
 
 /// Pause playback on `group` (routed to its coordinator).
 pub fn pause(group: &GroupId) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.pause(group));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire_observed(
+        |w| w.pause(group),
+        |wire_gen, result| {
+            observe_group_health(wire_gen, group, result);
+        },
+    )
 }
 
 /// Skip to the next track on `group`.
 pub fn next(group: &GroupId) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.next(group));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire_observed(
+        |w| w.next(group),
+        |wire_gen, result| {
+            observe_group_health(wire_gen, group, result);
+        },
+    )
 }
 
 /// Skip to the previous track on `group`.
 pub fn previous(group: &GroupId) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.previous(group));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire_observed(
+        |w| w.previous(group),
+        |wire_gen, result| {
+            observe_group_health(wire_gen, group, result);
+        },
+    )
 }
 
 /// Set `speaker`'s volume (per-speaker, not per-group).
 pub fn set_volume(speaker: &SpeakerId, volume: Volume) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.set_volume(speaker, volume));
-    observe_speaker_health(wire_gen, speaker, &result);
-    result
+    with_wire_observed(
+        |w| w.set_volume(speaker, volume),
+        |wire_gen, result| {
+            observe_speaker_health(wire_gen, speaker, result);
+        },
+    )
 }
 
 /// Set `speaker`'s mute state (per-speaker, not per-group).
 pub fn set_mute(speaker: &SpeakerId, muted: bool) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.set_mute(speaker, muted));
-    observe_speaker_health(wire_gen, speaker, &result);
-    result
+    with_wire_observed(
+        |w| w.set_mute(speaker, muted),
+        |wire_gen, result| {
+            observe_speaker_health(wire_gen, speaker, result);
+        },
+    )
 }
 
 /// v0.5.1: set `group`'s master volume (routed to its coordinator). Health is
 /// attributed to the coordinator the command was routed to.
 pub fn set_group_volume(group: &GroupId, volume: Volume) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.set_group_volume(group, volume));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire_observed(
+        |w| w.set_group_volume(group, volume),
+        |wire_gen, result| {
+            observe_group_health(wire_gen, group, result);
+        },
+    )
 }
 
 /// v0.5.1: set `group`'s master mute state (routed to its coordinator). Health
 /// is attributed to the coordinator the command was routed to.
 pub fn set_group_mute(group: &GroupId, muted: bool) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.set_group_mute(group, muted));
-    observe_group_health(wire_gen, group, &result);
-    result
+    with_wire_observed(
+        |w| w.set_group_mute(group, muted),
+        |wire_gen, result| {
+            observe_group_health(wire_gen, group, result);
+        },
+    )
 }
 
 /// v0.5.1: fold `speaker` into `coordinator`'s group. Additive; the settled
@@ -375,18 +386,24 @@ pub fn set_group_mute(group: &GroupId, muted: bool) -> Result<(), WireError> {
 /// (no self-trigger here). Health is attributed to the joiner - the speaker
 /// the join SOAP is sent to.
 pub fn join_group(speaker: &SpeakerId, coordinator: &SpeakerId) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.join_group(speaker, coordinator));
-    observe_speaker_health(wire_gen, speaker, &result);
-    result
+    with_wire_observed(
+        |w| w.join_group(speaker, coordinator),
+        |wire_gen, result| {
+            observe_speaker_health(wire_gen, speaker, result);
+        },
+    )
 }
 
 /// v0.5.1: detach `speaker` into its own standalone group. Additive; the
 /// settled topology surfaces via the debounced `GroupMembership`
 /// topology-event path (no self-trigger here).
 pub fn leave_group(speaker: &SpeakerId) -> Result<(), WireError> {
-    let (wire_gen, result) = with_wire_gen(|w| w.leave_group(speaker));
-    observe_speaker_health(wire_gen, speaker, &result);
-    result
+    with_wire_observed(
+        |w| w.leave_group(speaker),
+        |wire_gen, result| {
+            observe_speaker_health(wire_gen, speaker, result);
+        },
+    )
 }
 
 /// One-shot read of `speaker`'s current volume/mute/transport snapshot.
@@ -1186,7 +1203,7 @@ mod tests {
     }
 
     #[test]
-    fn subscription_error_not_repeated_on_repeated_failures() {
+    fn subscription_error_repeated_for_every_failed_command() {
         let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
         clear_slot();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
@@ -1202,8 +1219,110 @@ mod tests {
         let events = drain_app_events();
         assert_eq!(
             events.len(),
-            1,
-            "edge-triggered: only the first failure emits"
+            3,
+            "each failed command re-establishes reachability for Dart"
+        );
+    }
+
+    #[test]
+    fn failure_after_wire_replacement_reestablishes_unreachable_health() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        let mock = discover_with_held_mock();
+        mock.set_command_error(&kitchen, WireError::Network("first failure".into()));
+        assert!(set_mute(&kitchen, true).is_err());
+        assert_eq!(drain_app_events().len(), 1);
+
+        // A user scan can clear Dart's flag, while Rust retains Errored.
+        // The next failure must be emitted even though Rust sees no edge.
+        let replacement = discover_with_held_mock();
+        replacement.set_command_error(&kitchen, WireError::Network("still unreachable".into()));
+        assert!(set_mute(&kitchen, false).is_err());
+        assert_eq!(
+            drain_app_events(),
+            vec![ChangeEvent::SubscriptionError {
+                speaker: kitchen,
+                message: "still unreachable".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn success_after_lost_recovery_reestablishes_reachable_health() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        let mock = discover_with_held_mock();
+        mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
+        assert!(set_mute(&kitchen, true).is_err());
+        assert_eq!(drain_app_events().len(), 1);
+        mock.clear_command_error(&kitchen);
+        assert!(set_mute(&kitchen, false).is_ok());
+
+        // Recovery was queued, but replacement clears it before Dart sees it.
+        // An automatic refresh preserves Dart's old error; Rust is Healthy.
+        discover_with_held_mock();
+        assert!(drain_app_events().is_empty());
+        assert!(set_mute(&kitchen, true).is_ok());
+        assert_eq!(
+            drain_app_events(),
+            vec![ChangeEvent::SubscriptionRecovered { speaker: kitchen }]
+        );
+    }
+
+    #[test]
+    fn command_health_observation_cannot_be_overtaken_by_later_dispatch() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+        discover_with_held_mock();
+        let kitchen = SpeakerId::new("RINCON_KITCHEN");
+        let first_speaker = kitchen.clone();
+        let (observing_tx, observing_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let first = std::thread::spawn(move || {
+            with_wire_observed(
+                |_| Err::<(), _>(WireError::Network("older failure".into())),
+                |generation, result| {
+                    observing_tx.send(()).unwrap();
+                    release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    observe_speaker_health(generation, &first_speaker, result);
+                },
+            )
+        });
+        observing_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        // Synchronize at the old command's observation, after SOAP completed.
+        // A later command must still wait for its observation and enqueue.
+        let (started_tx, started_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let second_speaker = kitchen.clone();
+        let second = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let result = set_mute(&second_speaker, false);
+            finished_tx.send(()).unwrap();
+            result
+        });
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let overtook = finished_rx.recv_timeout(Duration::from_millis(100)).is_ok();
+        release_tx.send(()).unwrap();
+        assert!(first.join().unwrap().is_err());
+        assert!(second.join().unwrap().is_ok());
+        assert!(
+            !overtook,
+            "later command overtook the older health observation"
+        );
+        assert_eq!(
+            drain_app_events(),
+            vec![
+                ChangeEvent::SubscriptionError {
+                    speaker: kitchen.clone(),
+                    message: "older failure".into(),
+                },
+                ChangeEvent::SubscriptionRecovered { speaker: kitchen },
+            ]
         );
     }
 
@@ -1530,7 +1649,7 @@ mod tests {
         mock.set_command_error(&kitchen, WireError::Network("unreachable".into()));
         let _ = set_volume(&kitchen, Volume::new(50).unwrap());
 
-        // Rediscover: health resets, so the queued event is stale and must
+        // Rediscover: the queued event belongs to the replaced wire and must
         // be dropped - it must not surface on the new stream (review #65).
         let _ = discover_with_held_mock();
         assert!(

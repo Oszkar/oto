@@ -489,18 +489,68 @@ class _Header extends ConsumerWidget {
 
 /// Full-screen Now Playing route (phone). On wide layouts the same content is
 /// rendered by `NowPlayingBody` inside the detail pane instead.
-class NowPlayingScreen extends StatelessWidget {
-  const NowPlayingScreen({super.key, required this.groupId});
+class NowPlayingScreen extends ConsumerStatefulWidget {
+  const NowPlayingScreen({
+    super.key,
+    required this.groupId,
+    this.coordinatorId,
+  });
   final String groupId;
+
+  /// Captured when navigation starts, before the route first builds.
+  final String? coordinatorId;
+
+  @override
+  ConsumerState<NowPlayingScreen> createState() => _NowPlayingScreenState();
+}
+
+class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+  String? _coordinatorId;
+
+  @override
+  void didUpdateWidget(NowPlayingScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.groupId != widget.groupId ||
+        oldWidget.coordinatorId != widget.coordinatorId) {
+      _coordinatorId = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     if (context.checkResponsivePop()) return const SizedBox.shrink();
+    final household = ref.watch(householdProvider);
+    // A route follows the selected physical coordinator, just like the wide
+    // pane. Once captured, an old group ID must never select another speaker.
+    _coordinatorId ??=
+        widget.coordinatorId ?? household.groups[widget.groupId]?.coordinatorId;
+    String? groupId;
+    for (final group in household.groups.values) {
+      if (group.coordinatorId == _coordinatorId) {
+        groupId = group.id;
+        break;
+      }
+    }
     return OtoScaffold(
-      body: NowPlayingBody(
-        groupId: groupId,
-        onDismiss: () => Navigator.of(context).maybePop(),
-      ),
+      body: groupId == null
+          ? Column(
+              children: [
+                PaneDismiss(
+                  onDismiss: () => Navigator.of(context).maybePop(),
+                  icon: 'chevronDown',
+                  tooltip: 'Dismiss Now Playing',
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Text('This source is no longer available.'),
+                  ),
+                ),
+              ],
+            )
+          : NowPlayingBody(
+              groupId: groupId,
+              onDismiss: () => Navigator.of(context).maybePop(),
+            ),
     );
   }
 }

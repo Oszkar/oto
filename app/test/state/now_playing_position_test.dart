@@ -136,7 +136,7 @@ Future<_Harness> _harness({String watch = 'G1'}) async {
   final container = ProviderContainer(
     overrides: [
       discoveryProvider.overrideWith(_FakeDiscovery.new),
-      changeEventsProvider.overrideWith((ref) => events.stream),
+      changeEventsProvider.overrideWithBuild((ref, notifier) => events.stream),
       clockProvider.overrideWithValue(() => fakeNow),
       positionApiProvider.overrideWithValue(fake),
     ],
@@ -391,7 +391,9 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         discoveryProvider.overrideWith(_FakeDiscovery.new),
-        changeEventsProvider.overrideWith((ref) => events.stream),
+        changeEventsProvider.overrideWithBuild(
+          (ref, notifier) => events.stream,
+        ),
         clockProvider.overrideWithValue(() => fakeNow),
         positionApiProvider.overrideWith(
           (ref) => _CompleterPositionApi(completers),
@@ -479,7 +481,9 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         discoveryProvider.overrideWith(_FakeDiscovery.new),
-        changeEventsProvider.overrideWith((ref) => events.stream),
+        changeEventsProvider.overrideWithBuild(
+          (ref, notifier) => events.stream,
+        ),
         clockProvider.overrideWithValue(() => fakeNow),
         positionApiProvider.overrideWithValue(fake),
       ],

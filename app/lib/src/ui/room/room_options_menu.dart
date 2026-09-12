@@ -45,6 +45,10 @@ class RoomOptionsButton extends ConsumerWidget {
   }
 
   void _showMenu(BuildContext context, WidgetRef ref) {
+    // The originating room can disappear while this sheet is open. Keep only
+    // app-lived command/navigation handles in its callbacks.
+    final navigatorContext = Navigator.of(context).context;
+    final grouping = ref.read(groupingControllerProvider);
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => _KebabSheet(
@@ -52,14 +56,14 @@ class RoomOptionsButton extends ConsumerWidget {
         memberCount: memberCount,
         onGroupRooms: () {
           Navigator.of(ctx).pop();
-          openGroupEditor(context, hostId);
+          openGroupEditor(navigatorContext, hostId);
         },
         // Ungroup removes THIS room from its group, so it targets speakerId
         // (not the coordinator).
         onUngroup: memberCount > 1
             ? () {
                 Navigator.of(ctx).pop();
-                ref.read(groupingControllerProvider).leaveGroup(speakerId);
+                grouping.leaveGroup(speakerId);
               }
             : null,
       ),

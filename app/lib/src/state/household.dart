@@ -21,12 +21,129 @@ import 'model/household.dart';
 
 part 'household.g.dart';
 
+/// Fields that commands can change optimistically. Group fields use the
+/// coordinator's speaker id so observations survive a group-id change.
+enum CommandField {
+  roomVolume,
+  roomMute,
+  groupVolume,
+  groupMute,
+  transportToggle,
+}
+
+typedef CommandObservation = ({int topology, int revision});
+
 @Riverpod(keepAlive: true)
 class HouseholdNotifier extends _$HouseholdNotifier {
+  Household _confirmed = const Household();
+  int _topologyRevision = 0;
+  int _eventRevision = 0;
+  final _observations = <({String speakerId, CommandField field}), int>{};
+
+  CommandObservation observation(String speakerId, CommandField field) => (
+    topology: _topologyRevision,
+    revision: _observations[(speakerId: speakerId, field: field)] ?? 0,
+  );
+
+  String? _confirmedGroupId(String coordinatorId) {
+    for (final group in _confirmed.groups.values) {
+      if (group.coordinatorId == coordinatorId) return group.id;
+    }
+    return null;
+  }
+
+  /// Last observed or successfully commanded value, never an in-flight guess.
+  Object? confirmedValue(String speakerId, CommandField field) {
+    final room = _confirmed.rooms[speakerId];
+    final group = _confirmed.groups[_confirmedGroupId(speakerId)];
+    return switch (field) {
+      CommandField.roomVolume => room?.volume,
+      CommandField.roomMute => room?.muted,
+      CommandField.groupVolume => group?.groupVolume,
+      CommandField.groupMute => group?.groupMuted,
+      CommandField.transportToggle => group?.transport,
+    };
+  }
+
+  /// A successful command needs no NOTIFY when the device value was unchanged.
+  /// Keep that value for rediscovery, without replacing a newer optimistic UI
+  /// intent. The scheduler calls this only if dispatch saw no newer observation.
+  void confirmCommand(String speakerId, CommandField field, Object? value) {
+    final groupId = _confirmedGroupId(speakerId);
+    _confirmed = switch (field) {
+      CommandField.roomVolume => updateRoom(
+        _confirmed,
+        speakerId,
+        (r) => r.copyWith(volume: value),
+      ),
+      CommandField.roomMute => updateRoom(
+        _confirmed,
+        speakerId,
+        (r) => r.copyWith(muted: value),
+      ),
+      CommandField.groupVolume => updateGroup(
+        _confirmed,
+        groupId ?? '',
+        (g) => g.copyWith(groupVolume: value),
+      ),
+      CommandField.groupMute => updateGroup(
+        _confirmed,
+        groupId ?? '',
+        (g) => g.copyWith(groupMuted: value),
+      ),
+      CommandField.transportToggle => updateGroup(
+        _confirmed,
+        groupId ?? '',
+        (g) => g.copyWith(transport: value),
+      ),
+    };
+    _recordObservation(speakerId, field);
+  }
+
+  void _recordObservation(String speakerId, CommandField field) {
+    final known = switch (field) {
+      CommandField.roomVolume ||
+      CommandField.roomMute => _confirmed.rooms.containsKey(speakerId),
+      _ => _confirmedGroupId(speakerId) != null,
+    };
+    if (known) {
+      _observations[(speakerId: speakerId, field: field)] = ++_eventRevision;
+    }
+  }
+
+  void _observeEvent(ChangeEventDto event) {
+    _confirmed = applyEvent(_confirmed, event);
+    switch (event) {
+      case ChangeEventDto_Volume(:final speakerId):
+        _recordObservation(speakerId, CommandField.roomVolume);
+      case ChangeEventDto_Mute(:final speakerId):
+        _recordObservation(speakerId, CommandField.roomMute);
+      case ChangeEventDto_GroupVolume(:final groupId):
+        final coordinator = _confirmed.groups[groupId]?.coordinatorId;
+        if (coordinator != null) {
+          _recordObservation(coordinator, CommandField.groupVolume);
+        }
+      case ChangeEventDto_GroupMute(:final groupId):
+        final coordinator = _confirmed.groups[groupId]?.coordinatorId;
+        if (coordinator != null) {
+          _recordObservation(coordinator, CommandField.groupMute);
+        }
+      case ChangeEventDto_Playback(:final groupId):
+        final coordinator = _confirmed.groups[groupId]?.coordinatorId;
+        if (coordinator != null) {
+          _recordObservation(coordinator, CommandField.transportToggle);
+        }
+      default:
+        break;
+    }
+    state = applyEvent(state, event);
+  }
+
   @override
   Household build() {
     // Future discovery transitions (regroup / re-discover) fold in here,
-    // preserving accumulated per-speaker/-group state via `previous: state`.
+    // preserving confirmed per-speaker/-group state independently of the UI's
+    // in-flight optimistic values.
     ref.listen(discoveryProvider, (_, next) {
       next.whenData((topo) {
         // Only a user-requested scan resets stale unreachable flags; every
@@ -42,15 +159,20 @@ class HouseholdNotifier extends _$HouseholdNotifier {
             last != null &&
             identical(last.topology, topo) &&
             last.source == TopologySource.userScan;
-        state = householdFromTopology(
+        _confirmed = householdFromTopology(
           topo,
-          previous: state,
+          previous: _confirmed,
           clearHealth: userScan,
         );
+        // A replacement starts from confirmed state, not an optimistic guess
+        // made against the previous wire. No removed entity keeps a revision.
+        _topologyRevision++;
+        _observations.clear();
+        state = _confirmed;
       });
     });
     ref.listen(changeEventsProvider, (_, next) {
-      next.whenData((e) => state = applyEvent(state, e));
+      next.whenData(_observeEvent);
     });
     // Seed the INITIAL skeleton from discovery's current value. We read here
     // rather than rely on a `fireImmediately` listener: an immediate fire runs
@@ -58,10 +180,11 @@ class HouseholdNotifier extends _$HouseholdNotifier {
     // via `previous: state`) only for `return const Household()` to overwrite
     // it -- leaving the UI empty whenever discovery already resolved before
     // this provider was first watched (codex review, PR #80).
-    return switch (ref.read(discoveryProvider)) {
+    _confirmed = switch (ref.read(discoveryProvider)) {
       AsyncData(:final value) => householdFromTopology(value),
       _ => const Household(),
     };
+    return _confirmed;
   }
 
   /// Optimistically reflect a per-speaker volume change before the event
@@ -125,4 +248,7 @@ class HouseholdNotifier extends _$HouseholdNotifier {
   /// Restore a group's master mute to [m] (may be `null`).
   void restoreGroupMuted(String groupId, bool? m) =>
       state = updateGroup(state, groupId, (g) => g.copyWith(groupMuted: m));
+
+  void restoreTransport(String groupId, PlaybackState? transport) => state =
+      updateGroup(state, groupId, (g) => g.copyWith(transport: transport));
 }

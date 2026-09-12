@@ -1,7 +1,7 @@
 //! App-originated event bus (v0.5).
 //!
 //! `SubscriptionError` / `SubscriptionRecovered` events originate in
-//! `oto-app` on command-dispatch health transitions - NOT in the wire's
+//! `oto-app` on conclusive command-dispatch results - NOT in the wire's
 //! pump - so they need a path to the FRB consumer independent of the wire's
 //! v0.4 `mpsc` channel.
 //!
@@ -92,7 +92,7 @@ pub fn try_recv_app_event(consumer_gen: u64, current_gen: u64) -> Option<ChangeE
 }
 
 /// Drain and discard every pending app-bus event. Called by `discover_with`
-/// on wire replacement: health resets there, so any `SubscriptionError` /
+/// on wire replacement: any `SubscriptionError` /
 /// `Recovered` still queued against the OLD wire is stale and must not
 /// surface on the NEW stream after rediscover.
 pub(crate) fn clear() {

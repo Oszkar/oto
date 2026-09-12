@@ -237,12 +237,14 @@ class _CardsBody extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: RoomCard(speakerId: left)),
+          Expanded(
+            child: RoomCard(key: ValueKey(left), speakerId: left),
+          ),
           const SizedBox(width: Space.gutter12),
           Expanded(
             child: right == null
                 ? const SizedBox.shrink()
-                : RoomCard(speakerId: right),
+                : RoomCard(key: ValueKey(right), speakerId: right),
           ),
         ],
       ),
@@ -270,7 +272,12 @@ class _StackBody extends StatelessWidget {
           ),
         );
       } else {
-        children.add(RoomRow(speakerId: g.memberIds.single));
+        children.add(
+          RoomRow(
+            key: ValueKey(g.memberIds.single),
+            speakerId: g.memberIds.single,
+          ),
+        );
       }
     }
 

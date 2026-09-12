@@ -13,6 +13,7 @@ import 'package:oto/src/state/breakpoints.dart';
 import 'package:oto/src/state/model/household.dart';
 import 'package:oto/src/state/prefs.dart';
 import 'package:oto/src/theme/accent.dart';
+import 'package:oto/src/ui/group/group_editor_screen.dart';
 
 void main() {
   LayoutTier? captured;
@@ -53,4 +54,39 @@ void main() {
     await pumpAt(tester, Viewport.phone);
     expect(captured, LayoutTier.compact);
   });
+
+  for (final wide in [false, true]) {
+    testWidgets('room menu keeps preview scope and viewport (wide=$wide)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      // Include the gallery's outer Navigator: standalone previews cannot
+      // detect a dialog escaping the fixture ProviderScope.
+      await tester.pumpWidget(const ShowcaseApp());
+      await tester.tap(find.text(wide ? 'Ready' : 'Room detail (solo)'));
+      await tester.pumpAndSettle();
+      if (wide) {
+        await tester.tap(find.text('Desktop'));
+        await tester.pumpAndSettle();
+      }
+      final room = wide ? 'RINCON_BR' : 'RINCON_OF';
+      await tester.tap(find.byKey(Key('room-kebab-$room')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('room-kebab-group-$room')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(GroupEditorBody), findsOneWidget);
+      expect(find.byType(Dialog), wide ? findsOneWidget : findsNothing);
+      expect(
+        find.byType(GroupEditorScreen),
+        wide ? findsNothing : findsOneWidget,
+      );
+    });
+  }
 }

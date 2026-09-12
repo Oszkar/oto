@@ -68,6 +68,11 @@ Ownership is **split**. Rust owns the authoritative device state; Dart owns the 
 
 **Dart side.** `householdProvider` is a keep-alive `Notifier` that seeds its skeleton from `discoveryProvider` and folds `changeEventsProvider` deltas on top through the pure `household_reducer`. It exists because the UI needs an accumulated per-room / per-group model that no single FRB read returns, and because the current FRB surface has no getter for Rust's cached group volume/mute.
 
+The accumulator retains confirmed values separately from its rendered optimistic
+state. Per-field observation revisions and a topology revision let the command
+scheduler detect intervening evidence; field revisions are cleared on topology
+replacement, and removed rooms/groups are dropped from both views.
+
 Consequences:
 
 - **Hot reload preserves both layers.** Hot restart recreates the Dart isolate and its accumulator; native state can remain until wire replacement. A process relaunch clears both. Dart needs discovery and event seeds to rebuild its view; it cannot recover group volume/mute through a bridge getter.
@@ -114,8 +119,14 @@ changes optimistically, then reconciles the FRB `Future` through one keep-alive
 physical speaker that receives SOAP; group commands capture the coordinator and
 re-resolve the current group id immediately before dispatch and rollback. A
 separate speaker-plus-operation-lane generation decides whether an older
-failure has been superseded, and each lane retains its last successfully
-committed rollback baseline. Cumulative commands are ordered without
+failure has been superseded. Rollback uses the latest authoritative observation
+for that field, kept separate from rendered optimistic values. A successful
+predecessor supplies the fallback when no newer observation arrived during its
+dispatch; an older success cannot overwrite an intervening device observation.
+Topology reseeding carries confirmed values by speaker/coordinator identity,
+never promoting a pending optimistic value to an observation. Events have no
+command IDs, so reconciliation follows their observed order without claiming
+to identify which command produced them. Cumulative commands are ordered without
 superseding each other. A current `CommandError` rolls back and is reported
 through the keep-alive `commandFailuresProvider`; the app-lifetime
 `CommandFailureListener` renders one non-modal SnackBar per report. `NotFound`
@@ -181,7 +192,13 @@ sequenceDiagram
     AP-->>U: ChangeEventDto (Stream)
 ```
 
-The Dart `changeEventsProvider` (a Riverpod `StreamProvider`) re-subscribes when a NEW wire is installed - keyed on the **wire generation** (`current_wire_generation()`, bumped by `discover_with` on success only), not raw discovery state. A *failed* re-discover keeps the old wire (whose event receiver is one-shot and can't be retaken), so gating on the generation avoids tearing the live stream down onto a dead receiver. The same `StateManager` generation makes stale-OLD-wire cache applies after a mid-stream `discover_with` no-op against the freshly-cleared cache.
+The Dart `changeEventsProvider` (a Riverpod `StreamNotifier`) re-subscribes when a NEW wire is installed - keyed on the **wire generation** (`current_wire_generation()`, bumped by `discover_with` on success only), not raw discovery state. A *failed* re-discover keeps the old wire (whose event receiver is one-shot and can't be retaken), so gating on the generation avoids tearing the live stream down onto a dead receiver. The same `StateManager` generation makes stale-OLD-wire cache applies after a mid-stream `discover_with` no-op against the freshly-cleared cache.
+
+The event notifier delivers every observation, including identical consecutive
+DTOs. Riverpod's default equality filtering is inappropriate here: an identical
+device value may arrive after an optimistic edit or health reset and must still
+reach the accumulator. Downstream derived state retains its normal equality
+filtering.
 
 The same single FRB stream also carries:
 
@@ -214,7 +231,16 @@ The same single FRB stream also carries:
   bumping the wire-install signal `wireGenerationProvider` watches, so the
   re-subscribe does not depend on whether the published topology compares equal.
 - **Group volume/mute events.** The pump watches `GroupVolume` / `GroupMute` (GroupRenderingControl, coordinator-routed like AVTransport) and emits `ChangeEvent::{GroupVolume, GroupMute}` from the SDK's typed payload. No per-speaker or group cache lookup is needed. Coordinator filtering and post-regroup stale-group suppression still apply (see [sonos-notes § Group operations](sonos-notes.md#group-operations)).
-- **Subscription health.** `SubscriptionError` / `SubscriptionRecovered` are emitted reactively from command dispatch (`oto-app` tracks per-speaker `Healthy ↔ Errored`) onto a *separate* app-event `mpsc` bus that the FRB consumer drains alongside the wire channel. App events are stamped with the wire generation; the consumer drops stale-stamped events so a lingering old-wire health event can't surface on the new stream.
+- **Subscription health.** Every mutating command that returns a network error
+  emits `SubscriptionError`; every successful mutating command emits
+  `SubscriptionRecovered`, including repeated outcomes. These are observations,
+  not just state transitions: a user scan can reset Dart's displayed error while
+  Rust still retains its prior error marker, and the next command must establish
+  health again. `Backend`/`NotFound` errors and best-effort position/cache reads
+  do not establish recovery. Observation and enqueue run under the command's
+  slot lock so they preserve SOAP execution order. The separate app-event
+  `mpsc` bus is drained alongside the wire channel; its events retain the wire
+  generation stamp and stale-generation checks.
 
 ## Frontend shell
 
@@ -223,6 +249,12 @@ The Flutter shell is responsive over the same providers (no backend change). Lay
 - **`OtoScaffold`** carries optional `detail` + `rail` slots. Compact renders the phone body unchanged; wide renders the room grid beside a persistent Now Playing pane; desktop adds a leading nav rail (a three-pane layout).
 - **Selection.** `selectedSourceProvider` (the explicit pick) + `resolvedSourceProvider` (default = first active source, self-healing when a regroup drops the chosen id) drive the pane. On wide, tapping a room/group selects it in place; on phone the existing route pushes are kept. A single tier-aware `nav.dart` helper makes that choice per width.
 - **Routing architecture decision.** Imperative routing (`Navigator.of(context).push`) is used for phone detail screens. Using `go_router` was deliberately decided against due to refactoring complexity, YAGNI (no deep linking or web browser history requirements), and to keep the codebase simple. Dynamically popped routes handle dynamic window resizing instead.
+- **Identity and action lifetime.** Solo and grouped room controls are keyed by
+  speaker identity so a topology reorder cannot retarget a slider gesture.
+  Phone Now Playing resolves its captured coordinator to the current group.
+  Responsive route changes preserve the underlying content while a modal is
+  active, so the modal's callbacks remain valid. Group confirmation rechecks
+  membership before applying an action to a topology that may have changed.
 - **`*Body` / `*Screen` split.** Detail screens split into a chrome-free `*Body` (embeddable in the pane or a dialog) and a thin `*Screen` route wrapper for phone. On wide, Now Playing renders in the pane, Settings and the group editor open as dialogs, and Room detail is folded away - a wide room tap selects its group into the pane, so the room screen is unreachable there.
 - **Mute surfaces.** One shared `MuteButton` fronts the existing
   per-speaker and group-master command paths wherever a volume control appears:
@@ -231,7 +263,9 @@ The Flutter shell is responsive over the same providers (no backend change). Lay
   adjacent volume control.
 - **Unreachable recovery.** `HomeAllUnreachable` keeps the cached
   household visible but adds a rescan affordance. A user-requested scan clears
-  carried health errors; automatic topology refresh preserves them. UI copy
+  carried health errors as an optimistic retry reset, not proof that every
+  listed speaker answered. Every subsequent mutating command supplies another
+  health observation; automatic topology refresh preserves carried errors. UI copy
   says "Unreachable" because command-time network failure cannot establish
   device power state.
 - **Room options on wide.** A solo room shown in the persistent Now

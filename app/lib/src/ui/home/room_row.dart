@@ -200,6 +200,7 @@ class RoomRow extends ConsumerWidget {
             child: Opacity(
               opacity: muted ? 0.45 : 1,
               child: OtoSlider(
+                key: ValueKey('room-volume-$speakerId'),
                 value: value,
                 onChanged: hasVolume
                     ? (v) => ctrl.setVolume(speakerId, (v * 100).round())

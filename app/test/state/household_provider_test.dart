@@ -37,12 +37,11 @@ class _FakeDiscovery extends Discovery {
 ProviderContainer _container() => ProviderContainer(
   overrides: [
     discoveryProvider.overrideWith(() => _FakeDiscovery(_topo())),
-    changeEventsProvider.overrideWith(
-      (ref) => const Stream<ChangeEventDto>.empty(),
+    changeEventsProvider.overrideWithBuild(
+      (ref, notifier) => const Stream<ChangeEventDto>.empty(),
     ),
   ],
 );
-
 
 /// A second topology, DIFFERENT from [_topo] so republishing it actually
 /// transitions `discoveryProvider`. Both are `const`, and Dart canonicalizes
@@ -139,7 +138,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           discoveryProvider.overrideWith(() => discovery),
-          changeEventsProvider.overrideWith((ref) => events.stream),
+          changeEventsProvider.overrideWithBuild(
+            (ref, notifier) => events.stream,
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -155,10 +156,12 @@ void main() {
       // broadcast stream drops anything emitted while nobody is listening,
       // which would make the setup silently no-op and the assertions vacuous.
       await pumpEventQueue();
-      events.add(const ChangeEventDto.subscriptionError(
-        speakerId: 'KT',
-        message: 'network',
-      ));
+      events.add(
+        const ChangeEventDto.subscriptionError(
+          speakerId: 'KT',
+          message: 'network',
+        ),
+      );
       await pumpEventQueue();
       expect(container.read(householdProvider).rooms['KT']!.online, isFalse);
 

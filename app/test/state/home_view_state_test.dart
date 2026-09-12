@@ -55,7 +55,6 @@ const _cachedHousehold = Household(
   },
 );
 
-
 /// [_cachedHousehold] with its only room unreachable - the "cached topology is
 /// still valid but nothing answers" case that used to render a healthy
 /// HomeReady with no rescan affordance anywhere on screen.
@@ -184,8 +183,8 @@ ProviderContainer _containerWithRealHousehold({
   final container = ProviderContainer(
     overrides: [
       discoveryProvider.overrideWith(discovery),
-      changeEventsProvider.overrideWith(
-        (ref) => const Stream<rust_api.ChangeEventDto>.empty(),
+      changeEventsProvider.overrideWithBuild(
+        (ref, notifier) => const Stream<rust_api.ChangeEventDto>.empty(),
       ),
     ],
   );

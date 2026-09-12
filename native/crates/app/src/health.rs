@@ -1,18 +1,14 @@
 //! Per-speaker subscription-health tracker (v0.5).
 //!
-//! The SDK at the pinned `=0.5.2` does not expose per-speaker subscription
-//! failures (it swallows them internally - see
-//! `oto-wire/src/events.rs::register_watches`), so v0.4 carried
-//! `ChangeEvent::SubscriptionError` / `SubscriptionRecovered` on the surface
-//! but never emitted them. v0.5 closes that gap reactively from command
-//! dispatch: every user command's `Result` is observed here, and a
-//! `Healthy ↔ Errored` edge for a speaker emits the matching event.
+//! Every completed mutating command publishes its observed reachability:
+//! `Network` emits `SubscriptionError`; success emits `SubscriptionRecovered`.
+//! These observations are repeatable, even if Rust already holds that state:
+//! Dart can clear an error on a user scan or miss an event during replacement.
+//! The next command must therefore establish health without requiring an edge.
 //!
-//! Only `WireError::Network` flips a speaker to `Errored` - it's the
-//! transport-reachability signal. `Backend` (a SOAP fault from a reachable
-//! device) and `NotFound` (a stale/typo'd id - a precondition error, not a
-//! reachability one) leave health untouched. Emission is **edge-triggered**:
-//! repeated failures or successes after the first do not re-emit.
+//! `Backend` and `NotFound` leave health untouched and emit nothing. Cached
+//! reads and best-effort position reads do not call this tracker because their
+//! success does not establish device reachability.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -78,23 +74,13 @@ impl HealthTracker {
             .retain(|speaker, _| known.contains(speaker));
     }
 
-    /// Observe a command's `Result` for `speaker` and return the event to
-    /// emit on a health *transition* (or `None` if health is unchanged).
+    /// Record and publish every conclusive command observation, including
+    /// repeated failures and successes. Only a current-generation `Network`
+    /// failure or success changes health; other errors emit nothing.
     ///
-    /// - `Healthy` + `Network` → `Errored`, emit `SubscriptionError`.
-    /// - `Errored` + `Ok`      → `Healthy`, emit `SubscriptionRecovered`.
-    /// - everything else (Backend/NotFound errors, repeated same-state,
-    ///   `Ok` while already Healthy) → no transition, `None`.
-    ///
-    /// `cmd_gen` is the wire generation the command ran under; `current_gen`
-    /// reads the live generation. Both are re-checked UNDER the states write
-    /// lock: `retain_known` (called by `discover_with` on wire replacement)
-    /// takes this same lock, so once we hold it AND the generation still
-    /// matches, no replacement can have interleaved between the check and the
-    /// mutation below. This closes the race where a stale command's
-    /// observation lands after a concurrent wire replacement (which could
-    /// otherwise surface a spurious transition against a GC'd or reassigned
-    /// slot).
+    /// Check the command generation under the health lock before mutation.
+    /// Discovery may still bump the generation concurrently, so callers must
+    /// also stamp the emitted event with `cmd_gen` for consumer filtering.
     pub(crate) fn observe<R>(
         &self,
         cmd_gen: u64,
@@ -107,23 +93,24 @@ impl HealthTracker {
             return None;
         }
         let cur = states.get(speaker).copied().unwrap_or(HealthState::Healthy);
-        match (cur, result) {
-            (HealthState::Healthy, Err(WireError::Network(msg))) => {
-                states.insert(speaker.clone(), HealthState::Errored);
+        match result {
+            Err(WireError::Network(msg)) => {
+                if cur != HealthState::Errored {
+                    states.insert(speaker.clone(), HealthState::Errored);
+                }
                 Some(ChangeEvent::SubscriptionError {
                     speaker: speaker.clone(),
                     message: msg.clone(),
                 })
             }
-            (HealthState::Errored, Ok(_)) => {
+            Ok(_) => {
                 // Back to default: remove the slot rather than store Healthy.
                 states.remove(speaker);
                 Some(ChangeEvent::SubscriptionRecovered {
                     speaker: speaker.clone(),
                 })
             }
-            // No transition: Backend/NotFound never flip health; repeated
-            // Network while Errored, or Ok while Healthy, are no-ops.
+            // Backend/NotFound and lifecycle errors do not establish health.
             _ => None,
         }
     }
@@ -170,36 +157,45 @@ mod tests {
     }
 
     #[test]
-    fn repeated_network_does_not_re_emit() {
+    fn repeated_network_publishes_latest_failure() {
         let t = HealthTracker::new();
-        assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // first → error
-        assert!(
-            t.observe(0, || 0, &sid(), &net()).is_none(),
-            "no duplicate error"
+        assert!(t.observe(0, || 0, &sid(), &net()).is_some());
+        let latest: Result<(), WireError> = Err(WireError::Network("connection refused".into()));
+        assert_eq!(
+            t.observe(0, || 0, &sid(), &latest),
+            Some(ChangeEvent::SubscriptionError {
+                speaker: sid(),
+                message: "connection refused".into(),
+            })
         );
-        assert!(t.observe(0, || 0, &sid(), &net()).is_none());
     }
 
     #[test]
-    fn repeated_ok_while_healthy_does_not_emit() {
+    fn repeated_success_republishes_reachability() {
         let t = HealthTracker::new();
-        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
-        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
+        for _ in 0..2 {
+            assert_eq!(
+                t.observe(0, || 0, &sid(), &ok()),
+                Some(ChangeEvent::SubscriptionRecovered { speaker: sid() })
+            );
+        }
     }
 
     #[test]
-    fn backend_error_does_not_change_health() {
+    fn backend_and_notfound_never_emit_or_change_health() {
         let t = HealthTracker::new();
-        assert!(t.observe(0, || 0, &sid(), &backend()).is_none());
-        // Still Healthy → a later Ok must not emit Recovered.
-        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
-    }
-
-    #[test]
-    fn notfound_error_does_not_change_health() {
-        let t = HealthTracker::new();
-        assert!(t.observe(0, || 0, &sid(), &notfound()).is_none());
-        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
+        for result in [backend(), notfound()] {
+            assert!(t.observe(0, || 0, &sid(), &result).is_none());
+            assert!(t.states.read().unwrap().is_empty());
+        }
+        assert!(t.observe(0, || 0, &sid(), &net()).is_some());
+        for result in [backend(), notfound()] {
+            assert!(t.observe(0, || 0, &sid(), &result).is_none());
+            assert_eq!(
+                t.states.read().unwrap().get(&sid()),
+                Some(&HealthState::Errored)
+            );
+        }
     }
 
     #[test]
@@ -220,9 +216,7 @@ mod tests {
         let t = HealthTracker::new();
         assert!(t.observe(0, || 0, &sid(), &net()).is_some()); // → Errored
         t.reset_all();
-        // After reset the speaker is Healthy again: an Ok must NOT emit
-        // Recovered (no transition from the default).
-        assert!(t.observe(0, || 0, &sid(), &ok()).is_none());
+        assert!(t.states.read().unwrap().is_empty());
     }
 
     #[test]
@@ -243,10 +237,7 @@ mod tests {
             t.observe(1, || 1, &a, &ok()),
             Some(ChangeEvent::SubscriptionRecovered { .. })
         ));
-        // B's slot was GC'd, so it reads back as the default Healthy - an Ok
-        // for it is a no-op (no spurious Recovered for a speaker that was
-        // never proven to have recovered).
-        assert!(t.observe(1, || 1, &b, &ok()).is_none());
+        assert!(!t.states.read().unwrap().contains_key(&b));
     }
 
     #[test]
@@ -255,8 +246,11 @@ mod tests {
         let a = SpeakerId::new("RINCON_A");
         let b = SpeakerId::new("RINCON_B");
         assert!(t.observe(0, || 0, &a, &net()).is_some()); // A → Errored
-        // B is independent: Ok while Healthy → no event.
-        assert!(t.observe(0, || 0, &b, &ok()).is_none());
+        assert!(t.observe(0, || 0, &b, &ok()).is_some());
+        assert_eq!(
+            t.states.read().unwrap().get(&a),
+            Some(&HealthState::Errored)
+        );
         // A recovers independently.
         assert!(matches!(
             t.observe(0, || 0, &a, &ok()),
@@ -266,11 +260,14 @@ mod tests {
 
     #[test]
     fn observe_is_generic_over_result_payload() {
-        // Commands return Result<(), _>; speaker_state returns
-        // Result<SpeakerState, _>. observe must accept any Ok payload.
+        // The observer accepts the payload without treating read results as
+        // health signals; only mutating command wrappers call it.
         let t = HealthTracker::new();
         let r: Result<Volume, WireError> = Ok(Volume::new(50).unwrap());
-        assert!(t.observe(0, || 0, &sid(), &r).is_none());
+        assert!(matches!(
+            t.observe(0, || 0, &sid(), &r),
+            Some(ChangeEvent::SubscriptionRecovered { .. })
+        ));
     }
 
     #[test]
@@ -283,11 +280,12 @@ mod tests {
             t.observe(0, || 1, &sid(), &net()).is_none(),
             "a stale-generation observation must be dropped (no emit)"
         );
-        // The speaker was never marked Errored, so an Ok at the CURRENT
-        // generation is a no-op - no spurious SubscriptionRecovered.
-        assert!(
-            t.observe(1, || 1, &sid(), &ok()).is_none(),
-            "the dropped stale observation must not leave the speaker Errored"
+        assert!(t.states.read().unwrap().is_empty());
+        assert!(t.observe(1, || 1, &sid(), &net()).is_some());
+        assert!(t.observe(0, || 1, &sid(), &ok()).is_none());
+        assert_eq!(
+            t.states.read().unwrap().get(&sid()),
+            Some(&HealthState::Errored)
         );
     }
 }

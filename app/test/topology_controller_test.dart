@@ -95,7 +95,9 @@ void main() {
       container = ProviderContainer(
         overrides: [
           // Decouple from FRB: the controller listens to this stream.
-          changeEventsProvider.overrideWith((ref) => events.stream),
+          changeEventsProvider.overrideWithBuild(
+            (ref, notifier) => events.stream,
+          ),
           // Fake Notifier: counts build() re-discovers AND refreshTopology()
           // fast-path calls.
           discoveryProvider.overrideWith(_FakeDiscovery.new),

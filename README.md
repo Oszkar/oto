@@ -28,6 +28,13 @@ oto is a side project, primarily built with agentic engineering methods. The nam
 - View Now Playing metadata and track progress.
 - Use phone, tablet, and desktop layouts with light/dark themes and local preferences.
 
+Device observations remain authoritative during optimistic controls: a failed
+command restores the latest observed value, or its successful predecessor when
+no newer observation has arrived. A user scan clears displayed unreachable
+errors to permit another attempt; every subsequent command reports fresh health
+evidence. Room controls and open details follow speaker/coordinator identity
+through regrouping, and responsive overlays retain valid action lifetimes.
+
 ## Scope
 
 Windows and Android 15+ (API 35), with 64-bit Android ABIs only. Other platform folders are scaffolding, not supported or routinely validated targets.

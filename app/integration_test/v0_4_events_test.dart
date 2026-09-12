@@ -3,17 +3,13 @@
 /// carries `ChangeEventDto` across the bridge intact.
 ///
 /// Variants covered: Volume, Mute, Playback (grouped), GroupVolume,
-/// GroupMute, TopologyChanged, and SubscriptionError. Plus the
+/// GroupMute, TopologyChanged, SubscriptionError, and repeatable command-health
+/// SubscriptionRecovered observations. Plus the
 /// discover-replacement race fix (generation token).
 ///
-/// NOT covered here, deliberately: `Track` and `SubscriptionRecovered`.
-/// Reaching either from Dart would need a new `dev_push_*` FRB function -
-/// the mock seeds no Track (no media in the fixture) and
-/// SubscriptionRecovered requires driving a speaker to Errored first, which
-/// needs command-error injection the bridge does not expose. Both are
-/// covered in Rust: the health transitions in `oto-app`'s tests, and the
-/// DTO mapping in `native/src/map.rs`. Growing the FRB surface for
-/// test-only reasons was judged the worse trade.
+/// Track remains covered by Rust DTO tests: the mock seeds no media, and the
+/// bridge has no test-only track injection. Command failure injection stays in
+/// Rust tests; successful health observations use the existing command surface.
 ///
 /// Run as the release gate (see RELEASING.md), or by hand on a Windows
 /// desktop:
@@ -87,6 +83,29 @@ Future<void> _waitFor(
   }
 }
 
+/// Property and health events use separate Rust channels. Wait for both rather
+/// than depending on which one the consumer forwards first.
+Future<T> _commandEvents<T extends api.ChangeEventDto>(
+  List<api.ChangeEventDto> events,
+  String speakerId,
+) async {
+  await _waitFor(
+    () =>
+        events.whereType<T>().isNotEmpty &&
+        events.whereType<api.ChangeEventDto_SubscriptionRecovered>().isNotEmpty,
+    message: 'command must deliver its property and health observation',
+  );
+  expect(events, hasLength(2));
+  expect(
+    events
+        .whereType<api.ChangeEventDto_SubscriptionRecovered>()
+        .single
+        .speakerId,
+    speakerId,
+  );
+  return events.whereType<T>().single;
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -136,14 +155,10 @@ void main() {
       // 3. Mutation: set volume on Kitchen -> ChangeEventDto.Volume arrives.
       h.events.clear();
       await api.setVolume(speakerId: 'RINCON_KITCHEN', volume: 75);
-      await _waitFor(
-        () => h.events.isNotEmpty,
-        message: 'no Volume event arrived after setVolume',
+      final volEv = await _commandEvents<api.ChangeEventDto_Volume>(
+        h.events,
+        'RINCON_KITCHEN',
       );
-      expect(h.events, hasLength(1));
-      final volEv = h.events.first;
-      expect(volEv, isA<api.ChangeEventDto_Volume>());
-      volEv as api.ChangeEventDto_Volume;
       expect(volEv.speakerId, 'RINCON_KITCHEN');
       expect(volEv.volume, 75);
 
@@ -185,17 +200,22 @@ void main() {
     h.events.clear();
 
     await api.setMute(speakerId: 'RINCON_OFFICE', muted: true);
-    await _waitFor(
-      () => h.events.isNotEmpty,
-      message: 'no Mute event arrived after setMute',
+    final ev = await _commandEvents<api.ChangeEventDto_Mute>(
+      h.events,
+      'RINCON_OFFICE',
     );
-
-    expect(h.events, hasLength(1));
-    final ev = h.events.first;
-    expect(ev, isA<api.ChangeEventDto_Mute>());
-    ev as api.ChangeEventDto_Mute;
     expect(ev.speakerId, 'RINCON_OFFICE');
     expect(ev.muted, isTrue);
+
+    // Repeating a successful outcome must still establish health, even after
+    // Dart has discarded an earlier observation during a scan or reconnect.
+    h.events.clear();
+    await api.setMute(speakerId: 'RINCON_OFFICE', muted: false);
+    final repeated = await _commandEvents<api.ChangeEventDto_Mute>(
+      h.events,
+      'RINCON_OFFICE',
+    );
+    expect(repeated.muted, isFalse);
 
     unawaited(h.sub.cancel());
   });
@@ -207,30 +227,29 @@ void main() {
   // success exactly as a device NOTIFYs. Office is the solo-group fixture,
   // so the group id is stable and its coordinator is the only member.
 
-  test('v0.5.1: set_group_volume auto-emits ChangeEventDto.GroupVolume', () async {
-    await api.devDiscoverMock();
-    final h = _subscribeAndCollect();
-    await h.seedComplete.future.timeout(const Duration(seconds: 5));
-    h.events.clear();
+  test(
+    'v0.5.1: set_group_volume auto-emits ChangeEventDto.GroupVolume',
+    () async {
+      await api.devDiscoverMock();
+      final h = _subscribeAndCollect();
+      await h.seedComplete.future.timeout(const Duration(seconds: 5));
+      h.events.clear();
 
-    await api.setGroupVolume(groupId: 'RINCON_OFFICE:0', volume: 42);
-    await _waitFor(
-      () => h.events.isNotEmpty,
-      message: 'no GroupVolume event arrived after setGroupVolume',
-    );
+      await api.setGroupVolume(groupId: 'RINCON_OFFICE:0', volume: 42);
+      final ev = await _commandEvents<api.ChangeEventDto_GroupVolume>(
+        h.events,
+        'RINCON_OFFICE',
+      );
+      expect(
+        ev.groupId,
+        'RINCON_OFFICE:0',
+        reason: 'GroupVolume addresses are per-GROUP, not per-speaker',
+      );
+      expect(ev.volume, 42);
 
-    expect(h.events, hasLength(1));
-    expect(h.events.first, isA<api.ChangeEventDto_GroupVolume>());
-    final ev = h.events.first as api.ChangeEventDto_GroupVolume;
-    expect(
-      ev.groupId,
-      'RINCON_OFFICE:0',
-      reason: 'GroupVolume addresses are per-GROUP, not per-speaker',
-    );
-    expect(ev.volume, 42);
-
-    unawaited(h.sub.cancel());
-  });
+      unawaited(h.sub.cancel());
+    },
+  );
 
   test('v0.5.1: set_group_mute auto-emits ChangeEventDto.GroupMute', () async {
     await api.devDiscoverMock();
@@ -239,14 +258,10 @@ void main() {
     h.events.clear();
 
     await api.setGroupMute(groupId: 'RINCON_OFFICE:0', muted: true);
-    await _waitFor(
-      () => h.events.isNotEmpty,
-      message: 'no GroupMute event arrived after setGroupMute',
+    final ev = await _commandEvents<api.ChangeEventDto_GroupMute>(
+      h.events,
+      'RINCON_OFFICE',
     );
-
-    expect(h.events, hasLength(1));
-    expect(h.events.first, isA<api.ChangeEventDto_GroupMute>());
-    final ev = h.events.first as api.ChangeEventDto_GroupMute;
     expect(ev.groupId, 'RINCON_OFFICE:0');
     expect(ev.muted, isTrue);
 
@@ -337,15 +352,10 @@ void main() {
 
     const groupId = 'RINCON_KITCHEN:1';
     await api.play(groupId: groupId);
-    await _waitFor(
-      () => h.events.isNotEmpty,
-      message: 'no Playback event arrived after play',
+    final ev = await _commandEvents<api.ChangeEventDto_Playback>(
+      h.events,
+      'RINCON_KITCHEN',
     );
-
-    expect(h.events, hasLength(1));
-    final ev = h.events.first;
-    expect(ev, isA<api.ChangeEventDto_Playback>());
-    ev as api.ChangeEventDto_Playback;
     expect(ev.groupId, groupId, reason: 'Playback addresses are per-GROUP');
     expect(ev.state, api.PlaybackStateDto.playing);
 
@@ -393,11 +403,11 @@ void main() {
       // alive right before re-discovery.
       h1.events.clear();
       await api.setVolume(speakerId: 'RINCON_KITCHEN', volume: 88);
-      await _waitFor(
-        () => h1.events.isNotEmpty,
-        message: 'OLD stream missed setVolume before rediscover',
-      );
-      final preRediscoverEvent = h1.events.last as api.ChangeEventDto_Volume;
+      final preRediscoverEvent =
+          await _commandEvents<api.ChangeEventDto_Volume>(
+            h1.events,
+            'RINCON_KITCHEN',
+          );
       expect(preRediscoverEvent.volume, 88);
 
       // ── Rediscover ─────────────────────────────────────────────────
