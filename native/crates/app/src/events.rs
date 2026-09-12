@@ -73,22 +73,47 @@ pub(crate) fn push(generation: u64, event: ChangeEvent) {
 /// keeps looping until its wire channel disconnects; if it drained here it
 /// would consume-and-discard events stamped for the NEW generation before the
 /// new consumer ever reads them. So a consumer whose `consumer_gen` no longer
-/// equals `current_gen` does not drain at all - it returns `None` and exits
-/// soon after on its wire channel's `Disconnected`. (Any events still queued
-/// against the old generation were already dropped by [`clear`] in
+/// equals the live generation does not drain at all - it returns `None` and
+/// exits soon after on its wire channel's `Disconnected`. (Any events still
+/// queued against the old generation were already dropped by [`clear`] in
 /// `discover_with`.)
-pub fn try_recv_app_event(consumer_gen: u64, current_gen: u64) -> Option<ChangeEvent> {
-    if consumer_gen != current_gen {
+///
+/// `current_gen` is a **closure read UNDER the receiver lock**, not a value,
+/// mirroring `HealthTracker::observe`. Reading it before taking the lock left
+/// a window: an old consumer could read a still-matching generation, have
+/// `discover_with` bump and [`clear`] in between, then take the lock and drain
+/// a NEW-generation event straight into the stale-drop below - losing a
+/// `SubscriptionError`/`Recovered` the new consumer should have seen. Under
+/// the lock the window closes in both directions: `discover_with` bumps the
+/// generation BEFORE it calls [`clear`], so a replacement either lands before
+/// we read (the check fails, we do not drain) or blocks on [`clear`] until we
+/// release - and while we hold the lock the new wire is not in the slot yet,
+/// so no new-generation event can even be pushed.
+pub fn try_recv_app_event(consumer_gen: u64, current_gen: impl Fn() -> u64) -> Option<ChangeEvent> {
+    let rx = bus().rx.lock().unwrap_or_else(|p| p.into_inner());
+    if consumer_gen != current_gen() {
         return None;
     }
-    let rx = bus().rx.lock().unwrap_or_else(|p| p.into_inner());
     while let Ok((generation, event)) = rx.try_recv() {
         if generation == consumer_gen {
             return Some(event);
         }
-        // Stale (different wire era) - drop and keep draining.
+        // Stale (different wire era) - drop and keep draining. Only reachable
+        // for OLD-generation leftovers now: see the lock note above.
     }
     None
+}
+
+/// Test-only probe: `true` while the bus receiver lock is held. Calling it
+/// from inside a `try_recv_app_event` `current_gen` closure, on the same
+/// thread, is how `generation_is_read_under_the_bus_lock` pins the ordering
+/// this module depends on - a value-based test cannot distinguish a read above
+/// the lock from one below it. (A poisoned mutex also reads as "locked"; the
+/// bus is never poisoned in practice, and a false positive here would only
+/// weaken the assertion, never fail it spuriously.)
+#[cfg(test)]
+pub(crate) fn receiver_is_locked() -> bool {
+    bus().rx.try_lock().is_err()
 }
 
 /// Drain and discard every pending app-bus event. Called by `discover_with`

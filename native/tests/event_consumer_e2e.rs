@@ -106,7 +106,7 @@ fn install_held_mock() -> Arc<MockWire> {
 /// generation, so a phase starts from a known-empty bus.
 fn drain_app_bus() {
     let generation = oto_app::current_generation();
-    while oto_app::try_recv_app_event(generation, oto_app::current_generation()).is_some() {}
+    while oto_app::try_recv_app_event(generation, oto_app::current_generation).is_some() {}
 }
 
 fn volume_event(speaker: &str, level: u8) -> ChangeEvent {

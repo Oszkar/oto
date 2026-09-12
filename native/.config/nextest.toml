@@ -1,0 +1,23 @@
+# cargo-nextest configuration for the `native/` workspace.
+#
+# The only thing configured here is exclusion for the hardware-gated LAN tests
+# (`crates/wire/tests/live_*.rs`, behind the `live-tests` feature and
+# `#[ignore]`). They all drive the SAME physical Sonos speakers: run two at
+# once and concurrent join/leave or volume traffic both flakes them and
+# violates the LAN-politeness non-negotiable (AGENTS.md section 3).
+#
+# Why a test group rather than a mutex in the test files: nextest runs ONE
+# PROCESS PER TEST, so a process-local `static Mutex` serialises nothing under
+# the documented `cargo nextest run` invocation. A test group is the only
+# mechanism that works here, and unlike a mutex it also spans the seven
+# separate `live_*` binaries - which are separate processes under plain
+# `cargo test` too, so a mutex never covered them either.
+#
+# Regular (non-LAN) tests are unaffected and still run fully parallel.
+
+[test-groups]
+lan = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary(/^live_/)'
+test-group = 'lan'

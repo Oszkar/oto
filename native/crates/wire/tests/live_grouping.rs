@@ -38,12 +38,19 @@ const POLL: Duration = Duration::from_millis(500);
 /// (the expected state never arrives) within the bound.
 const SETTLE_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Serialises the live grouping tests against EACH OTHER. They all mutate the
-/// SAME physical speakers' grouping, so cargo's default parallel test threads
-/// make them collide - concurrent join/leave storms time out the speakers' SOAP
-/// endpoints AND violate the LAN-politeness rule (no command storms; AGENTS §3).
-/// Each test holds this for its whole body, so they run strictly serially even
-/// without `--test-threads=1`.
+/// Belt-and-braces serialisation for the `cargo test` fallback in the header,
+/// where this binary's tests share one process and cargo's default threads
+/// would otherwise run them concurrently against the SAME physical speakers -
+/// join/leave storms time out the speakers' SOAP endpoints AND violate the
+/// LAN-politeness rule (no command storms; AGENTS §3).
+///
+/// It is **not** the real mechanism. nextest runs one process per test, so a
+/// process-local mutex serialises nothing under the documented invocation
+/// above; and no in-process lock can span the seven separate `live_*`
+/// binaries, which are separate processes under `cargo test` too. Real
+/// cross-test exclusion comes from the `lan` test group
+/// (`native/.config/nextest.toml`, `max-threads = 1`), which covers every
+/// `live_*` test in the workspace.
 static LAN_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Acquire the serial lock, recovering from a poisoned mutex (a prior test
