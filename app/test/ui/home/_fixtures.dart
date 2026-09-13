@@ -37,6 +37,16 @@ class FixtureHousehold extends HouseholdNotifier {
   Household build() => _fixture;
 }
 
+/// A [HouseholdNotifier] seeded with a fixture that the test can swap at will,
+/// for transitions the UI has to react to (a source starting, a room leaving).
+class MutableHousehold extends HouseholdNotifier {
+  MutableHousehold(this.initial);
+  final Household initial;
+  @override
+  Household build() => initial;
+  void replace(Household household) => state = household;
+}
+
 /// A [PlaybackController] that records every command instead of hitting Rust.
 class SpyPlayback extends PlaybackController {
   SpyPlayback(Ref ref)

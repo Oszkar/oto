@@ -112,6 +112,77 @@ Household _twoRoomGroupPlusTwoSolos() {
   );
 }
 
+/// The bottom reserve Home hard-coded before the strip height was measured.
+/// The two-source strip must exceed this, or the end-of-scroll test below is
+/// asserting nothing.
+const double _legacyFixedReserve = 96;
+
+/// [_twoRoomGroupPlusTwoSolos] with the LR group idle, so Office is the ONLY
+/// active source and the strip renders a single row. Same cards either way, so
+/// a swap between the two changes the strip's height and nothing else.
+Household _oneRoomGroupPlusTwoSolos() {
+  return const Household(
+    rooms: {
+      'LR': RoomState(
+        id: 'LR',
+        name: 'Living Room',
+        kind: RoomKind.speaker,
+        volume: 30,
+        groupId: 'G_LR',
+      ),
+      'KT': RoomState(
+        id: 'KT',
+        name: 'Kitchen',
+        kind: RoomKind.speaker,
+        volume: 25,
+        groupId: 'G_LR',
+      ),
+      'OF': RoomState(
+        id: 'OF',
+        name: 'Office',
+        kind: RoomKind.speaker,
+        volume: 55,
+        groupId: 'G_OF',
+      ),
+      'BR': RoomState(
+        id: 'BR',
+        name: 'Bedroom',
+        kind: RoomKind.speaker,
+        volume: 15,
+        groupId: 'G_BR',
+      ),
+    },
+    groups: {
+      // Stopped -> NOT a source (see GroupState.hasActiveStream), but it keeps
+      // the SAME track as the playing variant so the card renders identically.
+      // Only the strip differs between the two fixtures, which is the whole
+      // point: this models a stopped group being started, where the reserve
+      // grows and nothing above it does.
+      'G_LR': GroupState(
+        id: 'G_LR',
+        coordinatorId: 'LR',
+        memberIds: ['LR', 'KT'],
+        transport: PlaybackState.stopped,
+        track: Track(title: 'Strobe', artist: 'Deadmau5'),
+        groupVolume: 40,
+      ),
+      'G_OF': GroupState(
+        id: 'G_OF',
+        coordinatorId: 'OF',
+        memberIds: ['OF'],
+        transport: PlaybackState.playing,
+        track: Track(title: 'Opus', artist: 'Eric Prydz'),
+      ),
+      'G_BR': GroupState(
+        id: 'G_BR',
+        coordinatorId: 'BR',
+        memberIds: ['BR'],
+        transport: PlaybackState.stopped,
+      ),
+    },
+  );
+}
+
 const _emptyTopology = rust_api.Topology(speakers: [], groups: []);
 
 const _oneRoomTopology = rust_api.Topology(
@@ -161,6 +232,7 @@ Future<void> _pump(
   WidgetTester t,
   Widget child, {
   Household household = const Household(),
+  HouseholdNotifier Function()? householdNotifier,
   HomeLayout layout = HomeLayout.cards,
   Discovery Function()? discovery,
   bool settle = true,
@@ -175,7 +247,9 @@ Future<void> _pump(
         discoveryProvider.overrideWith(
           discovery ?? () => _DataDiscovery(_oneRoomTopology),
         ),
-        householdProvider.overrideWith(() => FixtureHousehold(household)),
+        householdProvider.overrideWith(
+          householdNotifier ?? () => FixtureHousehold(household),
+        ),
         prefsRepositoryProvider.overrideWithValue(PrefsRepository(prefs)),
         playbackControllerProvider.overrideWith((ref) => SpyPlayback(ref)),
         groupingControllerProvider.overrideWith((ref) => SpyGrouping(ref)),
@@ -432,5 +506,118 @@ void main() {
 
     // The real Navigator push rendered the Now Playing screen for that group.
     expect(find.byType(NowPlayingScreen), findsOneWidget);
+  });
+
+  /// The floating strip renders ONE row per active source, uncapped
+  /// (`bottom_strip.dart`), so the fixed bottom reserve Home used to apply was
+  /// only ever right for a single source: with two, the strip outgrew it and
+  /// the last card stayed partly covered even at maximum scroll - its controls
+  /// unreachable. The reserve is measured off the strip now, so the end of the
+  /// list has to clear it whatever the source count.
+  testWidgets('two sources: the last card clears the strip at full scroll', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(390, 600);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
+
+    await _pump(t, const HomeScreen(), household: _twoRoomGroupPlusTwoSolos());
+
+    await t.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await t.pumpAndSettle();
+
+    final position = t
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(HomeScreen),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    expect(
+      position.maxScrollExtent,
+      greaterThan(0),
+      reason: 'the body must overflow, or this test proves nothing',
+    );
+    expect(
+      position.pixels,
+      position.maxScrollExtent,
+      reason: 'the drag must reach the very end of the list',
+    );
+
+    final strip = t.getRect(find.byType(BottomStrip));
+    expect(
+      strip.height,
+      greaterThan(_legacyFixedReserve),
+      reason:
+          'two sources must push the strip past the old fixed reserve, or this '
+          'is not exercising the regression',
+    );
+
+    // Groups sort by coordinator id (BR, LR, OF), so Office is last.
+    expect(
+      t.getRect(find.byKey(const ValueKey('OF'))).bottom,
+      lessThanOrEqualTo(strip.top),
+      reason: 'the last card must sit entirely above the strip at full scroll',
+    );
+  });
+
+  /// Growing the reserve extends `maxScrollExtent` but leaves `pixels` at the
+  /// OLD maximum - `ScrollPosition` only corrects when the offset falls out of
+  /// range, and a larger extent keeps it in range. So a second source starting
+  /// while the user sits at the bottom slides the last card back under the
+  /// now-taller strip, and it stays there until the next scroll gesture. Home
+  /// re-anchors instead.
+  testWidgets('a source starting at full scroll keeps the last card clear', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(390, 600);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
+
+    final household = MutableHousehold(_oneRoomGroupPlusTwoSolos());
+    await _pump(t, const HomeScreen(), householdNotifier: () => household);
+
+    await t.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await t.pumpAndSettle();
+
+    final position = t
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(HomeScreen),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    expect(
+      position.pixels,
+      position.maxScrollExtent,
+      reason: 'the drag must reach the end before the transition',
+    );
+    final oneSourceStrip = t.getRect(find.byType(BottomStrip)).height;
+
+    // A second source starts while the user is pinned to the bottom.
+    household.replace(_twoRoomGroupPlusTwoSolos());
+    await t.pumpAndSettle();
+
+    final strip = t.getRect(find.byType(BottomStrip));
+    expect(
+      strip.height,
+      greaterThan(oneSourceStrip),
+      reason: 'the transition must actually grow the strip',
+    );
+    expect(
+      t.getRect(find.byKey(const ValueKey('OF'))).bottom,
+      lessThanOrEqualTo(strip.top),
+      reason:
+          'the last card must still clear the strip after it grows, without '
+          'needing another scroll gesture',
+    );
   });
 }
