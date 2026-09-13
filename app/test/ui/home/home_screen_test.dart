@@ -112,6 +112,11 @@ Household _twoRoomGroupPlusTwoSolos() {
   );
 }
 
+/// The bottom reserve Home hard-coded before the strip height was measured.
+/// The two-source strip must exceed this, or the end-of-scroll test below is
+/// asserting nothing.
+const double _legacyFixedReserve = 96;
+
 const _emptyTopology = rust_api.Topology(speakers: [], groups: []);
 
 const _oneRoomTopology = rust_api.Topology(
@@ -432,5 +437,62 @@ void main() {
 
     // The real Navigator push rendered the Now Playing screen for that group.
     expect(find.byType(NowPlayingScreen), findsOneWidget);
+  });
+
+  /// The floating strip renders ONE row per active source, uncapped
+  /// (`bottom_strip.dart`), so the fixed bottom reserve Home used to apply was
+  /// only ever right for a single source: with two, the strip outgrew it and
+  /// the last card stayed partly covered even at maximum scroll - its controls
+  /// unreachable. The reserve is measured off the strip now, so the end of the
+  /// list has to clear it whatever the source count.
+  testWidgets('two sources: the last card clears the strip at full scroll', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(390, 600);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      t.view.resetPhysicalSize();
+      t.view.resetDevicePixelRatio();
+    });
+
+    await _pump(t, const HomeScreen(), household: _twoRoomGroupPlusTwoSolos());
+
+    await t.drag(find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await t.pumpAndSettle();
+
+    final position = t
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(HomeScreen),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    expect(
+      position.maxScrollExtent,
+      greaterThan(0),
+      reason: 'the body must overflow, or this test proves nothing',
+    );
+    expect(
+      position.pixels,
+      position.maxScrollExtent,
+      reason: 'the drag must reach the very end of the list',
+    );
+
+    final strip = t.getRect(find.byType(BottomStrip));
+    expect(
+      strip.height,
+      greaterThan(_legacyFixedReserve),
+      reason:
+          'two sources must push the strip past the old fixed reserve, or this '
+          'is not exercising the regression',
+    );
+
+    // Groups sort by coordinator id (BR, LR, OF), so Office is last.
+    expect(
+      t.getRect(find.byKey(const ValueKey('OF'))).bottom,
+      lessThanOrEqualTo(strip.top),
+      reason: 'the last card must sit entirely above the strip at full scroll',
+    );
   });
 }

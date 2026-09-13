@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/breakpoints.dart';
@@ -105,16 +106,39 @@ class _HomeContent extends ConsumerStatefulWidget {
   ConsumerState<_HomeContent> createState() => _HomeContentState();
 }
 
+/// First-frame estimate for [_HomeContentState._stripInset], before the strip
+/// has been laid out. Sized for the common single-source strip; anything taller
+/// corrects on the next frame.
+const double _stripInsetEstimate = 96;
+
 class _HomeContentState extends ConsumerState<_HomeContent> {
   // Own controller so this scrollable never contends with another primary
   // scrollable (e.g. the wide NowPlayingPane) for the app-wide
   // PrimaryScrollController - see responsive_pop.dart's sibling fix.
   final _scrollController = ScrollController();
 
+  /// Bottom room reserved in the scroll view for the floating strip.
+  ///
+  /// Measured, not assumed. The strip renders ONE row per active source,
+  /// uncapped (`bottom_strip.dart`), so its height grows with the household:
+  /// a fixed reserve was right for one source and left the last card roughly
+  /// 50 px covered at full scroll with two. Deriving `rowHeight * n` from a
+  /// constant instead would go stale the moment a row gains a line, and fail
+  /// silently again.
+  double _stripInset = _stripInsetEstimate;
+
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onStripHeight(double height) {
+    // Clear the strip by its real height plus the gutter the body uses
+    // everywhere else, so the last card never kisses it.
+    final inset = height + Space.gutter12;
+    if (!mounted || inset == _stripInset) return;
+    setState(() => _stripInset = inset);
   }
 
   @override
@@ -141,12 +165,13 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
                 child: SingleChildScrollView(
                   controller: _scrollController,
                   // Bottom padding leaves room for the floating strip so the
-                  // last card never hides behind it (phone only).
+                  // last card never hides behind it (phone only). Driven by
+                  // the strip's measured height - see [_stripInset].
                   padding: EdgeInsets.fromLTRB(
                     Space.gutter12,
                     0,
                     Space.gutter12,
-                    (!wide && hasActiveStream) ? 96 : Space.gutter12,
+                    (!wide && hasActiveStream) ? _stripInset : Space.gutter12,
                   ),
                   child: layout == HomeLayout.cards
                       ? _CardsBody(groups: groups)
@@ -161,12 +186,56 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: BottomStrip(
-              onTapSource: (s) => openSource(context, ref, s.id),
+            child: _MeasureHeight(
+              onChange: _onStripHeight,
+              child: BottomStrip(
+                onTapSource: (s) => openSource(context, ref, s.id),
+              ),
             ),
           ),
       ],
     );
+  }
+}
+
+/// Reports its child's laid-out height to [onChange] whenever that height
+/// changes. Used to size the scroll view's bottom reserve off the floating
+/// strip's real height rather than a guess.
+class _MeasureHeight extends SingleChildRenderObjectWidget {
+  const _MeasureHeight({required this.onChange, required Widget super.child});
+
+  final ValueChanged<double> onChange;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _MeasureHeightBox(onChange);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _MeasureHeightBox renderObject,
+  ) {
+    renderObject.onChange = onChange;
+  }
+}
+
+class _MeasureHeightBox extends RenderProxyBox {
+  _MeasureHeightBox(this.onChange);
+
+  ValueChanged<double> onChange;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (_reported == size.height) return;
+    _reported = size.height;
+    // Reporting synchronously would run a `setState` in the middle of layout,
+    // which Flutter forbids. Defer to after this frame; the reserve is one
+    // frame stale on a source-count change, which is invisible unless you are
+    // already pinned to the very bottom of the list at that instant.
+    final height = size.height;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onChange(height));
   }
 }
 
