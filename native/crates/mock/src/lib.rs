@@ -50,8 +50,8 @@ use oto_core::{
 
 /// A grouping snapshot: `GroupId` → coordinator and member → coordinator
 /// lookups. The device holds the authoritative one (`Model::grouping`, mutated
-/// by join/leave); the routing `Model::cache` holds a copy that `discover()` /
-/// `refresh_topology()` commit.
+/// by join/leave); the routing `Model::cache` holds a copy that `discover()`
+/// commits.
 #[derive(Clone, Default)]
 struct Grouping {
     /// `GroupId` → coordinator `SpeakerId`.
@@ -151,9 +151,10 @@ struct Model {
     /// Routing cache. Every command/read resolves group→coordinator through
     /// this. Seeded at construction (so a `MockWire::default()` round-trips
     /// commands without ceremony - see [`MockWire`]) and RE-committed from
-    /// `grouping` only by `discover()` / `refresh_topology()`. join/leave never
-    /// touch it, so - exactly like `SonosWire`'s id→addr / group→coord caches -
-    /// a regroup does not change routing until a re-pull.
+    /// `grouping` only by `discover()`. join/leave never touch it, and neither
+    /// does `refresh_topology()` (a read-only probe - see `snapshot`), so -
+    /// exactly like `SonosWire`'s id→addr / group→coord caches - a regroup does
+    /// not change routing until a fresh `discover()` installs it.
     cache: Grouping,
     /// Sender half of the v0.4 unified event channel. Lazy-init: only
     /// populated by `subscribe_speakers`. `None` ↔ "no pump active".
@@ -237,8 +238,9 @@ impl Model {
 /// - **Grouping is deferred like `SonosWire`.** `join_group` / `leave_group`
 ///   mutate the device grouping but NOT the routing cache, so a regroup does
 ///   not change command routing (`play`, `speaker_state`, ...) until a
-///   `refresh_topology()` / `discover()` re-pull commits it - exactly as the
-///   real wire's caches only change on a `GetZoneGroupState` re-pull. A regroup
+///   `discover()` re-pull commits it - exactly as the real wire's caches only
+///   change when a freshly-discovered wire is installed. `refresh_topology()`
+///   is a read-only probe and commits nothing (see `snapshot`). A regroup
 ///   surfaces as `TopologyChanged` (only when topology was subscribed), which
 ///   in production drives the debounced Dart refresh.
 /// - **Pre-`discover()` commands are a DELIBERATE convenience, not fidelity.**
@@ -390,18 +392,33 @@ impl MockWire {
         lock!(self).topology_subscribed
     }
 
-    /// Shared `next`/`previous` body. On real Sonos a skip triggers an
-    /// AVTransport NOTIFY (track change, possibly a transitional state),
-    /// so the mock mirrors that by emitting a per-group `Playback` event
-    /// carrying the coordinator's current cached state - closing the
-    /// silent-no-op gap (v0.4 review follow-up). The skip itself doesn't
-    /// model a queue, so the state value is the current one (no fabricated
-    /// metadata); the point is that a skip is observable on the stream.
-    /// Commit the device grouping into the routing cache and synthesize the
-    /// discovery snapshot from it: identity (room / model / ip) from the
-    /// configured outcome, grouping from the device model. Shared by
-    /// `discover()` and `refresh_topology()` so they can't drift. `?` propagates
-    /// a `failing()` mock's discovery error before any cache commit.
+    /// Synthesize the discovery snapshot WITHOUT touching the routing cache:
+    /// identity (room / model / ip) from the configured outcome, grouping read
+    /// from the device model. `?` propagates a `failing()` mock's discovery
+    /// error.
+    ///
+    /// This is the `refresh_topology()` shape - a **read-only probe**, exactly
+    /// like `SonosWire::refresh_topology` (see the long comment at
+    /// `oto-wire/src/adapter.rs`). Production's fast refresh is two-stage: this
+    /// probe runs on the OLD wire, then its result seeds a brand-new wire
+    /// installed through `discover_with`. If that second stage FAILS, the old
+    /// wire stays installed - so a probe that mutated its own routing would
+    /// leave the installed wire routing on a topology Dart never saw. Keep the
+    /// commit in [`resnapshot`](Self::resnapshot), which is the `discover()`
+    /// (stage-two) shape.
+    fn snapshot(&self) -> Result<DiscoverySnapshot, WireError> {
+        let base = self.outcome.clone()?;
+        let guard = lock!(self);
+        Ok(DiscoverySnapshot {
+            speakers: base.speakers,
+            groups: guard.grouping.to_group_identities(),
+        })
+    }
+
+    /// [`snapshot`](Self::snapshot) plus the routing-cache commit: the
+    /// `discover()` shape, where a real `SonosWire` populates the caches of the
+    /// wire being installed. `?` propagates a `failing()` mock's discovery
+    /// error before any cache commit.
     fn resnapshot(&self) -> Result<DiscoverySnapshot, WireError> {
         let base = self.outcome.clone()?;
         let mut guard = lock!(self);
@@ -413,6 +430,13 @@ impl MockWire {
         })
     }
 
+    /// Shared `next`/`previous` body. On real Sonos a skip triggers an
+    /// AVTransport NOTIFY (track change, possibly a transitional state),
+    /// so the mock mirrors that by emitting a per-group `Playback` event
+    /// carrying the coordinator's current cached state - closing the
+    /// silent-no-op gap (v0.4 review follow-up). The skip itself doesn't
+    /// model a queue, so the state value is the current one (no fabricated
+    /// metadata); the point is that a skip is observable on the stream.
     fn skip(&self, group: &GroupId) -> Result<(), WireError> {
         let guard = lock!(self);
         let coord = guard
@@ -442,9 +466,10 @@ impl MockWire {
 impl Wire for MockWire {
     fn discover(&self) -> Result<DiscoverySnapshot, WireError> {
         // Commit the device grouping into the routing cache and synthesize the
-        // snapshot from it (shared with `refresh_topology`, so the two agree
-        // after a regroup - a plain `self.outcome.clone()` would return the
-        // stale original fixture). The `?` propagates a `failing()` mock's error
+        // snapshot from it (the grouping half is shared with
+        // `refresh_topology`, so the two agree on what they REPORT after a
+        // regroup - a plain `self.outcome.clone()` would return the stale
+        // original fixture). The `?` propagates a `failing()` mock's error
         // WITHOUT flipping `discovered`.
         let snap = self.resnapshot()?;
         // Flip the lifecycle gate so `subscribe_speakers` can succeed.
@@ -650,7 +675,7 @@ impl Wire for MockWire {
         }
         // Fold `speaker` into `coordinator`'s group in the DEVICE grouping only
         // (not the routing cache) - like SonosWire, the regroup doesn't change
-        // routing until a `refresh_topology()`/`discover()` re-pull. If `speaker`
+        // routing until a `discover()` re-pull. If `speaker`
         // had been coordinating a group, re-home the members it leaves behind
         // (and drop its now-stale group) so they don't end up pointing at a
         // coordinator that itself follows another group.
@@ -875,10 +900,11 @@ impl Wire for MockWire {
         }
         // Re-pull authoritative topology reflecting any join/leave mutations
         // since the last commit - mirrors SonosWire's GetZoneGroupState re-pull.
-        // Commits the device grouping into the routing cache and synthesizes the
-        // snapshot from it (identity from the configured outcome). Shared with
-        // `discover()` so the two can't drift.
-        self.resnapshot()
+        // READ-ONLY: `snapshot()`, never `resnapshot()`. The real wire
+        // deliberately does not populate its caches here because a failed
+        // stage-two replacement leaves THIS wire installed (adapter.rs); the
+        // commit belongs to the `discover()` that installs the next wire.
+        self.snapshot()
     }
 
     fn take_event_stream(&self) -> Option<Receiver<ChangeEvent>> {
@@ -1520,16 +1546,16 @@ mod tests {
     #[test]
     fn join_group_updates_membership() {
         let w = MockWire::default();
-        // refresh_topology requires a prior discover(), same as the real wire.
+        // Establish the discovered baseline, same lifecycle as the real wire.
         w.discover().unwrap();
         let office = SpeakerId::new("RINCON_OFFICE"); // solo group coordinator
         let kitchen = SpeakerId::new("RINCON_KITCHEN"); // another group's coordinator
 
-        // Office joins Kitchen's group; a refresh commits the regroup to the
-        // routing cache (deferred like SonosWire); then play Kitchen and confirm
-        // Office's transport now follows the Kitchen coordinator (D2 routing).
+        // Office joins Kitchen's group; a re-discover commits the regroup to
+        // the routing cache (deferred like SonosWire); then play Kitchen and
+        // confirm Office's transport now follows the Kitchen coordinator (D2).
         w.join_group(&office, &kitchen).unwrap();
-        w.refresh_topology().unwrap();
+        w.discover().unwrap();
         w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap();
         let st = w.speaker_state(&office).unwrap();
         assert_eq!(
@@ -1543,12 +1569,12 @@ mod tests {
     #[test]
     fn join_group_dissolves_empty_source_group() {
         let w = MockWire::default();
-        // refresh_topology requires a prior discover(), same as the real wire.
+        // Establish the discovered baseline, same lifecycle as the real wire.
         w.discover().unwrap();
         let office = SpeakerId::new("RINCON_OFFICE");
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         w.join_group(&office, &kitchen).unwrap();
-        w.refresh_topology().unwrap(); // commit the regroup to the routing cache
+        w.discover().unwrap(); // commit the regroup to the routing cache
         // The old solo group (RINCON_OFFICE:0) must no longer route, while
         // the Kitchen group is unaffected.
         assert_eq!(
@@ -1563,7 +1589,7 @@ mod tests {
     #[test]
     fn leave_group_makes_standalone() {
         let w = MockWire::default();
-        // refresh_topology requires a prior discover(), same as the real wire.
+        // Establish the discovered baseline, same lifecycle as the real wire.
         w.discover().unwrap();
         let dining = SpeakerId::new("RINCON_DINING"); // member of Kitchen group, not coordinator
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
@@ -1576,10 +1602,10 @@ mod tests {
         );
 
         // Dining leaves → its own standalone group; its transport now comes
-        // from itself (Stopped seed), independent of Kitchen. A refresh commits
-        // the regroup to the routing cache (deferred like SonosWire).
+        // from itself (Stopped seed), independent of Kitchen. A re-discover
+        // commits the regroup to the routing cache (deferred like SonosWire).
         w.leave_group(&dining).unwrap();
-        w.refresh_topology().unwrap();
+        w.discover().unwrap();
         assert_eq!(
             w.speaker_state(&dining).unwrap().transport.unwrap().state,
             PlaybackState::Stopped,
@@ -1597,13 +1623,13 @@ mod tests {
 
     // ── v0.6.3 fidelity: deferred grouping + gated TopologyChanged ─────────
 
-    /// #1: a regroup does NOT change command routing until a
-    /// `refresh_topology()`/`discover()` re-pull commits it (mirrors SonosWire's
-    /// caches only updating on a `GetZoneGroupState` re-pull). Before the
-    /// refresh the joiner's old solo group still routes; after it, the new
-    /// grouping takes effect.
+    /// #1: a regroup does NOT change command routing until a `discover()`
+    /// re-pull commits it (mirrors SonosWire, whose caches are only populated
+    /// by the discovery that installs a wire). `refresh_topology()` sits in
+    /// between as a read-only probe - see
+    /// `refresh_topology_probe_does_not_commit_routing`.
     #[test]
-    fn regroup_routing_is_deferred_until_refresh() {
+    fn regroup_routing_is_deferred_until_rediscover() {
         let w = MockWire::default();
         w.discover().unwrap();
         let office = SpeakerId::new("RINCON_OFFICE");
@@ -1612,14 +1638,55 @@ mod tests {
         w.join_group(&office, &kitchen).unwrap();
         assert!(
             w.play(&GroupId::new("RINCON_OFFICE:0")).is_ok(),
-            "before refresh, the joiner's old group still routes (deferred like SonosWire)"
+            "before the re-pull, the joiner's old group still routes (deferred like SonosWire)"
         );
 
-        w.refresh_topology().unwrap();
+        w.discover().unwrap();
         assert_eq!(
             w.play(&GroupId::new("RINCON_OFFICE:0")),
             Err(WireError::NotFound("RINCON_OFFICE:0".into())),
-            "after refresh, the joiner's old group no longer routes"
+            "after the re-pull, the joiner's old group no longer routes"
+        );
+    }
+
+    /// The stage-one probe must install nothing. Production's fast refresh
+    /// probes the OLD wire, then seeds and installs a NEW one through
+    /// `discover_with`; a failed stage two leaves the OLD wire installed
+    /// (`oto-wire/src/adapter.rs` spells this out at length). A probe that
+    /// committed would leave that still-installed wire routing on a topology
+    /// Dart never saw - installed wire and UI silently disagreeing.
+    #[test]
+    fn refresh_topology_probe_does_not_commit_routing() {
+        let w = MockWire::default();
+        w.discover().unwrap();
+        w.join_group(
+            &SpeakerId::new("RINCON_OFFICE"),
+            &SpeakerId::new("RINCON_KITCHEN"),
+        )
+        .unwrap();
+
+        // The probe REPORTS the post-regroup topology...
+        let probed = w.refresh_topology().unwrap();
+        assert!(
+            !probed
+                .groups
+                .iter()
+                .any(|g| g.id == GroupId::new("RINCON_OFFICE:0")),
+            "the probe must report the regroup"
+        );
+        // ...and installs none of it. This is the state a failed stage two has
+        // to leave behind.
+        assert!(
+            w.play(&GroupId::new("RINCON_OFFICE:0")).is_ok(),
+            "a read-only probe must not change command routing"
+        );
+
+        // Stage two - the discover that installs the next wire - commits.
+        w.discover().unwrap();
+        assert_eq!(
+            w.play(&GroupId::new("RINCON_OFFICE:0")),
+            Err(WireError::NotFound("RINCON_OFFICE:0".into())),
+            "the installing discover is what commits routing"
         );
     }
 
@@ -1811,7 +1878,7 @@ mod tests {
         // the remaining member must be re-homed (off Kitchen) - never left
         // pointing at the departed coordinator (an impossible topology).
         let w = MockWire::default();
-        // refresh_topology requires a prior discover(), same as the real wire.
+        // Establish the discovered baseline, same lifecycle as the real wire.
         w.discover().unwrap();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         let dining = SpeakerId::new("RINCON_DINING");
@@ -1827,7 +1894,7 @@ mod tests {
         // seed), proving it was re-homed off Kitchen rather than orphaned
         // still pointing at the now-departed Kitchen.
         w.leave_group(&kitchen).unwrap();
-        w.refresh_topology().unwrap(); // commit the regroup to the routing cache
+        w.discover().unwrap(); // commit the regroup to the routing cache
         assert_eq!(
             w.speaker_state(&dining).unwrap().transport.unwrap().state,
             PlaybackState::Stopped,
@@ -1841,7 +1908,7 @@ mod tests {
         // group, the left-behind Dining must be re-homed - not left pointing
         // at Kitchen, which now follows Office.
         let w = MockWire::default();
-        // refresh_topology requires a prior discover(), same as the real wire.
+        // Establish the discovered baseline, same lifecycle as the real wire.
         w.discover().unwrap();
         let kitchen = SpeakerId::new("RINCON_KITCHEN");
         let dining = SpeakerId::new("RINCON_DINING");
@@ -1849,7 +1916,7 @@ mod tests {
 
         w.play(&GroupId::new("RINCON_KITCHEN:1")).unwrap(); // Kitchen playing, Dining follows
         w.join_group(&kitchen, &office).unwrap(); // Kitchen now follows Office
-        w.refresh_topology().unwrap(); // commit the regroup to the routing cache
+        w.discover().unwrap(); // commit the regroup to the routing cache
 
         // Dining is re-homed off Kitchen → independent → its own Stopped seed.
         assert_eq!(

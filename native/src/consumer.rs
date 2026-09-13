@@ -110,8 +110,7 @@ pub fn run_event_consumer(
         // is dropped, not forwarded onto this stream (review #67-followup
         // #3). The app bus never disconnects (it's process-global), so only
         // the wire channel drives loop exit.
-        while let Some(event) =
-            oto_app::try_recv_app_event(generation, oto_app::current_generation())
+        while let Some(event) = oto_app::try_recv_app_event(generation, oto_app::current_generation)
         {
             if let Some(exit) = emit(event) {
                 return exit;

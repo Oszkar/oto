@@ -65,6 +65,15 @@ Household householdFromTopology(
       // path carries health forward instead, so a background regroup cannot
       // flap a genuinely-off speaker back to online.
       //
+      // LOAD-BEARING: "flips back on its next failed command" is only true
+      // because Rust re-publishes health on EVERY conclusive command result,
+      // not just on a state change - `native/crates/app/src/health.rs` is
+      // deliberately not edge-triggered, while Rust keeps its own `Errored`
+      // mark across the wire swap (`retain_known`). If emission were ever
+      // narrowed back to transitions, this reset would strand the speaker as
+      // permanently healthy: Rust would suppress the next failure as a repeat
+      // and never re-mark it.
+      //
       // Accepted limitation: this also clears a `SubscriptionError` that landed
       // DURING the ~3-5 s scan, so evidence newer than the scan is discarded.
       // Distinguishing it needs a health snapshot or generation token; not

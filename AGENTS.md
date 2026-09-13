@@ -107,7 +107,7 @@ just build-win  # debug Windows desktop
 just build-apk  # debug Android APK
 ```
 
-Network-dependent code can be validated from an agent shell on a LAN with 4 Sonos devices. State explicitly when running network-dependent experiments or checks. Hardware-gated tests live under `native/crates/wire/tests/live_*.rs` behind the `live-tests` Cargo feature (and `#[ignore]` belt-and-braces); run via `cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only`.
+Network-dependent code can be validated from an agent shell on a LAN with 4 Sonos devices. State explicitly when running network-dependent experiments or checks. Hardware-gated tests live under `native/crates/wire/tests/live_*.rs` behind the `live-tests` Cargo feature (and `#[ignore]` belt-and-braces); run via `cargo nextest run -p oto-wire --features live-tests --run-ignored ignored-only`. They all drive the same physical speakers, so they are pinned to the `lan` test group (`native/.config/nextest.toml`, `max-threads = 1`) and never run concurrently; nextest's one-process-per-test model means an in-process mutex cannot do this.
 
 ## 6. Validation Matrix
 

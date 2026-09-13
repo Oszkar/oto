@@ -1092,6 +1092,56 @@ mod tests {
         assert!(matches!(refresh_topology(), Err(WireError::NotFound(_))));
     }
 
+    /// A FAILED second-stage replacement must leave the old wire installed
+    /// **and still routing the topology Dart is showing**. That only holds
+    /// because stage one is a read-only probe: `Wire::refresh_topology`
+    /// reports the new grouping without installing it (`oto-wire`'s adapter
+    /// spells this out; `oto-mock` pins it in
+    /// `refresh_topology_probe_does_not_commit_routing`). If the probe
+    /// committed, this test would find the still-installed wire routing on a
+    /// topology that never reached the UI.
+    #[test]
+    fn failed_refresh_replacement_preserves_old_wire_routing() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+
+        let mock = discover_with_held_mock();
+        let old_solo = GroupId::new("RINCON_OFFICE:0");
+        assert!(play(&old_solo).is_ok(), "baseline: the solo group routes");
+
+        // A regroup lands on the devices, then stage one probes for it.
+        mock.join_group(
+            &SpeakerId::new("RINCON_OFFICE"),
+            &SpeakerId::new("RINCON_KITCHEN"),
+        )
+        .expect("join ok");
+        let probed = mock.refresh_topology().expect("stage-one probe ok");
+        assert!(
+            !probed.groups.iter().any(|g| g.id == old_solo),
+            "the probe reports the regroup"
+        );
+
+        // Stage two fails: no new wire is installed.
+        let before = current_generation();
+        assert!(
+            refresh_topology_with(|| Box::new(MockWire::failing(WireError::NoDevicesFound)))
+                .is_err(),
+            "a failing factory must fail the replacement"
+        );
+        assert_eq!(
+            current_generation(),
+            before,
+            "a failed install must not bump the generation"
+        );
+
+        // The old wire is still installed and still routes the OLD topology,
+        // which is the one Dart still has on screen.
+        assert!(
+            play(&old_solo).is_ok(),
+            "the surviving wire must keep routing the topology the UI shows"
+        );
+    }
+
     // ── SubscriptionError reactive emission ──────────────────────────────
 
     /// Drain every app-bus event currently queued at the current generation
@@ -1100,7 +1150,7 @@ mod tests {
     fn drain_app_events() -> Vec<ChangeEvent> {
         let generation = current_generation();
         let mut out = Vec::new();
-        while let Some(e) = try_recv_app_event(generation, current_generation()) {
+        while let Some(e) = try_recv_app_event(generation, current_generation) {
             out.push(e);
         }
         out
@@ -1192,14 +1242,78 @@ mod tests {
 
         // The old-generation consumer is gated out entirely → does not drain.
         assert!(
-            try_recv_app_event(stale, current).is_none(),
+            try_recv_app_event(stale, || current).is_none(),
             "old-generation consumer must not drain current-generation events"
         );
         // The current consumer still sees the event (it was not consumed away).
         assert!(matches!(
-            try_recv_app_event(current, current),
+            try_recv_app_event(current, || current),
             Some(ChangeEvent::SubscriptionError { .. })
         ));
+    }
+
+    /// N2b: the generation must be read UNDER the bus receiver lock, not above
+    /// it. With the read above the lock there was a window - an old consumer
+    /// passes the equality check, a `discover_with` bump + `events::clear()`
+    /// interleaves, then the consumer takes the lock and drains a
+    /// NEW-generation event straight into the stale-drop, losing it for the
+    /// consumer it was stamped for.
+    ///
+    /// Ordering, not value, is the invariant: a closure that merely *returns* a
+    /// moved generation is gated out either way, so it proves nothing. This
+    /// probes the lock itself from inside the closure - had the read happened
+    /// before the lock was taken, `try_lock` would have succeeded.
+    #[test]
+    fn generation_is_read_under_the_bus_lock() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+
+        discover_with_held_mock();
+        let _ = drain_app_events();
+
+        let current = current_generation();
+        let read_under_lock = std::cell::Cell::new(false);
+        let _ = try_recv_app_event(current, || {
+            read_under_lock.set(events::receiver_is_locked());
+            current
+        });
+
+        assert!(
+            read_under_lock.get(),
+            "current_gen must be read while the receiver lock is held, or a              replacement can interleave between the check and the drain"
+        );
+    }
+
+    /// The gate itself: a consumer whose generation has moved must not drain,
+    /// and the event must survive for the consumer it was stamped for.
+    #[test]
+    fn moved_generation_consumer_leaves_the_event_alone() {
+        let _guard = TEST_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        clear_slot();
+
+        discover_with_held_mock();
+        let _ = drain_app_events();
+
+        let current = current_generation();
+        events::push(
+            current,
+            ChangeEvent::SubscriptionError {
+                speaker: SpeakerId::new("RINCON_KITCHEN"),
+                message: "x".into(),
+            },
+        );
+
+        assert!(
+            try_recv_app_event(current, || current.wrapping_add(1)).is_none(),
+            "a consumer whose generation moved must not consume"
+        );
+        assert!(
+            matches!(
+                try_recv_app_event(current, || current),
+                Some(ChangeEvent::SubscriptionError { .. })
+            ),
+            "the event must survive the gated-out consumer"
+        );
     }
 
     #[test]
