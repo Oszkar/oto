@@ -111,6 +111,10 @@ class _HomeContent extends ConsumerStatefulWidget {
 /// corrects on the next frame.
 const double _stripInsetEstimate = 96;
 
+/// Sub-pixel slack for "the list is scrolled to its end" - layout math leaves
+/// fractional remainders, so an exact comparison misses by a hair.
+const double _endTolerance = 0.5;
+
 class _HomeContentState extends ConsumerState<_HomeContent> {
   // Own controller so this scrollable never contends with another primary
   // scrollable (e.g. the wide NowPlayingPane) for the app-wide
@@ -133,16 +137,62 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
     super.dispose();
   }
 
+  /// Whether the list was parked at its end as of the LAST completed layout.
+  ///
+  /// Captured in `build`, which runs before this frame's layout, so it still
+  /// describes where the reader was before whatever change is being built.
+  /// Reading it later is too late: a source starting also changes its own
+  /// card, so by the time the strip has been measured the extent has already
+  /// grown underneath the offset and "at the end" no longer holds.
+  bool _wasAtEnd = false;
+
   void _onStripHeight(double height) {
     // Clear the strip by its real height plus the gutter the body uses
     // everywhere else, so the last card never kisses it.
     final inset = height + Space.gutter12;
     if (!mounted || inset == _stripInset) return;
+
+    // A bigger reserve extends `maxScrollExtent` but does NOT move `pixels`:
+    // `ScrollPosition` only corrects an offset that has fallen OUT of range,
+    // and a larger extent keeps the old offset comfortably inside it. So a
+    // reader sitting at the end when a source starts would watch the last card
+    // slide back under the now-taller strip and STAY there until they scrolled
+    // again - the very thing this inset exists to prevent. Re-anchor them.
+    //
+    // Shrinking needs no help: the old offset falls out of range and Flutter
+    // clamps it back to the end on its own.
+    final anchored = _wasAtEnd && inset > _stripInset;
+    final anchoredAt = _scrollController.hasClients
+        ? _scrollController.position.pixels
+        : null;
+
     setState(() => _stripInset = inset);
+
+    if (!anchored) return;
+    // Runs after the frame this setState schedules, so the relayout with the
+    // new inset has already happened and `maxScrollExtent` is the new one.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final settled = _scrollController.position;
+      // Leave it alone if the reader moved in the meantime, or if there is
+      // nothing left to take up.
+      if (settled.pixels != anchoredAt ||
+          settled.pixels >= settled.maxScrollExtent) {
+        return;
+      }
+      settled.jumpTo(settled.maxScrollExtent);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Snapshot the scroll anchor before this frame lays out - see [_wasAtEnd].
+    // A read, not a mutation of anything the build depends on.
+    _wasAtEnd =
+        _scrollController.hasClients &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - _endTolerance;
+
     final layout = ref.watch(currentHomeLayoutProvider);
     final groups = _sortedGroups(widget.household);
     final hasActiveStream = groups.any((g) => g.hasActiveStream);
