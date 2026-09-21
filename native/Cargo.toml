@@ -29,15 +29,15 @@ oto-wire = { path = "crates/wire" }
 # Low-level UPnP SOAP client used directly in oto-wire for production
 # control operations (play/pause/vol/mute/state). Exact pin =0.8.0.
 # See AGENTS.md §4.
-sonos-api = "=0.8.0"
+sonos-api = "=0.9.0"
 
 # Reactive event stack from upstream crates.io. Keep the whole SDK family
 # aligned and re-run the hardware acceptance checks when upgrading.
 # SDK 0.8 removes the reqwest/native-tls dependencies that required our fork.
-sonos-sdk-state = "=0.8.0"
-sonos-sdk-event-manager = "=0.8.0"
-sonos-sdk-stream = "=0.8.0"
-sonos-sdk-callback-server = "=0.8.0"
+sonos-sdk-state = "=0.9.0"
+sonos-sdk-event-manager = "=0.9.0"
+sonos-sdk-stream = "=0.9.0"
+sonos-sdk-callback-server = "=0.9.0"
 
 # XML parser used by oto-wire's DIDL-Lite track-metadata parser
 # (parse_track_didl in control.rs). Already in the locked graph via
