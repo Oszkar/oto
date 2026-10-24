@@ -23,7 +23,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
 
   # Native bridge.
   oto_native:
@@ -36,7 +36,7 @@ dependencies:
   freezed_annotation: ^3.1.0
 
   # UI foundation (v0.6.0).
-  shared_preferences: ^2.3.0
+  shared_preferences: ^2.5.6
   flutter_svg: ^2.0.10
   lucide_icons_flutter: ^3.1.19
 
