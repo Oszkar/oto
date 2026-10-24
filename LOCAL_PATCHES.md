@@ -76,8 +76,9 @@ fail even when the pinned compiler is installed. The builder now resolves
 explicit Cargokit toolchain is configured. Rustup enumeration also recognizes
 numbered releases, avoiding redundant installation of an already installed pin.
 
-Run `dart run test/toolchain_check.dart` from
-`app/rust_builder/cargokit/build_tool/` after changing either patch. CI runs the
+Run `dart pub get` followed by `dart run test/toolchain_check.dart` from
+`app/rust_builder/cargokit/build_tool/` after changing either patch. The nested
+package needs its own dependency resolution on a fresh checkout. CI runs the
 same check. Validate both Flutter platform builds, since both use this builder.
 
 ## 5. Cargokit Windows failure propagation

@@ -189,4 +189,6 @@ jobs:
 
       - name: Verify Cargokit toolchain selection
         working-directory: app/rust_builder/cargokit/build_tool
-        run: dart run test/toolchain_check.dart
+        run: |
+          dart pub get
+          dart run test/toolchain_check.dart
