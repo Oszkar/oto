@@ -44,7 +44,7 @@ Local control only: no Sonos account, cloud API, or multi-household support. Shu
 ## Development setup
 
 - Flutter version from [`.fvmrc`](.fvmrc).
-- Rust toolchain from [`rust-toolchain.toml`](rust-toolchain.toml), installed by rustup.
+- Rust 1.99.1 from [`rust-toolchain.toml`](rust-toolchain.toml), installed by rustup.
 - [`just`](https://github.com/casey/just) (preferred), or `make` for the mirrored recipes.
 - Windows: Visual Studio 2022 with the "Desktop development with C++" workload and PowerShell 7+ for `just`.
 - Android: Java 21, Android SDK, and the NDK selected by Flutter. See [Android cross-builds](CONTRIBUTING.md#android-cross-builds).
@@ -85,6 +85,9 @@ Allow oto's outbound SSDP multicast to UDP port 1900 and the replies to its per-
 Discovery validates SSDP replies against their sender and retains up to 32 distinct hosts. Each topology lookup tries at most 8 distinct hosts, with a 30-second check before each attempt. The three-second SSDP receive window is shared across interfaces; the complete scan can take longer due to SOAP and initialization. These limits do not cap the speakers returned by a successful topology lookup or authenticate LAN peers.
 
 On Android, oto acquires a Wi-Fi `MulticastLock` around discovery. GENA notifications use unicast TCP. Protocol details and discovery limitations are in [Sonos notes](docs/sonos-notes.md#ssdp-discovery).
+
+Sonos SOAP and live events use the aligned SDK 0.9.0 crates from crates.io.
+oto retains its own bounded discovery and explicit multicast interface selection.
 
 ## Repository guide
 

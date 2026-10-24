@@ -88,7 +88,7 @@ pub(crate) struct PumpInputs {
 /// `POLL_INTERVAL` (~250 ms).
 ///
 /// **Shutdown design:** we do NOT rely on dropping a `StateManager`
-/// "keepalive" to close the SDK's event channel. SDK 0.8 manager clones
+/// "keepalive" to close the SDK's event channel. SDK 0.9 manager clones
 /// share the event fanout; the pump thread's manager keeps it alive.
 /// Waiting for channel-close from that thread would therefore deadlock.
 /// The poll-loop + atomic-stop pattern avoids that trap.
@@ -178,7 +178,7 @@ impl EventPump {
         let topology = build_sdk_topology(&inputs);
         manager.initialize(topology);
 
-        // SDK 0.8 iterators subscribe without replay. Install our receiver
+        // SDK 0.9 iterators subscribe without replay. Install our receiver
         // before any watch can emit its initial NOTIFY, then move that same
         // queue into the pump thread so startup scheduling cannot lose seeds.
         let iter = manager.iter();
@@ -188,7 +188,7 @@ impl EventPump {
         // initial SUBSCRIBE NOTIFY *is* the seed probe").
         //
         // We do NOT attempt to surface per-speaker subscription
-        // failures here. The SDK at `=0.8.0` still does not expose the
+        // failures here. The SDK at `=0.9.0` still does not expose the
         // information - see `register_watches` for the full citation.
         // This is a known shortfall of the spec's "in-band per-speaker
         // failure surfacing" contract; tracked as v0.5 follow-up.
@@ -255,7 +255,7 @@ impl Drop for EventPump {
         // (≤ POLL_INTERVAL). Then join.
         //
         // Why this works where an earlier design didn't:
-        // SDK 0.8 manager clones share the event fanout (0.5.2 used
+        // SDK 0.9 manager clones share the event fanout (0.5.2 used
         // independent senders). The previous design held a "keepalive"
         // manager clone in this struct AND moved another clone into
         // the pump thread, on the (mistaken) assumption that the SDK's
@@ -361,21 +361,21 @@ fn build_sdk_topology(inputs: &PumpInputs) -> sonos_state::Topology {
 /// "ergonomic footgun").
 ///
 /// **No per-speaker error reporting.** The
-/// SDK at `=0.8.0` still does not expose per-speaker subscription failures:
+/// SDK at `=0.9.0` still does not expose per-speaker subscription failures:
 ///
 ///   - `watch_property_with_subscription::<P>` swallows
 ///     `ensure_service_subscribed` errors with `tracing::warn!` and
 ///     returns `Ok(...)`. See
-///     `sonos-sdk-state-0.8.0/src/state.rs::watch_property_with_subscription`.
+///     `sonos-sdk-state-0.9.0/src/state.rs::watch_property_with_subscription`.
 ///   - `ensure_service_subscribed` itself only fails if the broker's
 ///     command channel is closed; it returns `Ok` and queues a
 ///     `Subscribe` command for an async worker even when the target
 ///     device is unreachable. See
-///     `sonos-sdk-event-manager-0.8.0/src/manager.rs::ensure_service_subscribed`.
+///     `sonos-sdk-event-manager-0.9.0/src/manager.rs::ensure_service_subscribed`.
 ///   - `is_service_subscribed` is a ref-count check (true iff a
 ///     `Subscribe` command was *queued*), not a "device responded to
 ///     SUBSCRIBE" probe. See
-///     `sonos-sdk-event-manager-0.8.0/src/manager.rs::is_service_subscribed`.
+///     `sonos-sdk-event-manager-0.9.0/src/manager.rs::is_service_subscribed`.
 ///
 /// The previous version of this fn carried `if let Err(e) = manager
 /// .watch_property_with_subscription::<P>(...)` branches emitting
@@ -579,7 +579,7 @@ fn map_upstream_event(
 ) -> Option<ChangeEvent> {
     use sonos_state::PropertyChange;
 
-    // SDK 0.8 carries the value observed for this event. Reading its mutable
+    // SDK 0.9 carries the value observed for this event. Reading its mutable
     // cache instead could replace queued transitions with a later value.
     match &upstream.change {
         PropertyChange::Volume(v) => Some(volume_event(speaker.clone(), v.clone())),

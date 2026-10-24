@@ -52,7 +52,7 @@ jobs:
           cache: true
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@1.99.1
         with:
           targets: aarch64-linux-android,x86_64-linux-android
           # verify_generated.dart re-formats FRB's Rust output with the

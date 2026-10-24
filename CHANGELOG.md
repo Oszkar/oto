@@ -8,12 +8,16 @@ The format is based on [Keep a Changelog][kac]; the project follows [Semantic Ve
 
 ### Changed
 
-- Updated the Sonos SDK family to 0.8.0 and retired the Android TLS fork.
+- Updated the Sonos SDK family to 0.9.0 and the Rust toolchain to 1.99.1.
+  The SDK fixes a watch-teardown race that could suppress resubscription.
+  The Android TLS fork remains retired since SDK 0.8.0.
   The event adapter now reads typed event payloads, preserving queued changes
   without re-reading a newer cache value.
 
 ### Fixed
 
+- Flutter native builds use the repository's pinned Rust compiler. On Windows,
+  Rust build failures now stop packaging instead of reusing an older library.
 - Failed controls preserve newer speaker updates, including updates received
   during rediscovery. A repeated failed command after a user scan restores the
   room's unreachable indication.

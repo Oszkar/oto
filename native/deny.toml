@@ -11,13 +11,13 @@ ignore = [
     # `paste` is an unmaintained proc-macro crate (advisory = unmaintained only,
     # no security impact). It is a transitive dependency of sonos-api: the full
     # path is paste → sonos-api → oto-wire. No upgrade path while sonos-api is
-    # pinned =0.8.0.
+    # pinned =0.9.0.
     # TODO(v0.7): re-evaluate if the sonos-api pin is changed.
-    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api; still present in pinned sonos-api =0.8.0" },
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, transitive via sonos-api; still present in pinned sonos-api =0.9.0" },
     # `quick-xml v0.31.0` - two DoS-class parsing advisories (RUSTSEC-2026-0194
     # quadratic duplicate-attribute check; RUSTSEC-2026-0195 unbounded
     # namespace-declaration allocation), both fixed in >=0.41.0. quick-xml is
-    # pinned =0.31.0 transitively via sonos-api =0.8.0 (DIDL-Lite parsing), so
+    # pinned =0.31.0 transitively via sonos-api =0.9.0 (DIDL-Lite parsing), so
     # there is no local upgrade path while that pin holds. Practical exposure:
     # discovery validates status, ST, and the LOCATION host against the
     # responder IP, and bounds candidates and receive time. These checks
@@ -29,8 +29,8 @@ ignore = [
     # unsafety - and requires the attacker to already be on the LAN. Revisit
     # when the sonos-api pin is bumped to a release that depends on
     # quick-xml >=0.41.0.
-    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.8.0, no upgrade path; LAN-local XML input from unauthenticated SSDP responders despite destination validation, DoS-only exposure" },
-    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.8.0, no upgrade path; LAN-local XML input from unauthenticated SSDP responders despite destination validation, DoS-only exposure" },
+    { id = "RUSTSEC-2026-0194", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.9.0, no upgrade path; LAN-local XML input from unauthenticated SSDP responders despite destination validation, DoS-only exposure" },
+    { id = "RUSTSEC-2026-0195", reason = "DoS in quick-xml <0.41; pinned =0.31.0 via sonos-api =0.9.0, no upgrade path; LAN-local XML input from unauthenticated SSDP responders despite destination validation, DoS-only exposure" },
     # RUSTSEC-2026-0258 (h2 0.3) retired with SDK 0.8: reqwest, warp,
     # and h2 left the resolved graph. No exception is needed now.
     # RUSTSEC-2025-0134 (rustls-pemfile v1) formerly ignored here: it came

@@ -139,7 +139,14 @@ class RustBuilder {
   CargoBuildOptions? get _buildOptions =>
       environment.crateOptions.cargo[environment.configuration];
 
-  String get _toolchain => _buildOptions?.toolchain.name ?? 'stable';
+  // LOCAL PATCH (oto): resolve the repository's rust-toolchain.toml instead
+  // of forcing the possibly outdated local stable channel.
+  late final String _toolchain = _buildOptions?.toolchain.name ??
+      runCommand(
+        'rustup',
+        ['show', 'active-toolchain'],
+        workingDirectory: environment.manifestDir,
+      ).stdout.toString().trim().split(RegExp(r'\s+')).first;
 
   /// Returns the path of directory containing build artifacts.
   Future<String> build() async {
