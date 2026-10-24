@@ -1,12 +1,14 @@
 # Local patches
 
-Local third-party integration changes. Reapply the active Cargokit patch when updating the vendored tree; do not restore retired workarounds.
+Local third-party integration changes. Reapply the active Cargokit patches when updating the vendored tree; do not restore retired workarounds.
 
 | Entry | Location | Status |
 | --- | --- | --- |
 | 1 | `app/rust_builder/cargokit/gradle/plugin.gradle` | Active: build only 64-bit Android ABIs |
 | 2 | Former `sonos-sdk` fork | Retired with SDK 0.8.0 |
 | 3 | `app/rust_builder/macos/oto_native.podspec` | Retained pending macOS validation |
+| 4 | Cargokit `build_tool/lib/src/{builder,rustup}.dart` | Active: respect the repository Rust toolchain |
+| 5 | Cargokit `run_build_tool.cmd` | Active: propagate build failures on Windows |
 
 ## 1. cargokit/gradle/plugin.gradle - drop 32-bit ABIs
 
@@ -45,7 +47,7 @@ platforms = platforms.findAll { it != "android-arm" && it != "android-x86" }.uni
 ### Updating Cargokit
 
 1. Update the vendored `app/rust_builder/cargokit/` tree.
-2. Reapply the platform filtering above unless the new version provides equivalent configuration. Locate the edits with `rg "LOCAL PATCH" app/rust_builder/`.
+2. Reapply platform filtering and the toolchain/error-propagation patches below unless the new version provides equivalent behavior. Locate the edits with `rg "LOCAL PATCH" app/rust_builder/`.
 3. Run `just build-apk`; neither `i686-linux-android` nor `armv7-linux-androideabi` should be requested.
 4. Update this entry if the patch or its location changes.
 
@@ -64,3 +66,27 @@ Do not recreate the fork when upgrading. Check `native/Cargo.lock` and run `just
 ```
 
 This fixed unresolved `SC*` symbols when `reqwest` used Apple's proxy detection: Rust static libraries do not carry framework-link directives into Xcode's final link. SDK 0.8 removed that dependency path. Remove the flag after verifying `flutter build macos -t lib/showcase/main.dart` from `app/` without it. macOS is not a supported shipping target; do not copy this workaround to iOS without a demonstrated linker failure.
+
+## 4. Cargokit Rust toolchain selection
+
+Upstream's builder defaults to `rustup run stable cargo`, bypassing the
+repository's `rust-toolchain.toml`. A locally outdated `stable` can therefore
+fail even when the pinned compiler is installed. The builder now resolves
+`rustup show active-toolchain` from the Rust manifest directory, unless an
+explicit Cargokit toolchain is configured. Rustup enumeration also recognizes
+numbered releases, avoiding redundant installation of an already installed pin.
+
+Run `dart run test/toolchain_check.dart` from
+`app/rust_builder/cargokit/build_tool/` after changing either patch. CI runs the
+same check. Validate both Flutter platform builds, since both use this builder.
+
+## 5. Cargokit Windows failure propagation
+
+The Windows launcher now captures the Dart process exit code before checking
+whether its kernel snapshot needs regeneration, and explicitly returns that
+code after an optional retry. Without this, a Rust compilation failure could
+be logged while Gradle still packaged an older native library successfully.
+
+Validate a nonzero launcher result for an invalid build-tool command, and build
+the APK and Windows app successfully. Do not accept a successful Flutter exit
+code if the log contains `Cargokit BuildTool failed`.

@@ -1,6 +1,6 @@
 # Sonos protocol & SDK notes
 
-Durable reference for how oto talks to Sonos: UPnP/SOAP behaviors, the `sonos-api` crate at the pinned `=0.8.0`, and the load-bearing facts learned from hardware spikes. Historical observations below name the SDK version used at the time.
+Durable reference for how oto talks to Sonos: UPnP/SOAP behaviors, the `sonos-api` crate at the pinned `=0.9.0`, and the load-bearing facts learned from hardware spikes. Historical observations below name the SDK version used at the time.
 
 Audience: anyone touching `oto-wire`. If you're touching the GENA event path, the [Event model](#event-model) section is the one to read first.
 
@@ -8,7 +8,7 @@ Audience: anyone touching `oto-wire`. If you're touching the GENA event path, th
 
 ## Dependency pin
 
-- `sonos-api = "=0.8.0"` (exact), aligned with the reactive SDK crates. Re-check SOAP, discovery, events, and hardware acceptance when upgrading.
+- `sonos-api = "=0.9.0"` (exact), aligned with the reactive SDK crates. Re-check SOAP, discovery, events, and hardware acceptance when upgrading.
 - All Sonos crates now resolve from crates.io. Upstream 0.8 removed the reqwest/native-TLS dependencies that required our fork; [`LOCAL_PATCHES.md`](../LOCAL_PATCHES.md) #2 records its retirement. SDK discovery uses ureq 3.4, shared with oto's model fetches; upstream SOAP still uses ureq 2.x.
 - `quick-xml = "=0.31.0"` (workspace). Used for DIDL-Lite parsing in `oto-wire/src/control.rs::parse_track_didl` and model-name extraction in `device_description.rs`. Already in the locked graph via `sonos-api` - unify, don't bump.
 - The `sonos-sdk` umbrella and its `test-support` tree are **not** in oto-wire's dependency graph (dropped at v0.3). v0.4 live events add the upstream reactive state/event crates from the same SDK family; `sonos-api` remains the only Sonos crate used for direct SOAP commands and discovery.
@@ -101,7 +101,7 @@ Conventions:
 - **Channel for RenderingControl ops:** `"Master"`.
 - Direct SOAP operations are **sync/blocking** (`ureq` under the hood). No tokio reactor is needed for this one-shot command/read path.
 
-Operation table (historical SDK 0.5.2 hardware observations: Run 1 stopped/empty queue, Run 2 playing Spotify; these observations are not SDK 0.8 acceptance):
+Operation table (historical SDK 0.5.2 hardware observations: Run 1 stopped/empty queue, Run 2 playing Spotify; these observations are not SDK 0.9 acceptance):
 
 | Operation | Builder | Response type | Observed (Run 1 / Run 2) |
 |---|---|---|---|
@@ -223,7 +223,7 @@ The ordering in `native/crates/wire/src/events.rs` is required:
 
 1. Attach a `SonosEventManager` through `StateManager::builder()`.
 2. Add discovered devices and call `manager.initialize(topology)`.
-3. Create `manager.iter()` before registering watches. SDK 0.8 has no event replay; attaching later can lose initial NOTIFYs.
+3. Create `manager.iter()` before registering watches. SDK 0.9 has no event replay; attaching later can lose initial NOTIFYs.
 4. Register `watch_property_with_subscription` for the supported properties.
 
 A bare `StateManager::new()` plus watch intent does not establish subscriptions. Missing topology initialization breaks AVTransport coordinator routing even when per-speaker volume events work. Use `build_sdk_topology` and the production spawn path as the implementation reference.
@@ -244,7 +244,7 @@ The callback listener uses the SDK's configured TCP port range (3400-3500 in the
 
 ### Shutdown
 
-SDK 0.8 manager clones share an event fanout. A held manager keeps it alive, so channel closure cannot stop a pump that itself holds a manager.
+SDK 0.9 manager clones share an event fanout. A held manager keeps it alive, so channel closure cannot stop a pump that itself holds a manager.
 
 `EventPump::Drop` first calls `SonosEventManager::shutdown()` to release the SDK worker's self-owned reference cycle, then sets oto's stop flag and joins its pump after the next `recv_timeout` boundary. SDK cleanup can complete asynchronously. Both the stop/join and explicit SDK shutdown are necessary; the strong-reference regression test covers eventual release.
 
@@ -302,7 +302,7 @@ An immediate post-mutation `GetZoneGroupState` can return a transitional topolog
 
 `GroupRenderingControl` reads and writes target the coordinator. Volume builders reject values outside 0-100; the FRB shim clamps signed input through `Volume::clamped` before dispatch. Group volume/mute events carry the coordinator's speaker ID, which oto maps to its group ID.
 
-SDK 0.8 carries values in typed payloads. The old SDK 0.5.2 trap of reading group events from the speaker-property cache no longer applies; do not restore cache lookups in event mapping.
+SDK 0.9 carries values in typed payloads. The old SDK 0.5.2 trap of reading group events from the speaker-property cache no longer applies; do not restore cache lookups in event mapping.
 
 Unchanged writes need not emit NOTIFY. An event test must prime one value and write a different one, then wait for the matching event. A fixed target can silently match the value left by an earlier run.
 

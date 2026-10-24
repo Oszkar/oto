@@ -136,7 +136,7 @@ impl Grouping {
                 }
             })
             .collect();
-        groups.sort_by(|a, b| a.id.to_string().cmp(&b.id.to_string()));
+        groups.sort_by_key(|group| group.id.to_string());
         groups
     }
 }

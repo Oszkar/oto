@@ -82,10 +82,15 @@ if not exist "%PRECOMPILED%" (
 )
 
 "%DART%" "%PRECOMPILED%" %*
+REM LOCAL PATCH (oto): preserve failures even when the retry IF is not taken.
+set BUILD_TOOL_EXIT_CODE=%ERRORLEVEL%
 
 REM 253 means invalid snapshot version.
-If %ERRORLEVEL% equ 253 (
+If %BUILD_TOOL_EXIT_CODE% equ 253 (
     "%DART%" pub get --no-precompile
     "%DART%" compile kernel bin/build_tool_runner.dart
     "%DART%" "%PRECOMPILED%" %*
+    set BUILD_TOOL_EXIT_CODE=!ERRORLEVEL!
 )
+
+exit /b %BUILD_TOOL_EXIT_CODE%

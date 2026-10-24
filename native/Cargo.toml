@@ -5,7 +5,7 @@ members = ["crates/app", "crates/core", "crates/mock", "crates/wire"]
 [workspace.package]
 version = "0.6.4"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.99.1"
 license = "MIT"
 repository = "https://github.com/oszkar/oto"
 
@@ -27,7 +27,7 @@ oto-mock = { path = "crates/mock" }
 oto-wire = { path = "crates/wire" }
 
 # Low-level UPnP SOAP client used directly in oto-wire for production
-# control operations (play/pause/vol/mute/state). Exact pin =0.8.0.
+# control operations (play/pause/vol/mute/state). Exact pin =0.9.0.
 # See AGENTS.md §4.
 sonos-api = "=0.9.0"
 

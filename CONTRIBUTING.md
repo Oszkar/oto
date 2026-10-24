@@ -29,16 +29,22 @@ Toolchain and tooling versions are pinned in multiple files. Dependabot covers m
 
 ### Pinned in workflows (Dependabot updates these)
 
-- `dtolnay/rust-toolchain@<version>` - bumping this **must** be paired with the manual updates below (the action ref is what CI uses; the toolchain file is the source of truth for local development).
+- `dtolnay/rust-toolchain@<version>` - deliberately ignored by Dependabot;
+  update every workflow reference together with the manual pins below.
 - `subosito/flutter-action@vN` - major action version, automatic.
 - All other `uses:` action refs.
 
 ### Manual bump required (Dependabot doesn't see these)
 
-When the `dtolnay/rust-toolchain` Dependabot PR lands, update **in the same PR**:
+When updating Rust, change every workflow reference and these pins **in the same PR**:
 
 - `rust-toolchain.toml` - `channel = "X.Y.Z"`
-- `native/Cargo.toml` - `rust-version = "X.Y"` under `[workspace.package]`
+- `native/Cargo.toml` - `rust-version = "X.Y.Z"` under `[workspace.package]`
+
+The current toolchain and minimum supported Rust version are 1.99.1, including
+the patch release's linker fix. The Sonos SDK 0.9 family requires at least 1.98.
+Cargokit resolves the same repository pin for Flutter builds; its local patches
+and regression check are documented in [Local patches](LOCAL_PATCHES.md#4-cargokit-rust-toolchain-selection).
 
 For Flutter, no Dependabot coverage exists. `.fvmrc` at the repo root is the canonical Flutter version - the CI workflows read it (the `Read Flutter version` steps in the workflows), so bumping `.fvmrc` (`{"flutter": "X.Y.Z"}`) propagates automatically.
 
