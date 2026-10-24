@@ -58,7 +58,7 @@ socket2 = "0.5"
 # "HTTP fetch quirk"); ureq handles chunked + bounded timeouts with a sync
 # API matching the SOAP path. Share 3.4 with SDK discovery; the upstream SOAP
 # client still requires ureq 2.x, so both majors remain in the resolved graph.
-ureq = "=3.4.0"
+ureq = "=3.4.2"
 
 # Log-emission facade for oto-wire's own diagnostics (per AGENTS.md §3:
 # "oto-wire/oto-app may use anyhow at boundaries and tracing for logs").
